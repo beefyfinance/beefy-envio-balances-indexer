@@ -31,6 +31,7 @@ const configSchema = S.schema({
         5000: S.string, // mantle
         1088: S.string, // metis
         34443: S.string, // mode
+        143: S.string, // monad
         1284: S.string, // moonbeam
         1285: S.string, // moonriver
         1666600000: S.string, // one
@@ -80,6 +81,7 @@ export const config = S.parseOrThrow(
             5000: process.env.MANTLE_RPC_URL ?? null,
             1088: process.env.METIS_RPC_URL ?? null,
             34443: process.env.MODE_RPC_URL ?? null,
+            143: process.env.MONAD_RPC_URL ?? null,
             1284: process.env.MOONBEAM_RPC_URL ?? null,
             1285: process.env.MOONRIVER_RPC_URL ?? null,
             1666600000: process.env.ONE_RPC_URL ?? null,

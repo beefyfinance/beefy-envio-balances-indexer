@@ -2,8 +2,8 @@ import { S } from 'envio';
 import * as R from 'remeda';
 
 export const allChainIds = [
-    1313161554, // aurora
     42161, // arbitrum
+    1313161554, // aurora
     43114, // avax
     8453, // base
     80094, // berachain
@@ -15,9 +15,10 @@ export const allChainIds = [
     1, // ethereum
     250, // fantom
     252, // fraxtal
-    100, // gnosis
-    128, // heco
     122, // fuse
+    100, // gnosis
+    1666600000, // harmony
+    128, // heco
     999, // hyperevm
     2222, // kava
     59144, // linea
@@ -26,9 +27,9 @@ export const allChainIds = [
     5000, // mantle
     1088, // metis
     34443, // mode
+    143, // monad
     1284, // moonbeam
     1285, // moonriver
-    1666600000, // one
     10, // optimism
     9745, // plasma
     137, // polygon
