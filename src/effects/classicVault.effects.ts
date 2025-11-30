@@ -1,4 +1,4 @@
-import { experimental_createEffect } from 'envio';
+import { createEffect } from 'envio';
 import * as R from 'remeda';
 import type { Hex } from 'viem';
 import { blacklistStatus } from '../lib/blacklist';
@@ -7,7 +7,7 @@ import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
-export const getClassicVaultTokens = experimental_createEffect(
+export const getClassicVaultTokens = createEffect(
     {
         name: 'getClassicVaultTokens',
         input: {
@@ -20,6 +20,7 @@ export const getClassicVaultTokens = experimental_createEffect(
             strategyAddress: hexSchema,
             blacklistStatus: blacklistStatus,
         },
+        rateLimit: false,
         cache: true,
     },
     async ({ input, context }) => {

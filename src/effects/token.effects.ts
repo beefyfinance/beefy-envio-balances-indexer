@@ -1,10 +1,10 @@
-import { experimental_createEffect, S } from 'envio';
+import { createEffect, S } from 'envio';
 import { erc20Abi } from 'viem';
 import { chainIdSchema } from '../lib/chain';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
-export const getTokenMetadata = experimental_createEffect(
+export const getTokenMetadata = createEffect(
     {
         name: 'getTokenMetadata',
         input: {
@@ -16,7 +16,7 @@ export const getTokenMetadata = experimental_createEffect(
             symbol: S.string,
             decimals: S.number,
         }),
-        // Enable caching to avoid duplicated calls
+        rateLimit: false,
         cache: true,
     },
     async ({ input, context }) => {

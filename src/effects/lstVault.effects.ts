@@ -1,11 +1,11 @@
-import { experimental_createEffect } from 'envio';
+import { createEffect } from 'envio';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
-export const getLstVaultTokens = experimental_createEffect(
+export const getLstVaultTokens = createEffect(
     {
         name: 'getLstVaultTokens',
         input: {
@@ -17,6 +17,7 @@ export const getLstVaultTokens = experimental_createEffect(
             underlyingTokenAddress: hexSchema,
             blacklistStatus: blacklistStatus,
         },
+        rateLimit: false,
         cache: true,
     },
     async ({ input, context }) => {

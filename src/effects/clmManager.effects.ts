@@ -1,11 +1,11 @@
-import { experimental_createEffect } from 'envio';
+import { createEffect } from 'envio';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
-export const getClmManagerTokens = experimental_createEffect(
+export const getClmManagerTokens = createEffect(
     {
         name: 'getClmManagerTokens',
         input: {
@@ -18,6 +18,7 @@ export const getClmManagerTokens = experimental_createEffect(
             underlyingToken1Address: hexSchema,
             blacklistStatus: blacklistStatus,
         },
+        rateLimit: false,
         cache: true,
     },
     async ({ input, context }) => {
