@@ -121,7 +121,7 @@ const main = async () => {
         const yamlSnippet = `
           - id: ${networkId} # ${network}
             # start_block: <FILL_ME>
-            # rpc: \${${network.toUpperCase()}_RPC_URL}
+            # rpc: \${ENVIO_${network.toUpperCase()}_RPC_URL}
             contracts:
               - name: ClassicVault
                 address: ${formatYamlArray(vaultConfigsMissingInDb.map((vault) => vault.earnContractAddress))}
