@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "blockchain-addressbook": "0.54.103",
-    "envio": "2.32.3",
+    "envio": "3.0.0-alpha-main-clickhouse-sink",
     "remeda": "2.32.0",
     "viem": "2.40.3"
   },
