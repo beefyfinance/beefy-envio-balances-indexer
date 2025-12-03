@@ -2,27 +2,20 @@ import type { Logger } from 'envio';
 import { createPublicClient, defineChain, http, type Chain as ViemChain } from 'viem';
 import {
     arbitrum,
-    aurora,
     avalanche,
     base,
     berachain,
     bsc,
-    canto,
-    celo,
     cronos,
     fantom,
     fraxtal,
-    fuse,
     gnosis,
-    harmonyOne,
     kava,
     linea,
     lisk,
     mainnet,
-    manta,
     mantle,
     metis,
-    mode,
     monad,
     moonbeam,
     moonriver,
@@ -30,7 +23,6 @@ import {
     plasma,
     polygon,
     polygonZkEvm,
-    real,
     rootstock,
     saga,
     scroll,
@@ -42,7 +34,7 @@ import {
 import type { ChainId } from './chain';
 import { config } from './config';
 
-const emerald = defineChain({
+const _emerald = defineChain({
     id: 42262,
     name: 'Emerald',
     nativeCurrency: {
@@ -67,7 +59,7 @@ const emerald = defineChain({
     },
 });
 
-const heco = defineChain({
+const _heco = defineChain({
     id: 128,
     name: 'Heco',
     nativeCurrency: {
@@ -111,38 +103,38 @@ const hyperevm = defineChain({
 });
 
 const chainMap: Record<ChainId, ViemChain> = {
-    1313161554: aurora,
+    // 1313161554: aurora,
     42161: arbitrum,
     43114: avalanche,
     8453: base,
     80094: berachain,
     56: bsc,
-    7700: canto,
-    42220: celo,
+    // 7700: canto,
+    // 42220: celo,
     25: cronos,
-    42262: emerald,
+    // 42262: emerald,
     1: mainnet,
     250: fantom,
     252: fraxtal,
     100: gnosis,
-    128: heco,
-    122: fuse,
+    // 128: heco,
+    // 122: fuse,
     2222: kava,
     999: hyperevm,
     59144: linea,
     1135: lisk,
-    169: manta,
+    // 169: manta,
     5000: mantle,
     1088: metis,
-    34443: mode,
+    // 34443: mode,
     143: monad,
     1284: moonbeam,
     1285: moonriver,
-    1666600000: harmonyOne,
+    // 1666600000: harmonyOne,
     10: optimism,
     9745: plasma,
     137: polygon,
-    111188: real,
+    // 111188: real,
     30: rootstock,
     5464: saga,
     534352: scroll,

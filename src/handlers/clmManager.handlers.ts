@@ -10,7 +10,7 @@ import { type ChainId, toChainId } from '../lib/chain';
 import { handleTokenTransfer } from '../lib/token';
 
 ClmManager.Initialized.handler(async ({ event, context }) => {
-    const chainId = toChainId(event.chainId);
+    const chainId = toChainId(context.chain.id);
     const managerAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = BigInt(event.block.number);
 
@@ -21,7 +21,7 @@ ClmManager.Initialized.handler(async ({ event, context }) => {
 });
 
 ClmManager.Transfer.handler(async ({ event, context }) => {
-    const chainId = toChainId(event.chainId);
+    const chainId = toChainId(context.chain.id);
     const managerAddress = event.srcAddress.toString().toLowerCase() as Hex;
 
     // Ensure that the manager is initialized first

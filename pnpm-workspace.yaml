@@ -1,10 +1,9 @@
-packages: 
-  - '.'
-  - 'generated'
-  
+packages:
+  - "."
+  - "generated"
 
 #minimumReleaseAge: 10080 # 1 week
 minimumReleaseAge: 1440 # 1 day
 onlyBuiltDependencies:
-  - '@biomejs/biome'
+  - "@biomejs/biome"
   - lefthook

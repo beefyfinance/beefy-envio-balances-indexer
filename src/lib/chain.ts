@@ -1,39 +1,40 @@
 import { S } from 'envio';
+import type { chain } from 'generated';
 import * as R from 'remeda';
 
 export const allChainIds = [
     42161, // arbitrum
-    1313161554, // aurora
+    // 1313161554, // aurora
     43114, // avax
     8453, // base
     80094, // berachain
     56, // bsc
-    7700, // canto
-    42220, // celo
+    // 7700, // canto
+    // 42220, // celo
     25, // cronos
-    42262, // emerald
+    // 42262, // emerald
     1, // ethereum
     250, // fantom
     252, // fraxtal
-    122, // fuse
+    // 122, // fuse
     100, // gnosis
-    1666600000, // harmony
-    128, // heco
+    // 1666600000, // harmony
+    // 128, // heco
     999, // hyperevm
     2222, // kava
     59144, // linea
     1135, // lisk
-    169, // manta
+    // 169, // manta
     5000, // mantle
     1088, // metis
-    34443, // mode
+    // 34443, // mode
     143, // monad
     1284, // moonbeam
     1285, // moonriver
     10, // optimism
     9745, // plasma
     137, // polygon
-    111188, // real
+    // 111188, // real
     30, // rootstock
     5464, // saga
     534352, // scroll
@@ -42,7 +43,7 @@ export const allChainIds = [
     130, // unichain
     1101, // zkevm
     324, // zksync
-] as const;
+] as const satisfies chain[];
 
 export const chainIdSchema = S.union(
     R.pipe(

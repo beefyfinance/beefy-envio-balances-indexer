@@ -11,7 +11,7 @@ import { type ChainId, toChainId } from '../lib/chain';
 import { handleTokenTransfer } from '../lib/token';
 
 RewardPool.Initialized.handler(async ({ event, context }) => {
-    const chainId = toChainId(event.chainId);
+    const chainId = toChainId(context.chain.id);
     const rewardPoolAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = BigInt(event.block.number);
 
@@ -22,7 +22,7 @@ RewardPool.Initialized.handler(async ({ event, context }) => {
 });
 
 RewardPool.Transfer.handler(async ({ event, context }) => {
-    const chainId = toChainId(event.chainId);
+    const chainId = toChainId(context.chain.id);
     const rewardPoolAddress = event.srcAddress.toString().toLowerCase() as Hex;
 
     // Ensure that the reward pool is initialized first
@@ -49,7 +49,7 @@ RewardPool.Transfer.handler(async ({ event, context }) => {
 });
 
 RewardPool.NotifyReward.handler(async ({ event, context }) => {
-    const chainId = toChainId(event.chainId);
+    const chainId = toChainId(context.chain.id);
     const rewardPoolAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const trxHash = event.transaction.hash.toString().toLowerCase() as Hex;
     const logIndex = event.logIndex;

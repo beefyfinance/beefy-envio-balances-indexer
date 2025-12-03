@@ -1,54 +1,19 @@
 import { S } from 'envio';
-import type { ChainId } from './chain';
+import * as R from 'remeda';
+import { allChainIds } from './chain';
 import { hexSchema } from './hex';
 
 const configSchema = S.schema({
     ADDRESS_ZERO: hexSchema,
     BURN_ADDRESS: hexSchema,
     MINT_ADDRESS: hexSchema,
-    RPC_URL: S.schema({
-        1313161554: S.string, // aurora
-        42161: S.string, // arbitrum
-        43114: S.string, // avax
-        8453: S.string, // base
-        80094: S.string, // berachain
-        56: S.string, // bsc
-        7700: S.string, // canto
-        42220: S.string, // celo
-        25: S.string, // cronos
-        42262: S.string, // emerald
-        1: S.string, // ethereum
-        250: S.string, // fantom
-        252: S.string, // fraxtal
-        100: S.string, // gnosis
-        128: S.string, // heco
-        122: S.string, // fuse
-        999: S.string, // hyperevm
-        2222: S.string, // kava
-        59144: S.string, // linea
-        1135: S.string, // lisk
-        169: S.string, // manta
-        5000: S.string, // mantle
-        1088: S.string, // metis
-        34443: S.string, // mode
-        143: S.string, // monad
-        1284: S.string, // moonbeam
-        1285: S.string, // moonriver
-        1666600000: S.string, // one
-        10: S.string, // optimism
-        9745: S.string, // plasma
-        137: S.string, // polygon
-        111188: S.string, // real
-        30: S.string, // rootstock
-        5464: S.string, // saga
-        534352: S.string, // scroll
-        1329: S.string, // sei
-        146: S.string, // sonic
-        130: S.string, // unichain
-        1101: S.string, // zkevm
-        324: S.string, // zksync
-        // biome-ignore lint/suspicious/noExplicitAny: it's fine here
-    } satisfies Record<ChainId, any>),
+    RPC_URL: S.schema(
+        R.pipe(
+            allChainIds,
+            R.map((chainId) => [chainId, S.string] as const),
+            R.fromEntries()
+        )
+    ),
 });
 
 export const config = S.parseOrThrow(
@@ -56,48 +21,11 @@ export const config = S.parseOrThrow(
         ADDRESS_ZERO: '0x0000000000000000000000000000000000000000',
         BURN_ADDRESS: '0x000000000000000000000000000000000000dead',
         MINT_ADDRESS: '0x0000000000000000000000000000000000000000',
-        RPC_URL: {
-            1313161554: process.env.ENVIO_AURORA_RPC_URL ?? null,
-            42161: process.env.ENVIO_ARBITRUM_RPC_URL ?? null,
-            43114: process.env.ENVIO_AVAX_RPC_URL ?? null,
-            8453: process.env.ENVIO_BASE_RPC_URL ?? null,
-            80094: process.env.ENVIO_BERACHAIN_RPC_URL ?? null,
-            56: process.env.ENVIO_BSC_RPC_URL ?? null,
-            7700: process.env.ENVIO_CANTO_RPC_URL ?? null,
-            42220: process.env.ENVIO_CELO_RPC_URL ?? null,
-            25: process.env.ENVIO_CRONOS_RPC_URL ?? null,
-            42262: process.env.ENVIO_EMERALD_RPC_URL ?? null,
-            1: process.env.ENVIO_ETHEREUM_RPC_URL ?? null,
-            250: process.env.ENVIO_FANTOM_RPC_URL ?? null,
-            252: process.env.ENVIO_FRAXTAL_RPC_URL ?? null,
-            100: process.env.ENVIO_GNOSIS_RPC_URL ?? null,
-            128: process.env.ENVIO_HECO_RPC_URL ?? null,
-            122: process.env.ENVIO_FUSE_RPC_URL ?? null,
-            999: process.env.ENVIO_HYPEREVM_RPC_URL ?? null,
-            2222: process.env.ENVIO_KAVA_RPC_URL ?? null,
-            59144: process.env.ENVIO_LINEA_RPC_URL ?? null,
-            1135: process.env.ENVIO_LISK_RPC_URL ?? null,
-            169: process.env.ENVIO_MANTA_RPC_URL ?? null,
-            5000: process.env.ENVIO_MANTLE_RPC_URL ?? null,
-            1088: process.env.ENVIO_METIS_RPC_URL ?? null,
-            34443: process.env.ENVIO_MODE_RPC_URL ?? null,
-            143: process.env.ENVIO_MONAD_RPC_URL ?? null,
-            1284: process.env.ENVIO_MOONBEAM_RPC_URL ?? null,
-            1285: process.env.ENVIO_MOONRIVER_RPC_URL ?? null,
-            1666600000: process.env.ENVIO_ONE_RPC_URL ?? null,
-            10: process.env.ENVIO_OPTIMISM_RPC_URL ?? null,
-            9745: process.env.ENVIO_PLASMA_RPC_URL ?? null,
-            137: process.env.ENVIO_POLYGON_RPC_URL ?? null,
-            111188: process.env.ENVIO_REAL_RPC_URL ?? null,
-            30: process.env.ENVIO_ROOTSTOCK_RPC_URL ?? null,
-            5464: process.env.ENVIO_SAGA_RPC_URL ?? null,
-            534352: process.env.ENVIO_SCROLL_RPC_URL ?? null,
-            1329: process.env.ENVIO_SEI_RPC_URL ?? null,
-            146: process.env.ENVIO_SONIC_RPC_URL ?? null,
-            130: process.env.ENVIO_UNICHAIN_RPC_URL ?? null,
-            1101: process.env.ENVIO_ZKEVM_RPC_URL ?? null,
-            324: process.env.ENVIO_ZKSYNC_RPC_URL ?? null,
-        } satisfies Record<ChainId, string | null>,
+        RPC_URL: R.pipe(
+            allChainIds,
+            R.map((chainId) => [chainId, process.env[`ENVIO_RPC_URL_${chainId}`] ?? null] as const),
+            R.fromEntries()
+        ),
     },
     configSchema
 );
