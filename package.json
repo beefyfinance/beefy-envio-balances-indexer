@@ -1,18 +1,19 @@
 {
   "name": "envio-indexer",
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
     "clean": "tsc --clean",
     "build": "tsc --build",
     "watch": "tsc --watch",
     "codegen": "envio codegen",
-    "dev": "ENVIO_PG_PUBLIC_SCHEMA=beefy_balances envio dev",
-    "start": "ENVIO_PG_PUBLIC_SCHEMA=beefy_balances envio start",
+    "dev": "ENVIO_PG_PORT=5444 ENVIO_PG_PUBLIC_SCHEMA=beefy_balances envio dev",
+    "start": "ENVIO_PG_PORT=5444 ENVIO_PG_PUBLIC_SCHEMA=beefy_balances envio start",
     "stop": "envio stop",
     "deploy": "git checkout prod && git merge origin/main --ff-only && git push && git checkout -",
     "format": "biome check --write --unsafe",
     "format:safe": "biome check --write",
-    "db:console": "PGPASSWORD=testing psql -h localhost -p 5433 -U postgres -d envio-dev",
+    "db:console": "PGPASSWORD=testing psql -h localhost -p ${ENVIO_PG_PORT:-5433} -U postgres -d envio-dev",
     "test": "pnpm run test:lint && pnpm run test:ts",
     "test:lint": "biome ci",
     "test:ts": "tsc --noEmit"
