@@ -23,5 +23,5 @@
     /* Code doesn't run in the DOM: */
     "lib": ["es2022"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "generated"]
 }
