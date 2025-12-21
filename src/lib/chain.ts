@@ -1,5 +1,5 @@
 import { S } from 'envio';
-import type { chain } from 'generated';
+import type { chainId } from 'generated';
 import * as R from 'remeda';
 
 export const allChainIds = [
@@ -43,7 +43,7 @@ export const allChainIds = [
     130, // unichain
     1101, // zkevm
     324, // zksync
-] as const satisfies chain[];
+] as const satisfies chainId[];
 
 export const chainIdSchema = S.union(
     R.pipe(
