@@ -1,4 +1,4 @@
-import { Erc4626Adapter } from 'generated';
+import { type Block_t, Erc4626Adapter } from 'generated';
 import type { Erc4626Adapter_t } from 'generated/src/db/Entities.gen';
 import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
@@ -12,7 +12,7 @@ import { handleTokenTransfer } from '../lib/token';
 Erc4626Adapter.Initialized.handler(async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
     const adapterAddress = event.srcAddress.toString().toLowerCase() as Hex;
-    const initializedBlock = BigInt(event.block.number);
+    const initializedBlock = event.block;
 
     const adapter = await initializeErc4626Adapter({ context, chainId, adapterAddress, initializedBlock });
     if (!adapter) return;
@@ -29,7 +29,7 @@ Erc4626Adapter.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         adapterAddress,
-        initializedBlock: BigInt(event.block.number),
+        initializedBlock: event.block,
     });
     if (!adapter) return;
 
@@ -56,7 +56,7 @@ const initializeErc4626Adapter = async ({
     context: HandlerContext;
     chainId: ChainId;
     adapterAddress: Hex;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<Erc4626Adapter_t | null> => {
     // Check if the adapter already exists
     const existingAdapter = await getErc4626Adapter(context, chainId, adapterAddress);

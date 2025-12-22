@@ -1,4 +1,4 @@
-import { ClmManager } from 'generated';
+import { type Block_t, ClmManager } from 'generated';
 import type { ClmManager_t } from 'generated/src/db/Entities.gen';
 import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
@@ -12,7 +12,7 @@ import { handleTokenTransfer } from '../lib/token';
 ClmManager.Initialized.handler(async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
     const managerAddress = event.srcAddress.toString().toLowerCase() as Hex;
-    const initializedBlock = BigInt(event.block.number);
+    const initializedBlock = event.block;
 
     const manager = await initializeClmManager({ context, chainId, managerAddress, initializedBlock });
     if (!manager) return;
@@ -29,7 +29,7 @@ ClmManager.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         managerAddress,
-        initializedBlock: BigInt(event.block.number),
+        initializedBlock: event.block,
     });
     if (!manager) return;
 
@@ -56,7 +56,7 @@ const initializeClmManager = async ({
     context: HandlerContext;
     chainId: ChainId;
     managerAddress: Hex;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<ClmManager_t | null> => {
     // Check if the manager already exists
     const existingManager = await getClmManager(context, chainId, managerAddress);

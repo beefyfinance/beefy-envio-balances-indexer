@@ -1,4 +1,4 @@
-import { LstVault } from 'generated';
+import { type Block_t, LstVault } from 'generated';
 import type { LstVault_t } from 'generated/src/db/Entities.gen';
 import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
@@ -12,7 +12,7 @@ import { handleTokenTransfer } from '../lib/token';
 LstVault.Initialized.handler(async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
     const lstAddress = event.srcAddress.toString().toLowerCase() as Hex;
-    const initializedBlock = BigInt(event.block.number);
+    const initializedBlock = event.block;
 
     const lst = await initializeLstVault({ context, chainId, lstAddress, initializedBlock });
     if (!lst) return;
@@ -29,7 +29,7 @@ LstVault.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         lstAddress,
-        initializedBlock: BigInt(event.block.number),
+        initializedBlock: event.block,
     });
     if (!lst) return;
 
@@ -56,7 +56,7 @@ const initializeLstVault = async ({
     context: HandlerContext;
     chainId: ChainId;
     lstAddress: Hex;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<LstVault_t | null> => {
     // Check if the LST vault already exists
     const existingLst = await getLstVault(context, chainId, lstAddress);

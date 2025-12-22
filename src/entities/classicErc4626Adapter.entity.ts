@@ -1,4 +1,4 @@
-import type { handlerContext as HandlerContext } from 'generated';
+import type { Block_t, handlerContext as HandlerContext } from 'generated';
 import type { Erc4626Adapter_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
@@ -25,7 +25,7 @@ export const createErc4626Adapter = async ({
     adapterAddress: Hex;
     shareToken: Token_t;
     underlyingToken: Token_t;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<Erc4626Adapter_t> => {
     const id = erc4626AdapterId({ chainId, adapterAddress });
 
@@ -36,7 +36,8 @@ export const createErc4626Adapter = async ({
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
         initializableStatus: 'INITIALIZED',
-        initializedBlock,
+        initializedBlock: BigInt(initializedBlock.number),
+        initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };
 
     context.Erc4626Adapter.set(adapter);

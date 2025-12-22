@@ -1,4 +1,4 @@
-import { ClassicBoost } from 'generated';
+import { type Block_t, ClassicBoost } from 'generated';
 import type { ClassicBoost_t } from 'generated/src/db/Entities.gen';
 import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
@@ -14,7 +14,7 @@ import { handleTokenTransfer } from '../lib/token';
 ClassicBoost.Initialized.handler(async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
     const boostAddress = event.srcAddress.toString().toLowerCase() as Hex;
-    const initializedBlock = BigInt(event.block.number);
+    const initializedBlock = event.block;
 
     const boost = await initializeBoost({ context, chainId, boostAddress, initializedBlock });
     if (!boost) return;
@@ -25,7 +25,7 @@ ClassicBoost.Initialized.handler(async ({ event, context }) => {
 ClassicBoost.Staked.handler(async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
     const boostAddress = event.srcAddress.toString().toLowerCase() as Hex;
-    const initializedBlock = BigInt(event.block.number);
+    const initializedBlock = event.block;
 
     // Ensure that the boost virtual token is created first
     // otherwise, handleTokenTransfer will try and create it and fail because
@@ -55,7 +55,7 @@ ClassicBoost.Withdrawn.handler(async ({ event, context }) => {
         context,
         chainId,
         boostAddress,
-        initializedBlock: BigInt(event.block.number),
+        initializedBlock: event.block,
     });
     if (!boost) return;
 
@@ -81,7 +81,7 @@ ClassicBoost.RewardAdded.handler(async ({ event, context }) => {
         context,
         chainId,
         boostAddress,
-        initializedBlock: BigInt(event.block.number),
+        initializedBlock: event.block,
     });
     if (!boost) return;
 
@@ -115,7 +115,7 @@ const initializeBoost = async ({
     context: HandlerContext;
     chainId: ChainId;
     boostAddress: Hex;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<ClassicBoost_t | null> => {
     // Check if the boost already exists
     const existingBoost = await getClassicBoost(context, chainId, boostAddress);

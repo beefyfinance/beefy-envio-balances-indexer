@@ -175,6 +175,8 @@ type ClassicVault {
   initializableStatus: InitializableStatus!
   "The first block the vault was active on"
   initializedBlock: BigInt!
+  "The first timestamp the vault was active on"
+  initializedTimestamp: Timestamp!
 }
 
 """
@@ -193,6 +195,13 @@ type ClassicVaultStrategy {
 
   "The classic vault of the strategy"
   classicVault: ClassicVault!
+
+  "Initialized status"
+  initializableStatus: InitializableStatus!
+  "The first block the strategy was active on"
+  initializedBlock: BigInt!
+  "The first timestamp the strategy was active on"
+  initializedTimestamp: Timestamp!
 }
 
 """
@@ -217,6 +226,8 @@ type ClassicBoost {
   initializableStatus: InitializableStatus!
   "The first block the boost was active on"
   initializedBlock: BigInt!
+  "The first timestamp the boost was active on"
+  initializedTimestamp: Timestamp!
 }
 
 """
@@ -241,6 +252,8 @@ type Erc4626Adapter {
   initializableStatus: InitializableStatus!
   "The first block the adapter was active on"
   initializedBlock: BigInt!
+  "The first timestamp the adapter was active on"
+  initializedTimestamp: Timestamp!
 }
 
 """
@@ -265,6 +278,33 @@ type ClmManager {
   initializableStatus: InitializableStatus!
   "The first block the manager was active on"
   initializedBlock: BigInt!
+  "The first timestamp the manager was active on"
+  initializedTimestamp: Timestamp!
+}
+
+"""
+A strategy is a contract that manages the assets of a CLM.
+This entity is mostly used to start tracking the events and link them to the CLM on new event
+Also used to ignore balance changes events for this address
+"""
+type ClmStrategy {
+  "chain - strategy address"
+  id: ID!
+
+  "chain id"
+  chainId: Int! @index
+  "The strategy address"
+  address: Bytes! @index
+
+  "The clm manager of the strategy"
+  clmManager: ClmManager!
+
+  "Initialized status"
+  initializableStatus: InitializableStatus!
+  "The first block the strategy was active on"
+  initializedBlock: BigInt!
+  "The first timestamp the strategy was active on"
+  initializedTimestamp: Timestamp!
 }
 
 """
@@ -290,6 +330,8 @@ type RewardPool {
   initializableStatus: InitializableStatus!
   "The first block the reward pool was active on"
   initializedBlock: BigInt!
+  "The first timestamp the reward pool was active on"
+  initializedTimestamp: Timestamp!
 }
 
 """
@@ -313,4 +355,6 @@ type LstVault {
   initializableStatus: InitializableStatus!
   "The first block the lst was active on"
   initializedBlock: BigInt!
+  "The first timestamp the lst was active on"
+  initializedTimestamp: Timestamp!
 }

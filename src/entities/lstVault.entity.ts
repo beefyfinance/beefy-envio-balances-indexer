@@ -1,4 +1,4 @@
-import type { handlerContext as HandlerContext } from 'generated';
+import type { Block_t, handlerContext as HandlerContext } from 'generated';
 import type { LstVault_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
@@ -25,7 +25,7 @@ export const createLstVault = async ({
     lstAddress: Hex;
     shareToken: Token_t;
     underlyingToken: Token_t;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<LstVault_t> => {
     const id = LstVaultId({ chainId, lstAddress });
 
@@ -36,7 +36,8 @@ export const createLstVault = async ({
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
         initializableStatus: 'INITIALIZED',
-        initializedBlock,
+        initializedBlock: BigInt(initializedBlock.number),
+        initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };
 
     context.LstVault.set(lst);

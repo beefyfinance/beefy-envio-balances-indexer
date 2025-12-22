@@ -1,4 +1,4 @@
-import { ClassicVault } from 'generated';
+import { type Block_t, ClassicVault } from 'generated';
 import type { ClassicVault_t } from 'generated/src/db/Entities.gen';
 import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
@@ -12,7 +12,7 @@ import { handleTokenTransfer } from '../lib/token';
 ClassicVault.Initialized.handler(async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
     const vaultAddress = event.srcAddress.toString().toLowerCase() as Hex;
-    const initializedBlock = BigInt(event.block.number);
+    const initializedBlock = event.block;
 
     const vault = await initializeClassicVault({ context, chainId, vaultAddress, initializedBlock });
     if (!vault) return;
@@ -29,7 +29,7 @@ ClassicVault.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         vaultAddress,
-        initializedBlock: BigInt(event.block.number),
+        initializedBlock: event.block,
     });
     if (!vault) return;
 
@@ -56,7 +56,7 @@ const initializeClassicVault = async ({
     context: HandlerContext;
     chainId: ChainId;
     vaultAddress: Hex;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<ClassicVault_t | null> => {
     // Check if the vault already exists
     const existingVault = await getClassicVault(context, chainId, vaultAddress);

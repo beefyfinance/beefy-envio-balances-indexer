@@ -1,4 +1,4 @@
-import type { handlerContext as HandlerContext } from 'generated';
+import type { Block_t, handlerContext as HandlerContext } from 'generated';
 import type { ClassicVault_t, ClassicVaultStrategy_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
@@ -27,7 +27,7 @@ export const createClassicVault = async ({
     shareToken: Token_t;
     underlyingToken: Token_t;
     strategyAddress: Hex;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<ClassicVault_t> => {
     const id = classicVaultId({ chainId, vaultAddress });
 
@@ -38,7 +38,8 @@ export const createClassicVault = async ({
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
         initializableStatus: 'INITIALIZED',
-        initializedBlock,
+        initializedBlock: BigInt(initializedBlock.number),
+        initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };
 
     context.ClassicVault.set(vault);
@@ -48,6 +49,7 @@ export const createClassicVault = async ({
         chainId,
         strategyAddress: strategyAddress,
         classicVault: vault,
+        initializedBlock,
     });
 
     return vault;
@@ -56,16 +58,24 @@ export const createClassicVault = async ({
 export const classicVaultStrategyId = ({ chainId, strategyAddress }: { chainId: ChainId; strategyAddress: Hex }) =>
     `${chainId}-${strategyAddress.toLowerCase()}`;
 
+export const getClassicVaultStrategy = async (context: HandlerContext, chainId: ChainId, strategyAddress: Hex) => {
+    const id = classicVaultStrategyId({ chainId, strategyAddress });
+    const strategy = await context.ClassicVaultStrategy.get(id);
+    return strategy;
+};
+
 export const createClassicVaultStrategy = async ({
     context,
     chainId,
     strategyAddress,
     classicVault,
+    initializedBlock,
 }: {
     context: HandlerContext;
     chainId: ChainId;
     strategyAddress: Hex;
     classicVault: ClassicVault_t;
+    initializedBlock: Block_t;
 }): Promise<ClassicVaultStrategy_t> => {
     const id = classicVaultStrategyId({ chainId, strategyAddress });
 
@@ -74,6 +84,9 @@ export const createClassicVaultStrategy = async ({
         chainId,
         address: strategyAddress,
         classicVault_id: classicVault.id,
+        initializableStatus: 'INITIALIZED',
+        initializedBlock: BigInt(initializedBlock.number),
+        initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };
 
     context.ClassicVaultStrategy.set(strategy);

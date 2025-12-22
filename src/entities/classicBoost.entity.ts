@@ -1,4 +1,4 @@
-import type { handlerContext as HandlerContext } from 'generated';
+import type { Block_t, handlerContext as HandlerContext } from 'generated';
 import type { ClassicBoost_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
@@ -25,7 +25,7 @@ export const createClassicBoost = async ({
     boostAddress: Hex;
     shareToken: Token_t;
     underlyingToken: Token_t;
-    initializedBlock: bigint;
+    initializedBlock: Block_t;
 }): Promise<ClassicBoost_t> => {
     const id = classicBoostId({ chainId, boostAddress });
 
@@ -36,7 +36,8 @@ export const createClassicBoost = async ({
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
         initializableStatus: 'INITIALIZED',
-        initializedBlock,
+        initializedBlock: BigInt(initializedBlock.number),
+        initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };
 
     context.ClassicBoost.set(boost);
