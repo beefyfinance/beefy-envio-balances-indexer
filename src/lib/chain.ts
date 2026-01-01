@@ -11,7 +11,7 @@ export const allChainIds = [
     56, // bsc
     // 7700, // canto
     // 42220, // celo
-    // 25, // cronos
+    25, // cronos
     // 42262, // emerald
     1, // ethereum
     250, // fantom
