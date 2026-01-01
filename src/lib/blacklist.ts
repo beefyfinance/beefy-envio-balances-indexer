@@ -331,21 +331,10 @@ export const rawVaultBlacklist =
         { chainId: 8453, address: '0xfc2f20a29697c400577b944c648378cf61cc3748' },
         { chainId: 8453, address: '0xfe3528cd1fe76745886efd655e5ab54859043df1' },
         { chainId: 8453, address: '0xfeb6d8c8571d64b7aa2c4d9b720750b0256d34fe' },
-        { chainId: 999, address: '0x073dda19364bb91ddb5e838ca57ebd36353e4061' },
-        { chainId: 999, address: '0x0d968c40feff3fea6953aa7c1fdefeb0818f10e9' },
-        { chainId: 999, address: '0x0fe958d31c0aa613a0b08901fb26a7761c5b14f4' },
-        { chainId: 999, address: '0x24b7b6fb9acd69f8bd6c64efc0664056eb612af9' },
-        { chainId: 999, address: '0x5d9a05038089519407833ea382d576ff5a67da69' },
-        { chainId: 999, address: '0x6ea6ce58d6948bd8575e1a3b82ef9be3d69dc2bd' },
-        { chainId: 999, address: '0x77c69255407dec68ab2ed60ec1dd15311f83f4de' },
         { chainId: 999, address: '0x795436fb1ebafb210e4e2976dbdf49df30b0a4d4' },
-        { chainId: 999, address: '0x8443ff28f4c891fd353a62313f570e2f29a46b0c' },
-        { chainId: 999, address: '0xad974cd0b0d9bc4b43d44efdbd11cd1e69a815b3' },
         { chainId: 999, address: '0xb400ea86eb0ded6d313b89ee579fd76cb730922a' },
-        { chainId: 999, address: '0xc3de4bab30aeb98bcc062cd4b1768cd5a5caccc3' },
         { chainId: 999, address: '0xcca0a5e330d7640d2599b4f0ac6067d658d46688' },
         { chainId: 999, address: '0xd9bcdf03d03d1f36d2b6daf6b30b9ee6c014f610' },
-        { chainId: 999, address: '0xecb0db6d40c34e8e9b7e48f286625a4f03788ea4' },
     ];
 
 const vaultBlacklist = R.pipe(
