@@ -175,6 +175,12 @@ const staticVaults = [
         underlyingTokenAddress: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // WAVAX
         strategyAddress: '0xe1526210f125c30227dfc398073896eC0a6eA9B9',
     },
+    {
+        chainId: 10,
+        vaultAddress: '0x7ee71053102d54fc843baebaf07277c2b6db64f1',
+        underlyingTokenAddress: '0x4200000000000000000000000000000000000006', // WETH
+        strategyAddress: '0x27Efc41fAb7F0c1ebadd126E66a3A998FA35C99B',
+    },
 
     // ??? no idea, the block explorer is not working
     {
@@ -188,6 +194,12 @@ const staticVaults = [
         vaultAddress: '0xbf1340159c1b69Ae98Ff08BE5fC77cdc084dDc73',
         underlyingTokenAddress: '0x21be370d5312f44cb42ce377bc9b8a0cef1a4c83', // WFTM
         strategyAddress: '0x212a9507CE6D0aC42990Bf42Db14d922a2A6bEed',
+    },
+    {
+        chainId: 250,
+        vaultAddress: '0x49c68edb7aebd968f197121453e41b8704acde0c',
+        underlyingTokenAddress: '0x21be370d5312f44cb42ce377bc9b8a0cef1a4c83', // WFTM
+        strategyAddress: '0x6d8CA0589702F30cED94C0D5c5d33b9e40D05C31',
     },
 ];
 

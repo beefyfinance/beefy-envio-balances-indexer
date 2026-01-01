@@ -141,7 +141,6 @@ export const rawVaultBlacklist =
         { chainId: 250, address: '0x329d482431691bf14ff9de2160e3b3cb14007d9d' },
         { chainId: 250, address: '0x36ffbdfd369347463535b416fe1a9fb9dfdb0264' },
         { chainId: 250, address: '0x432361e7f853ce1848d46942fecb13bc4263d1ac' },
-        { chainId: 250, address: '0x49c68edb7aebd968f197121453e41b8704acde0c' },
         { chainId: 250, address: '0x54eb10c9fee9570404eba4afed60daa19c9b61ae' },
         { chainId: 250, address: '0x7cba0d819c3778c9d05af08b1d5f2e8c0b8a0166' },
         { chainId: 250, address: '0x8afc0f9BdC5DcA9f0408Df03A03520bFa98A15aF' },

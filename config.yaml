@@ -3063,7 +3063,6 @@ chains:
           - 0x182be93E1C0C4d305fe43bD093292F21fd679797
       - name: ClassicVault
         address:
-          - 0x7eE71053102d54Fc843BaEBaf07277C2b6dB64f1
           - 0x00acfd3420cd652500f5ba1b90ac7c19f694c5c3
           - 0x01bff9f1b56c76a619327f681a734c48daa80e74
           - 0x01d9cfb8a9d43013a1fdc925640412d8d2d900f0
