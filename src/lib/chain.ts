@@ -29,8 +29,8 @@ export const allChainIds = [
     1088, // metis
     // 34443, // mode
     143, // monad
-    // 1284, // moonbeam
-    // 1285, // moonriver
+    1284, // moonbeam
+    1285, // moonriver
     10, // optimism
     9745, // plasma
     137, // polygon
