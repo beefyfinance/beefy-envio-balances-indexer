@@ -181,6 +181,12 @@ const staticVaults = [
         underlyingTokenAddress: '0x4200000000000000000000000000000000000006', // WETH
         strategyAddress: '0x27Efc41fAb7F0c1ebadd126E66a3A998FA35C99B',
     },
+    {
+        chainId: 43114,
+        vaultAddress: '0x1b156c5c75e9df4caab2a5cc5999ac58ff4f9090',
+        underlyingTokenAddress: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // WAVAX
+        strategyAddress: '0xB06D0423e890905dFBA194fa167849a7B2e1B56B',
+    },
 
     // ??? no idea, the block explorer is not working
     {
