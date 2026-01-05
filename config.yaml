@@ -1700,6 +1700,9 @@ chains:
       - name: ClassicBoost
         address:
           - 0xa01fae0612a4786ec296be7f87b292f05c68186b
+          - 0x657cc938053126fa29d9dbcb347f37807005b4f1
+          - 0xe06575cfd4a631e8c0cd9fbdd8d77ab04cffa52c
+          - 0xf424488cd9213b6fd83f63c2bdca8b0492b2a9a5
       - name: ClassicStrategy
         address: []
       - name: ClmStrategy
@@ -3021,7 +3024,10 @@ chains:
           - 0xf8e9774ae3cc7ae3ee11161cc1313252a0784e18
           - 0xfaa15a1b4dab85d35e912f88127b9986638a1265
       - name: ClassicBoost
-        address: []
+        address:
+          - 0x3c9c884efab85c44d675039de227b3dd275c360e
+          - 0x3ee361ea7bf033b7abb840a6853d417e85941965
+          - 0x405ee7f4f067604b787346bc22acb66b06b15a4b
       - name: ClassicStrategy
         address: []
       - name: ClmStrategy
