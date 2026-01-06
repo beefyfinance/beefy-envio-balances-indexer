@@ -43,8 +43,11 @@ RewardPool.Transfer.handler(async ({ event, context }) => {
         senderAddress: event.params.from.toString().toLowerCase() as Hex,
         receiverAddress: event.params.to.toString().toLowerCase() as Hex,
         rawTransferAmount: event.params.value,
-        block: event.block,
-        transaction: event.transaction,
+        event: {
+            block: event.block,
+            logIndex: event.logIndex,
+            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+        },
     });
 });
 

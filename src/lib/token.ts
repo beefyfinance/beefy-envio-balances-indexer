@@ -14,8 +14,7 @@ export const handleTokenTransfer = async ({
     senderAddress,
     receiverAddress,
     rawTransferAmount,
-    block,
-    transaction,
+    event,
 }: {
     context: HandlerContext;
     chainId: ChainId;
@@ -23,11 +22,14 @@ export const handleTokenTransfer = async ({
     senderAddress: Hex;
     receiverAddress: Hex;
     rawTransferAmount: bigint;
-    block: Block_t;
-    transaction: { hash: string };
+    event: {
+        block: Block_t;
+        logIndex: number;
+        trxHash: Hex;
+    };
 }) => {
     if (rawTransferAmount === 0n) {
-        context.log.debug('Ignoring transfer with zero value', { trx: transaction.hash });
+        context.log.debug('Ignoring transfer with zero value', { trx: event.trxHash });
         return;
     }
 
@@ -75,9 +77,8 @@ export const handleTokenTransfer = async ({
             amountDiff: value.negated(),
             account: senderAccount,
             balance: senderBalance,
-            block,
             token,
-            transaction,
+            event,
         });
         holderCountChange += diff.holderCountChange;
     }
@@ -89,9 +90,8 @@ export const handleTokenTransfer = async ({
             amountDiff: value,
             account: receiverAccount,
             balance: receiverBalance,
-            block,
             token,
-            transaction,
+            event,
         });
         holderCountChange += diff.holderCountChange;
     }
@@ -116,18 +116,20 @@ const updateAccountBalance = async ({
     account,
     balance,
     token,
-    block,
+    event,
     chainId,
-    transaction,
 }: {
     context: HandlerContext;
     amountDiff: BigDecimal;
     account: Account_t;
     balance: TokenBalance_t;
     token: Token_t;
-    block: Block_t;
     chainId: ChainId;
-    transaction: { hash: string };
+    event: {
+        block: Block_t;
+        logIndex: number;
+        trxHash: Hex;
+    };
 }) => {
     const before = balance.amount;
     const after = balance.amount.plus(amountDiff);
@@ -141,10 +143,10 @@ const updateAccountBalance = async ({
         context,
         token,
         account,
-        block,
-        balance: after,
+        event,
+        balanceBefore: before,
+        balanceAfter: after,
         chainId,
-        transaction,
     });
     context.TokenBalanceChange.set({
         ...balanceChange,

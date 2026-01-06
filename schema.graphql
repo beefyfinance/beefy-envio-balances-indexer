@@ -101,6 +101,8 @@ type TokenBalanceChange {
 
   "Transaction hash of the change"
   trxHash: Bytes! @index
+  "The log index"
+  logIndex: Int! @index
   "Block number of this change"
   blockNumber: BigInt! @index
   "Timestamp of this change"

@@ -2,7 +2,6 @@ import { BigDecimal, type Block_t, type handlerContext as HandlerContext } from 
 import type { Account_t, Token_t, TokenBalance_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
-import { BIG_ZERO } from '../lib/decimal';
 import { accountId } from './account.entity';
 import { tokenId } from './token.entity';
 
@@ -48,21 +47,25 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
     context,
     token,
     account,
-    block,
-    balance,
+    balanceBefore,
+    balanceAfter,
     chainId,
-    transaction,
+    event,
 }: {
     context: HandlerContext;
     chainId: ChainId;
     token: Token_t;
     account: Account_t;
-    block: Block_t;
-    transaction: { hash: string };
-    balance: BigDecimal;
+    event: {
+        block: Block_t;
+        logIndex: number;
+        trxHash: Hex;
+    };
+    balanceBefore: BigDecimal;
+    balanceAfter: BigDecimal;
 }) => {
     return await context.TokenBalanceChange.getOrCreate({
-        id: TokenBalanceChangeId({ chainId, account, token, blockNumber: block.number }),
+        id: TokenBalanceChangeId({ chainId, account, token, blockNumber: event.block.number }),
 
         chainId: chainId,
 
@@ -70,11 +73,12 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
         account_id: accountId({ accountAddress: account.address as Hex }),
         token_id: tokenId({ chainId, tokenAddress: token.address as Hex }),
 
-        balanceBefore: BIG_ZERO,
-        balanceAfter: balance,
+        balanceBefore,
+        balanceAfter,
 
-        trxHash: transaction.hash,
-        blockNumber: BigInt(block.number),
-        blockTimestamp: new Date(block.timestamp * 1000),
+        trxHash: event.trxHash,
+        logIndex: event.logIndex,
+        blockNumber: BigInt(event.block.number),
+        blockTimestamp: new Date(event.block.timestamp * 1000),
     });
 };
