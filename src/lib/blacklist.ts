@@ -458,5 +458,5 @@ export const logBlacklistStatus = (
     type: string,
     data: Record<string, unknown> & { contractAddress: string }
 ) => {
-    log.error(`[BLACKLIST] ${type}`, { status, ...data, contractAddress: data.contractAddress });
+    log.debug(`[BLACKLIST] ${type}`, { status, ...data, contractAddress: data.contractAddress });
 };
