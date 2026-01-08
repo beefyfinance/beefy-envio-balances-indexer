@@ -131,40 +131,35 @@ const updateAccountBalance = async ({
         trxHash: Hex;
     };
 }) => {
-    const before = balance.amount;
-    const after = balance.amount.plus(amountDiff);
+    const balanceBefore = balance.amount;
+    const balanceAfter = balance.amount.plus(amountDiff);
 
     context.TokenBalance.set({
         ...balance,
-        amount: after,
+        amount: balanceAfter,
     });
 
-    const balanceChange = await getOrCreateTokenBalanceChangeEntity({
+    await getOrCreateTokenBalanceChangeEntity({
         context,
         token,
         account,
         event,
-        balanceBefore: before,
-        balanceAfter: after,
+        balanceBefore,
+        balanceAfter,
         chainId,
-    });
-    context.TokenBalanceChange.set({
-        ...balanceChange,
-        balanceBefore: before,
-        balanceAfter: after,
     });
 
     let holderCountChange = 0;
-    if (before.eq(BIG_ZERO) && !after.eq(BIG_ZERO)) {
+    if (balanceBefore.eq(BIG_ZERO) && !balanceAfter.eq(BIG_ZERO)) {
         holderCountChange = 1;
     }
-    if (!before.eq(BIG_ZERO) && after.eq(BIG_ZERO)) {
+    if (!balanceBefore.eq(BIG_ZERO) && balanceAfter.eq(BIG_ZERO)) {
         holderCountChange = -1;
     }
 
     return {
-        before,
-        after,
+        balanceBefore,
+        balanceAfter,
         holderCountChange,
     };
 };
