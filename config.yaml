@@ -144,6 +144,15 @@ contracts:
         field_selection:
           transaction_fields: [hash]
 
+  - name: Token
+    abi_file_path: abis/IERC20/IERC20.json
+    handler: src/handlers/token.handlers.ts
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+        field_selection:
+          transaction_fields: [hash]
+
 chains:
   # - id: 1313161554 # aurora
   #   start_block: 54631763
@@ -547,7 +556,6 @@ chains:
       - name: ClassicVault
         address:
           - 0x62e5b9934dcb87618cfc74b222305d16c997e8c1
-          - 0xc55E93C62874D8100dBd2DfE307EDc1036ad5434
           - 0x48dffa589c0ca127c5c7b3e7250ba83fac206309
       - name: ClassicBoost
         address:
@@ -567,6 +575,9 @@ chains:
         address: []
       - name: Erc4626Adapter
         address: []
+      - name: Token
+        address:
+          - 0xc55e93c62874d8100dbd2dfe307edc1036ad5434 # mooBIFI
 
   - id: 80094 # berachain
     start_block: 792341
@@ -3175,6 +3186,9 @@ chains:
           - 0x96f990d1aAF83B09a4BA3D22cAab0377a058C84f # beOpx
       - name: Erc4626Adapter
         address: []
+      - name: Token
+        address:
+          - 0xc55e93c62874d8100dbd2dfe307edc1036ad5434 # mooBIFI
 
   # can't find an archive node for harmony
   # - id: 1666600000 # one (harmony)
