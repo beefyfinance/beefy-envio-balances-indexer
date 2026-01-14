@@ -10,6 +10,8 @@ import { type ChainId, toChainId } from '../lib/chain';
 import { handleTokenTransfer } from '../lib/token';
 
 ClassicVault.Initialized.handler(async ({ event, context }) => {
+    context.log.debug('ClassicVault.Initialized', { event });
+
     const chainId = toChainId(context.chain.id);
     const vaultAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = event.block;
@@ -21,6 +23,8 @@ ClassicVault.Initialized.handler(async ({ event, context }) => {
 });
 
 ClassicVault.Transfer.handler(async ({ event, context }) => {
+    context.log.debug('ClassicVault.Transfer', { event });
+
     const chainId = toChainId(context.chain.id);
     const vaultAddress = event.srcAddress.toString().toLowerCase() as Hex;
 

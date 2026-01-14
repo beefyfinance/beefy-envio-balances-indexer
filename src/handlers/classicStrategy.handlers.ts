@@ -8,6 +8,8 @@ import { type ChainId, toChainId } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 
 ClassicStrategy.Initialized.handler(async ({ event, context }) => {
+    context.log.debug('ClassicStrategy.Initialized', { event });
+
     const chainId = toChainId(context.chain.id);
     const strategyAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = event.block;

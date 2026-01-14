@@ -5,6 +5,8 @@ import { toChainId } from '../lib/chain';
 import { handleTokenTransfer } from '../lib/token';
 
 Token.Initialized.handler(async ({ event, context }) => {
+    context.log.debug('Token.Initialized', { event });
+
     const chainId = toChainId(context.chain.id);
     const tokenAddress = event.srcAddress.toString().toLowerCase() as Hex;
 
@@ -20,6 +22,8 @@ Token.Initialized.handler(async ({ event, context }) => {
 });
 
 Token.Transfer.handler(async ({ event, context }) => {
+    context.log.debug('Token.Transfer', { event });
+
     const chainId = toChainId(context.chain.id);
     const tokenAddress = event.srcAddress.toString().toLowerCase() as Hex;
 

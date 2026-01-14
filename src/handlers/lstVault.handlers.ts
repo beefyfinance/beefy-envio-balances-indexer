@@ -10,6 +10,8 @@ import { type ChainId, toChainId } from '../lib/chain';
 import { handleTokenTransfer } from '../lib/token';
 
 LstVault.Initialized.handler(async ({ event, context }) => {
+    context.log.debug('LstVault.Initialized', { event });
+
     const chainId = toChainId(context.chain.id);
     const lstAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = event.block;
@@ -21,6 +23,8 @@ LstVault.Initialized.handler(async ({ event, context }) => {
 });
 
 LstVault.Transfer.handler(async ({ event, context }) => {
+    context.log.debug('LstVault.Transfer', { event });
+
     const chainId = toChainId(context.chain.id);
     const lstAddress = event.srcAddress.toString().toLowerCase() as Hex;
 

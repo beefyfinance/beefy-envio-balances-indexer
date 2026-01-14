@@ -12,6 +12,8 @@ import { config } from '../lib/config';
 import { handleTokenTransfer } from '../lib/token';
 
 ClassicBoost.Initialized.handler(async ({ event, context }) => {
+    context.log.debug('ClassicBoost.Initialized', { event });
+
     const chainId = toChainId(context.chain.id);
     const boostAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = event.block;
@@ -23,6 +25,8 @@ ClassicBoost.Initialized.handler(async ({ event, context }) => {
 });
 
 ClassicBoost.Staked.handler(async ({ event, context }) => {
+    context.log.debug('ClassicBoost.Staked', { event });
+
     const chainId = toChainId(context.chain.id);
     const boostAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = event.block;
@@ -51,6 +55,8 @@ ClassicBoost.Staked.handler(async ({ event, context }) => {
 });
 
 ClassicBoost.Withdrawn.handler(async ({ event, context }) => {
+    context.log.debug('ClassicBoost.Withdrawn', { event });
+
     const chainId = toChainId(context.chain.id);
     const boostAddress = event.srcAddress.toString().toLowerCase() as Hex;
 
@@ -80,6 +86,8 @@ ClassicBoost.Withdrawn.handler(async ({ event, context }) => {
 });
 
 ClassicBoost.RewardAdded.handler(async ({ event, context }) => {
+    context.log.debug('ClassicBoost.RewardAdded', { event });
+
     const chainId = toChainId(context.chain.id);
     const boostAddress = event.srcAddress.toString().toLowerCase() as Hex;
 

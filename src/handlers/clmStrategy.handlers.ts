@@ -8,6 +8,8 @@ import { type ChainId, toChainId } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 
 ClmStrategy.Initialized.handler(async ({ event, context }) => {
+    context.log.debug('ClmStrategy.Initialized', { event });
+
     const chainId = toChainId(context.chain.id);
     const strategyAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = event.block;

@@ -10,6 +10,8 @@ import { type ChainId, toChainId } from '../lib/chain';
 import { handleTokenTransfer } from '../lib/token';
 
 Erc4626Adapter.Initialized.handler(async ({ event, context }) => {
+    context.log.debug('Erc4626Adapter.Initialized', { event });
+
     const chainId = toChainId(context.chain.id);
     const adapterAddress = event.srcAddress.toString().toLowerCase() as Hex;
     const initializedBlock = event.block;
@@ -21,6 +23,8 @@ Erc4626Adapter.Initialized.handler(async ({ event, context }) => {
 });
 
 Erc4626Adapter.Transfer.handler(async ({ event, context }) => {
+    context.log.debug('Erc4626Adapter.Transfer', { event });
+
     const chainId = toChainId(context.chain.id);
     const adapterAddress = event.srcAddress.toString().toLowerCase() as Hex;
 
