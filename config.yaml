@@ -1825,6 +1825,9 @@ chains:
         address: []
       - name: Erc4626Adapter
         address: []
+      - name: Token
+        address:
+          - 0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1 # BIFI
 
   - id: 250 # fantom
     start_block: 5541765
