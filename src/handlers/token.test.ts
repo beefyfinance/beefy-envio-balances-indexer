@@ -115,7 +115,7 @@ describe('Token Handlers', () => {
                 chains: {
                     // transfer from wallet to wallet
                     // https://etherscan.io/tx/0x519bac361b822c2f8e1902cd3d1fdab34729075854f2c6e59458b3c9fbea75d1
-                    1: { startBlock: 22089841, endBlock: 22089842 },
+                    1: { startBlock: 22089841, endBlock: 22089841 },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
@@ -202,6 +202,7 @@ describe('Token Handlers', () => {
                       ],
                     },
                     "block": 22089841,
+                    "blockHash": "0xd542fff60cb5125066683f564bcc5bb565baf5d969ca0f443ff6f7d292232ba0",
                     "chainId": 1,
                     "eventsProcessed": 1,
                   },
@@ -294,7 +295,8 @@ describe('Token Handlers', () => {
             const indexer = createTestIndexer();
 
             // process event creation + Initialize event for 0x020d570516a85c3e47d8d48c17fbcf63053cc9f5
-            await indexer.process({ chains: { 1: { startBlock: 19077712, endBlock: 19077718 } } });
+            const initTrace = await indexer.process({ chains: { 8453: { startBlock: 19077712, endBlock: 19077718 } } });
+            expect(initTrace.changes.length).toBeGreaterThan(0);
 
             const trace = await indexer.process({
                 chains: {
