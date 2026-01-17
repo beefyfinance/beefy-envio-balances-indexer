@@ -2,8 +2,9 @@ packages:
   - "."
   - "generated"
 
+# TODO: enable this when we are out of alpha
 #minimumReleaseAge: 10080 # 1 week
-minimumReleaseAge: 1440 # 1 day
+#minimumReleaseAge: 1440 # 1 day
 onlyBuiltDependencies:
   - "@biomejs/biome"
   - lefthook

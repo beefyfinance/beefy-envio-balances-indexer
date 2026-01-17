@@ -300,7 +300,7 @@ describe('Token Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    // process mint event
+                    // process mint event for 0x020D570516a85C3E47D8D48c17FBcF63053Cc9f5
                     // https://basescan.org/tx/0xd7b83bfd594af70b73bae313752f252b4beda8afb97709ed1a586181563b079e
                     8453: { startBlock: 32339635, endBlock: 32339635 },
                 },
