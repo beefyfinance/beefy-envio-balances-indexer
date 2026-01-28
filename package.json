@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "blockchain-addressbook": "0.54.111",
-    "envio": "3.0.0-alpha.10",
+    "envio": "3.0.0-alpha.11",
     "remeda": "2.33.3",
     "viem": "2.44.2"
   },
