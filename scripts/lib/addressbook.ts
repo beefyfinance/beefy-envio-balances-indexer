@@ -1,4 +1,4 @@
-import { addressBook, type Token } from 'blockchain-addressbook';
+import { addressBook, type Token } from '@beefyfinance/blockchain-addressbook';
 import * as R from 'remeda';
 import type { Hex } from 'viem';
 

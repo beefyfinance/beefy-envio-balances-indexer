@@ -1,4 +1,4 @@
-import { ChainId as AddressBookChainId, addressBook } from 'blockchain-addressbook';
+import { ChainId as AddressBookChainId, addressBook } from '@beefyfinance/blockchain-addressbook';
 import { sql } from 'bun';
 import * as R from 'remeda';
 import {

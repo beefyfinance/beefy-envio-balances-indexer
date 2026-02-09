@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { ChainId as AddressBookChainId } from 'blockchain-addressbook';
+import { ChainId as AddressBookChainId } from '@beefyfinance/blockchain-addressbook';
 import * as R from 'remeda';
 import type { Hex } from 'viem';
 import { isVaultBlacklisted, rawVaultBlacklist } from '../src/lib/blacklist';

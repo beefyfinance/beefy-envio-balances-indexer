@@ -23,24 +23,16 @@ describe('Token Handlers', () => {
               {
                 "changes": [
                   {
-                    "block": 17452329,
-                    "chainId": 8453,
-                    "dynamic_contract_registry": {
+                    "addresses": {
                       "sets": [
                         {
-                          "chain_id": 8453,
-                          "contract_address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "contract_name": "ClmManager",
-                          "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "registering_event_block_number": 17452329,
-                          "registering_event_block_timestamp": 1721694005,
-                          "registering_event_contract_name": "ClmManagerFactory",
-                          "registering_event_log_index": 210,
-                          "registering_event_name": "ClmManagerCreated",
-                          "registering_event_src_address": "0x7bc78990ac1ef0754cfde935b2d84e9acf13ed29",
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
                         },
                       ],
                     },
+                    "block": 17452329,
+                    "chainId": 8453,
                     "eventsProcessed": 1,
                   },
                   {

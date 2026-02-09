@@ -21,10 +21,10 @@
     "test:unit:watch": "vitest watch"
   },
   "dependencies": {
-    "blockchain-addressbook": "0.54.111",
+    "@beefyfinance/blockchain-addressbook": "^0.54.168",
     "envio": "3.0.0-alpha.11",
     "remeda": "2.33.3",
-    "viem": "2.44.2"
+    "viem": "2.45.2"
   },
   "optionalDependencies": {
     "generated": "link:generated"

@@ -2701,6 +2701,48 @@ chains:
       - name: Erc4626Adapter
         address: []
 
+  - id: 4326 # megaeth
+    start_block: 7854030
+    rpc: ${ENVIO_RPC_URL_4326}
+    contracts:
+      - name: ClassicVaultFactory
+        address:
+          - 0xecf7d9a1f6bc964e67806e7B9F1830B9a0328018
+      - name: ClassicStrategyFactory
+        address:
+          - 0xED9d262985E18710DDDAC0dfC10a3f900679063B
+      - name: ClassicBoostFactory
+        address: []
+      - name: RewardPoolFactory
+        address:
+          - 0x30E3D9a60D3B5C16FD29CDdB802E61708B699cBC
+      - name: ClmManagerFactory
+        address:
+          - 0x719A0Db9C0f730196cC4592d8f19B0ACC4b7BeC3
+      - name: ClmStrategyFactory
+        address:
+          - 0x53d189C1b6C28d4929AAc71355D5e4001E2A9Cff
+      - name: ContractFactory
+        address: []
+      - name: Erc4626AdapterFactory
+        address: []
+      - name: ClassicVault
+        address: []
+      - name: ClassicBoost
+        address: []
+      - name: ClassicStrategy
+        address: []
+      - name: ClmStrategy
+        address: []
+      - name: ClmManager
+        address: []
+      - name: RewardPool
+        address: []
+      - name: LstVault
+        address: []
+      - name: Erc4626Adapter
+        address: []
+
   - id: 1088 # metis
     start_block: 411040
     rpc: ${ENVIO_RPC_URL_1088}

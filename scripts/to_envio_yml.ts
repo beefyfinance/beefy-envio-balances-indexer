@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { addressBook } from 'blockchain-addressbook';
+import { addressBook } from '@beefyfinance/blockchain-addressbook';
 import * as viemChains from 'viem/chains';
 
 const CONFIG_DIR = '../beefy-balances-subgraph/config';

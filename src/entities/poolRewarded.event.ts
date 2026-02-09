@@ -1,4 +1,4 @@
-import type { ChainId } from 'blockchain-addressbook';
+import type { ChainId } from '@beefyfinance/blockchain-addressbook';
 import type { PoolRewardedEvent_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';

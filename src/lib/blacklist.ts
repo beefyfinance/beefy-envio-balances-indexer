@@ -1,4 +1,4 @@
-import { addressBookByChainId } from 'blockchain-addressbook';
+import { addressBookByChainId } from '@beefyfinance/blockchain-addressbook';
 import { type Logger, S } from 'envio';
 import type { HandlerContext } from 'generated/src/Types';
 import * as R from 'remeda';
