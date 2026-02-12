@@ -156,7 +156,8 @@ contracts:
 chains:
   # - id: 1313161554 # aurora
   #   start_block: 54631763
-  #   rpc: ${ENVIO_RPC_URL_1313161554}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_1313161554}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address: []
@@ -217,7 +218,8 @@ chains:
 
   - id: 42161 # arbitrum
     start_block: 1362980
-    rpc: ${ENVIO_RPC_URL_42161}
+    rpc:
+      - url: ${ENVIO_RPC_URL_42161}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -313,7 +315,8 @@ chains:
 
   - id: 43114 # avax
     start_block: 591621
-    rpc: ${ENVIO_RPC_URL_43114}
+    rpc:
+      - url: ${ENVIO_RPC_URL_43114}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -529,7 +532,8 @@ chains:
 
   - id: 8453 # base
     start_block: 2181945
-    rpc: ${ENVIO_RPC_URL_8453}
+    rpc:
+      - url: ${ENVIO_RPC_URL_8453}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -581,7 +585,8 @@ chains:
 
   - id: 80094 # berachain
     start_block: 792341
-    rpc: ${ENVIO_RPC_URL_80094}
+    rpc:
+      - url: ${ENVIO_RPC_URL_80094}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -623,7 +628,8 @@ chains:
 
   - id: 56 # bsc
     start_block: 1174850
-    rpc: ${ENVIO_RPC_URL_56}
+    rpc:
+      - url: ${ENVIO_RPC_URL_56}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -1515,7 +1521,8 @@ chains:
 
   # - id: 7700 # canto
   #   start_block: 3080011
-  #   rpc: ${ENVIO_RPC_URL_7700}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_7700}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address:
@@ -1590,7 +1597,8 @@ chains:
   #celo is eol
   # - id: 42220 # celo
   #   start_block: 9442098
-  #   rpc: ${ENVIO_RPC_URL_42220}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_42220}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address:
@@ -1642,7 +1650,8 @@ chains:
   # eol-ed but cronos was big
   - id: 25 # cronos
     start_block: 112203
-    rpc: ${ENVIO_RPC_URL_25}
+    rpc:
+      - url: ${ENVIO_RPC_URL_25}
     contracts:
       - name: ClassicVaultFactory
         address: []
@@ -1732,7 +1741,8 @@ chains:
   # can't find an archive node for oasis
   # - id: 42262 # emerald (oasis)
   #   start_block: 1389830
-  #   rpc: ${ENVIO_RPC_URL_42262}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_42262}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address: []
@@ -1779,7 +1789,8 @@ chains:
 
   - id: 1 # ethereum
     start_block: 15891216
-    rpc: ${ENVIO_RPC_URL_1}
+    rpc:
+      - url: ${ENVIO_RPC_URL_1}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -1831,7 +1842,8 @@ chains:
 
   - id: 250 # fantom
     start_block: 5541765
-    rpc: ${ENVIO_RPC_URL_250}
+    rpc:
+      - url: ${ENVIO_RPC_URL_250}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2179,7 +2191,8 @@ chains:
   # need archive node for fuse
   # - id: 122 # fuse
   #   start_block: 14811588
-  #   rpc: ${ENVIO_RPC_URL_122}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_122}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address: []
@@ -2243,7 +2256,8 @@ chains:
 
   - id: 252 # fraxtal
     start_block: 2365710
-    rpc: ${ENVIO_RPC_URL_252}
+    rpc:
+      - url: ${ENVIO_RPC_URL_252}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2283,7 +2297,8 @@ chains:
 
   - id: 100 # gnosis
     start_block: 30489787
-    rpc: ${ENVIO_RPC_URL_100}
+    rpc:
+      - url: ${ENVIO_RPC_URL_100}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2327,7 +2342,8 @@ chains:
   # can't find an archive node for heco
   # - id: 128 # heco
   #   start_block: 2182114
-  #   rpc: ${ENVIO_RPC_URL_128}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_128}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address: []
@@ -2400,14 +2416,14 @@ chains:
     start_block: 4883535
     # force rpc usage over hypersync because hyperevm used an existing chainid
     # that was already used by another chain (wanchain)
-    rpc_config:
-      url: ${ENVIO_RPC_URL_999}
-      initial_block_interval: 250 # Initial number of blocks to fetch in each request
-      backoff_multiplicative: 0.999999 # Factor to scale back block request size after errors
-      acceleration_additive: 0 # How many more blocks to request when successful
-      interval_ceiling: 250 # Maximum blocks to request in a single call
-      backoff_millis: 5000 # Milliseconds to wait after an error
-      query_timeout_millis: 60000 # Milliseconds before timing out a request
+    rpc:
+      - url: ${ENVIO_RPC_URL_999}
+        initial_block_interval: 250 # Initial number of blocks to fetch in each request
+        backoff_multiplicative: 0.999999 # Factor to scale back block request size after errors
+        acceleration_additive: 0 # How many more blocks to request when successful
+        interval_ceiling: 250 # Maximum blocks to request in a single call
+        backoff_millis: 5000 # Milliseconds to wait after an error
+        query_timeout_millis: 60000 # Milliseconds before timing out a request
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2451,7 +2467,8 @@ chains:
 
   - id: 2222 # kava
     start_block: 1933810
-    rpc: ${ENVIO_RPC_URL_2222}
+    rpc:
+      - url: ${ENVIO_RPC_URL_2222}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2505,7 +2522,8 @@ chains:
 
   - id: 59144 # linea
     start_block: 1111015
-    rpc: ${ENVIO_RPC_URL_59144}
+    rpc:
+      - url: ${ENVIO_RPC_URL_59144}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2549,7 +2567,8 @@ chains:
 
   - id: 1135 # lisk
     start_block: 8910850
-    rpc: ${ENVIO_RPC_URL_1135}
+    rpc:
+      - url: ${ENVIO_RPC_URL_1135}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2591,7 +2610,8 @@ chains:
 
   # - id: 169 # manta
   #   start_block: 2501033
-  #   rpc: ${ENVIO_RPC_URL_169}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_169}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address:
@@ -2632,7 +2652,8 @@ chains:
 
   - id: 5000 # mantle
     start_block: 48135884
-    rpc: ${ENVIO_RPC_URL_5000}
+    rpc:
+      - url: ${ENVIO_RPC_URL_5000}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2703,7 +2724,8 @@ chains:
 
   - id: 4326 # megaeth
     start_block: 7854030
-    rpc: ${ENVIO_RPC_URL_4326}
+    rpc:
+      - url: ${ENVIO_RPC_URL_4326}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2745,7 +2767,8 @@ chains:
 
   - id: 1088 # metis
     start_block: 411040
-    rpc: ${ENVIO_RPC_URL_1088}
+    rpc:
+      - url: ${ENVIO_RPC_URL_1088}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2814,7 +2837,8 @@ chains:
 
   # - id: 34443 # mode
   #   start_block: 7558107
-  #   rpc: ${ENVIO_RPC_URL_34443}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_34443}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address:
@@ -2856,7 +2880,8 @@ chains:
 
   - id: 143 # monad
     start_block: 37915183
-    rpc: ${ENVIO_RPC_URL_143}
+    rpc:
+      - url: ${ENVIO_RPC_URL_143}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -2899,7 +2924,8 @@ chains:
   # eol-ed but had ~$15M tvl
   - id: 1284 # moonbeam
     start_block: 389840
-    rpc: ${ENVIO_RPC_URL_1284}
+    rpc:
+      - url: ${ENVIO_RPC_URL_1284}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -3011,7 +3037,8 @@ chains:
   # eol-ed but had ~$15M tvl
   - id: 1285 # moonriver
     start_block: 833145
-    rpc: ${ENVIO_RPC_URL_1285}
+    rpc:
+      - url: ${ENVIO_RPC_URL_1285}
     contracts:
       - name: ClassicVaultFactory
         address: []
@@ -3101,7 +3128,8 @@ chains:
 
   - id: 10 # optimism
     start_block: 13334163
-    rpc: ${ENVIO_RPC_URL_10}
+    rpc:
+      - url: ${ENVIO_RPC_URL_10}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -3238,7 +3266,8 @@ chains:
   # can't find an archive node for harmony
   # - id: 1666600000 # one (harmony)
   #   start_block: 16794852
-  #   rpc: ${ENVIO_RPC_URL_1666600000}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_1666600000}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address: []
@@ -3296,7 +3325,8 @@ chains:
 
   - id: 9745 # plasma
     start_block: 1899550
-    rpc: ${ENVIO_RPC_URL_9745}
+    rpc:
+      - url: ${ENVIO_RPC_URL_9745}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -3339,7 +3369,8 @@ chains:
 
   - id: 137 # polygon
     start_block: 13795241
-    rpc: ${ENVIO_RPC_URL_137}
+    rpc:
+      - url: ${ENVIO_RPC_URL_137}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -3828,7 +3859,8 @@ chains:
   # re.al is down?
   # - id: 111188 # real
   #   start_block: 205606
-  #   rpc: ${ENVIO_RPC_URL_111188}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_111188}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address:
@@ -3870,7 +3902,8 @@ chains:
 
   - id: 30 # rootstock
     start_block: 6729703
-    rpc: ${ENVIO_RPC_URL_30}
+    rpc:
+      - url: ${ENVIO_RPC_URL_30}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -3912,7 +3945,8 @@ chains:
   # eol-ed
   # - id: 5464 # saga
   #   start_block: 2544719
-  #   rpc: ${ENVIO_RPC_URL_5464}
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_5464}
   #   contracts:
   #     - name: ClassicVaultFactory
   #       address:
@@ -3954,7 +3988,8 @@ chains:
 
   - id: 534352 # scroll
     start_block: 10224183
-    rpc: ${ENVIO_RPC_URL_534352}
+    rpc:
+      - url: ${ENVIO_RPC_URL_534352}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -3996,7 +4031,8 @@ chains:
 
   - id: 1329 # sei
     start_block: 92535412
-    rpc: ${ENVIO_RPC_URL_1329}
+    rpc:
+      - url: ${ENVIO_RPC_URL_1329}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -4037,7 +4073,8 @@ chains:
 
   - id: 146 # sonic
     start_block: 490985
-    rpc: ${ENVIO_RPC_URL_146}
+    rpc:
+      - url: ${ENVIO_RPC_URL_146}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -4081,7 +4118,8 @@ chains:
 
   - id: 130 # unichain
     start_block: 9042349
-    rpc: ${ENVIO_RPC_URL_130}
+    rpc:
+      - url: ${ENVIO_RPC_URL_130}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -4123,7 +4161,8 @@ chains:
 
   - id: 1101 # zkevm (polygon)
     start_block: 2402652
-    rpc: ${ENVIO_RPC_URL_1101}
+    rpc:
+      - url: ${ENVIO_RPC_URL_1101}
     contracts:
       - name: ClassicVaultFactory
         address:
@@ -4162,7 +4201,8 @@ chains:
 
   - id: 324 # zksync
     start_block: 2295741
-    rpc: ${ENVIO_RPC_URL_324}
+    rpc:
+      - url: ${ENVIO_RPC_URL_324}
     contracts:
       - name: ClassicVaultFactory
         address:

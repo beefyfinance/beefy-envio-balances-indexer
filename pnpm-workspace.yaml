@@ -5,8 +5,7 @@ packages:
 # TODO: enable this when we are out of alpha
 # scan: pnpx snyk test envio@3.0.0-alpha.11
 #minimumReleaseAge: 10080 # 1 week
-#minimumReleaseAge: 1440 # 1 day
-minimumReleaseAge: 120 # 2 hours
+minimumReleaseAge: 1440 # 1 day
 onlyBuiltDependencies:
   - "@biomejs/biome"
   - lefthook
