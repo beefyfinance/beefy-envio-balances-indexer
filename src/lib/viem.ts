@@ -28,7 +28,6 @@ import {
     scroll,
     sei,
     sonic,
-    unichain,
     zksync,
 } from 'viem/chains';
 import type { ChainId } from './chain';
@@ -141,9 +140,34 @@ const chainMap: Record<ChainId, ViemChain> = {
     534352: scroll,
     1329: sei,
     146: sonic,
-    130: unichain,
     1101: polygonZkEvm,
     324: zksync,
+};
+
+const backupMsPerBlock: Partial<Record<ChainId, number>> = {
+    25: 5000, // cronos
+    30: 30_000, // rootstock
+    250: 2200, // fantom
+    999: 1000, // hyperevm
+    1088: 12_000, // linea
+    1101: 1200, // polygon zkEvm
+    1284: 12_000, // moonbeam
+    1285: 12_000, // moonriver
+    1329: 400, // sei
+    2222: 6000, // kava
+    5000: 200, // mantle
+};
+
+/**
+ * Milliseconds per block for the given chain (from viem chain config).
+ * Use for block-handler interval and timestamp derivation.
+ */
+export const getBlockTimeMs = (chainId: ChainId): number => {
+    const blockTime = chainMap[chainId]?.blockTime ?? backupMsPerBlock[chainId] ?? null;
+    if (!blockTime) {
+        throw new Error(`Chain ${chainId} has no block time, please define it manually in the viem chain config`);
+    }
+    return blockTime;
 };
 
 export const getViemClient = (chainId: ChainId, logger: Logger) => {

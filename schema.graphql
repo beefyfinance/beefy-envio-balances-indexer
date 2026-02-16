@@ -45,7 +45,7 @@ type Token {
   "The total supply of the token"
   totalSupply: BigDecimal! @config(precision: 100, scale: 24)
 
-  "How many holders this token has. With balance > 0"
+  "How many holders this token has. With balance > 0. This is not accurate for non-beefy tokens"
   holderCount: Int!
 
   # todo: handle token breakdowns
@@ -112,6 +112,35 @@ type TokenBalanceChange {
   balanceBefore: BigDecimal! @config(precision: 100, scale: 24)
   "Balance amount at the end of the block"
   balanceAfter: BigDecimal! @config(precision: 100, scale: 24)
+}
+
+"""
+A periodic snapshot of a token balance at a given time bucket (period + roundedTimestamp).
+Enables time-series queries over balances. Can be combined with balance changes to get the balance at a specific point in time.
+One entry per (TokenBalance, period, roundedTimestamp).
+"""
+type TokenBalanceSnapshot @index(fields: ["period", "roundedTimestamp"]) {
+  "Composite key: keccak256(tokenBalanceId-period-roundedTimestamp). For space efficiency, we use the hash instead of the actual string."
+  id: ID!
+
+  "chain id"
+  chainId: Int!
+  "Account reference"
+  account: Account! @index
+  "Token reference"
+  token: Token! @index
+
+  "Snapshot period in seconds (e.g. 86400 daily, 3600 hourly)"
+  period: BigInt!
+  "Timestamp rounded down to the period (interval/epoch)"
+  roundedTimestamp: BigInt!
+  "Actual block timestamp of the snapshot"
+  timestamp: Timestamp!
+  "Block number at which the snapshot was taken"
+  blockNumber: BigInt!
+
+  "Balance amount at snapshot time"
+  amount: BigDecimal! @config(precision: 100, scale: 24)
 }
 
 type PoolRewardedEvent {

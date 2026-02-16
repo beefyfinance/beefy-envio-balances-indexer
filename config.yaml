@@ -4116,48 +4116,48 @@ chains:
       - name: Erc4626Adapter
         address: []
 
-  - id: 130 # unichain
-    start_block: 9042349
-    rpc:
-      - url: ${ENVIO_RPC_URL_130}
-    contracts:
-      - name: ClassicVaultFactory
-        address:
-          - 0xc0382dbbc2a46F31AA39791Fd0864991962B191c
-      - name: ClassicStrategyFactory
-        address:
-          - 0xC2F5bD6e9fef7368F59121552cA9CC60FF4a127A
-      - name: ClassicBoostFactory
-        address: []
-      - name: RewardPoolFactory
-        address:
-          - 0x8C8F9B7Fb2a668C866a1c529529f7FB598375252
-      - name: ClmManagerFactory
-        address:
-          - 0x4a902F6596cCf51c6c1FF5Cc055f69Aa1DD06277
-      - name: ClmStrategyFactory
-        address:
-          - 0x0B411a65044fcCA28f2cf0832d319c82A39c54bB
-      - name: ContractFactory
-        address: []
-      - name: Erc4626AdapterFactory
-        address: []
-      - name: ClassicVault
-        address: []
-      - name: ClassicBoost
-        address: []
-      - name: ClassicStrategy
-        address: []
-      - name: ClmStrategy
-        address: []
-      - name: ClmManager
-        address: []
-      - name: RewardPool
-        address: []
-      - name: LstVault
-        address: []
-      - name: Erc4626Adapter
-        address: []
+  # - id: 130 # unichain
+  #   start_block: 9042349
+  #   rpc:
+  #     - url: ${ENVIO_RPC_URL_130}
+  #   contracts:
+  #     - name: ClassicVaultFactory
+  #       address:
+  #         - 0xc0382dbbc2a46F31AA39791Fd0864991962B191c
+  #     - name: ClassicStrategyFactory
+  #       address:
+  #         - 0xC2F5bD6e9fef7368F59121552cA9CC60FF4a127A
+  #     - name: ClassicBoostFactory
+  #       address: []
+  #     - name: RewardPoolFactory
+  #       address:
+  #         - 0x8C8F9B7Fb2a668C866a1c529529f7FB598375252
+  #     - name: ClmManagerFactory
+  #       address:
+  #         - 0x4a902F6596cCf51c6c1FF5Cc055f69Aa1DD06277
+  #     - name: ClmStrategyFactory
+  #       address:
+  #         - 0x0B411a65044fcCA28f2cf0832d319c82A39c54bB
+  #     - name: ContractFactory
+  #       address: []
+  #     - name: Erc4626AdapterFactory
+  #       address: []
+  #     - name: ClassicVault
+  #       address: []
+  #     - name: ClassicBoost
+  #       address: []
+  #     - name: ClassicStrategy
+  #       address: []
+  #     - name: ClmStrategy
+  #       address: []
+  #     - name: ClmManager
+  #       address: []
+  #     - name: RewardPool
+  #       address: []
+  #     - name: LstVault
+  #       address: []
+  #     - name: Erc4626Adapter
+  #       address: []
 
   - id: 1101 # zkevm (polygon)
     start_block: 2402652
