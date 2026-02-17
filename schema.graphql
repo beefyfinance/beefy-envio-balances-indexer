@@ -119,7 +119,7 @@ A periodic snapshot of a token balance at a given time bucket (period + roundedT
 Enables time-series queries over balances. Can be combined with balance changes to get the balance at a specific point in time.
 One entry per (TokenBalance, period, roundedTimestamp).
 """
-type TokenBalanceSnapshot @index(fields: ["period", "roundedTimestamp"]) {
+type TokenBalanceSnapshot {
   "Composite key: keccak256(tokenBalanceId-period-roundedTimestamp). For space efficiency, we use the hash instead of the actual string."
   id: ID!
 
