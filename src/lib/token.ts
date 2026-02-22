@@ -70,30 +70,46 @@ export const handleTokenTransfer = async ({
     let holderCountChange = 0;
     let totalSupplyChange = BIG_ZERO;
 
-    if (senderAccount && senderBalance) {
-        const diff = await updateAccountBalance({
+    const isSelfTransfer = senderAddress === receiverAddress;
+
+    if (isSelfTransfer && senderAccount && senderBalance) {
+        // Same account: apply a single no-op balance update so we record the transfer
+        // without double-applying or incorrectly changing holderCount
+        await updateAccountBalance({
             context,
             chainId,
-            amountDiff: value.negated(),
+            amountDiff: BIG_ZERO,
             account: senderAccount,
             balance: senderBalance,
             token,
             event,
         });
-        holderCountChange += diff.holderCountChange;
-    }
+    } else {
+        if (senderAccount && senderBalance) {
+            const diff = await updateAccountBalance({
+                context,
+                chainId,
+                amountDiff: value.negated(),
+                account: senderAccount,
+                balance: senderBalance,
+                token,
+                event,
+            });
+            holderCountChange += diff.holderCountChange;
+        }
 
-    if (receiverAccount && receiverBalance) {
-        const diff = await updateAccountBalance({
-            context,
-            chainId,
-            amountDiff: value,
-            account: receiverAccount,
-            balance: receiverBalance,
-            token,
-            event,
-        });
-        holderCountChange += diff.holderCountChange;
+        if (receiverAccount && receiverBalance) {
+            const diff = await updateAccountBalance({
+                context,
+                chainId,
+                amountDiff: value,
+                account: receiverAccount,
+                balance: receiverBalance,
+                token,
+                event,
+            });
+            holderCountChange += diff.holderCountChange;
+        }
     }
 
     if (senderAddress === config.MINT_ADDRESS || senderAddress === config.BURN_ADDRESS) {

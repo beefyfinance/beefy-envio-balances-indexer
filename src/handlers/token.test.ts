@@ -340,5 +340,126 @@ describe('Token Handlers', () => {
                 'Should process multiple Transfer events in the same block correctly'
             ).toMatchInlineSnapshot();
         });
+
+        it('Should not decrement holderCount on self-transfer (from === to)', async () => {
+            const indexer = createTestIndexer();
+
+            // Non-zero self-transfer: from=to=0x94342d418137f494bfa8e133cb79e55a3e7dd532,
+            // contract 0xba53af4c2f1649f82e8070fb306ddbf2771a1950 (moo1INCH1INCH), amount_raw=26493322047799471367.
+            // Without the fix, the same balance would be updated twice (stale second write) and holderCount
+            // would be spuriously decremented when balance momentarily touched zero.
+            const trace = await indexer.process({
+                chains: {
+                    // BNB (BSC) chain, block 12132390
+                    // tx 0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88
+                    56: { startBlock: 12132390, endBlock: 12132390 },
+                },
+            });
+            expect(trace.changes.length).toBeGreaterThan(0);
+            expect(
+                trace,
+                'Should process block with non-zero self-transfer without incorrectly decrementing holderCount'
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "Account": {
+                      "sets": [
+                        {
+                          "address": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                        },
+                      ],
+                    },
+                    "ClassicVault": {
+                      "sets": [
+                        {
+                          "address": "0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "chainId": 56,
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 12132390n,
+                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "shareToken_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "underlyingToken_id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
+                        },
+                      ],
+                    },
+                    "ClassicVaultStrategy": {
+                      "sets": [
+                        {
+                          "address": "0xe807517273De0161D8309BC9363193f2162b9B65",
+                          "chainId": 56,
+                          "classicVault_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "id": "56-0xe807517273de0161d8309bc9363193f2162b9b65",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 12132390n,
+                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "chainId": 56,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "isVirtual": false,
+                          "name": "Moo 1INCH 1INCH",
+                          "symbol": "moo1INCH1INCH",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0x111111111117dC0aa78b770fA6A738034120C302",
+                          "chainId": 56,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
+                          "isVirtual": false,
+                          "name": "1INCH Token",
+                          "symbol": "1INCH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "TokenBalance": {
+                      "sets": [
+                        {
+                          "account_id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "amount": "0",
+                          "chainId": 56,
+                          "id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "token_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                        },
+                      ],
+                    },
+                    "TokenBalanceChange": {
+                      "sets": [
+                        {
+                          "account_id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "balanceAfter": "0",
+                          "balanceBefore": "0",
+                          "blockNumber": 12132390n,
+                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "chainId": 56,
+                          "id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-12132390",
+                          "logIndex": 387,
+                          "tokenBalance_id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "token_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "trxHash": "0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88",
+                        },
+                      ],
+                    },
+                    "block": 12132390,
+                    "blockHash": "0xe919e67fe66a265e114535cdbb724fd51cd5f30a9d01412154c342c75dfd3700",
+                    "chainId": 56,
+                    "eventsProcessed": 1,
+                  },
+                ],
+              }
+            `);
+        });
     });
 });
