@@ -15,7 +15,7 @@ export const getOrCreateAccount = async ({
     chainId: ChainId;
     accountAddress: Hex;
 }): Promise<Account_t | null> => {
-    const blacklisted = await isAccountBlacklisted(context, chainId, accountAddress);
+    const blacklisted = await isAccountBlacklisted(chainId, accountAddress);
     if (blacklisted) {
         context.log.debug('Account is blacklisted', { chainId, accountAddress });
         return null;

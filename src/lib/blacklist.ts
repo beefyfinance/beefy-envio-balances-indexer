@@ -1,12 +1,7 @@
 import { addressBookByChainId } from '@beefyfinance/blockchain-addressbook';
 import { type Logger, S } from 'envio';
-import type { HandlerContext } from 'generated/src/Types';
 import * as R from 'remeda';
 import type { Hex } from 'viem';
-import { isClassicBoost } from '../entities/classicBoost.entity';
-import { isErc4626Adapter } from '../entities/classicErc4626Adapter.entity';
-import { isClassicVaultStrategy } from '../entities/classicVault.entity';
-import { isRewardPool } from '../entities/rewardPool.entity';
 import { allChainIds, type ChainId } from './chain';
 import { config } from './config';
 
@@ -415,20 +410,9 @@ const allAccountBlacklist = R.pipe(
     )
 );
 
-export async function isAccountBlacklisted(context: HandlerContext, chainId: ChainId, address: string) {
+export async function isAccountBlacklisted(chainId: ChainId, address: string) {
     const lowerAddress = address.toLowerCase() as Hex;
     if (allAccountBlacklist[chainId][lowerAddress]) {
-        return true;
-    }
-    // don't track balances for indexed entities that are known to handle some share tokens
-    // we'll track that separately as proper vault breakdown
-    const [erc4626Adapter, rewardPool, classicBoost, classicVaultStrategy] = await Promise.all([
-        isErc4626Adapter(context, chainId, lowerAddress),
-        isRewardPool(context, chainId, lowerAddress),
-        isClassicBoost(context, chainId, lowerAddress),
-        isClassicVaultStrategy(context, chainId, lowerAddress),
-    ]);
-    if (erc4626Adapter || rewardPool || classicBoost || classicVaultStrategy) {
         return true;
     }
     return false;

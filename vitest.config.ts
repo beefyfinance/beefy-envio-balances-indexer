@@ -4,6 +4,6 @@ export default defineConfig({
     test: {
         globals: true,
         environment: 'node',
-        testTimeout: 10_000, // integration tests can take a while
+        testTimeout: 120_000, // integration tests can take a while
     },
 });
