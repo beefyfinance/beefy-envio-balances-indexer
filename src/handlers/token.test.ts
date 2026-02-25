@@ -349,29 +349,26 @@ describe('Token Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should update balances for Arbitrum reward pool vault transfer at block 245002875', async () => {
+        it('Should create balance change and balance entities for reward pool accounts', async () => {
             const indexer = createTestIndexer();
 
             // Prepare with init traces: vault 0xA297024a99098d52aae466AC5F48520d514262bA (creation 226974285, init 226974336),
             // reward pool 0xfb8d2f93a8bbbebd9ed701386c802705f42be1b1 (creation 227658548, init 227658576).
             // first reward pool stake at 228169368
-            // const initTraceVault = await indexer.process({
-            //   chains: {
-            //     42161: { startBlock: 226974285, endBlock: 226974336 },
-            //   },
-            // });
-            // expect(initTraceVault.changes.length).toBeGreaterThan(0);
+            for (const range of [
+                { startBlock: 226974285, endBlock: 226974336 },
+                { startBlock: 227658548, endBlock: 227658576 },
+            ] as const) {
+                console.log(`Processing init range ${range.startBlock} - ${range.endBlock}`);
+                const initTrace = await indexer.process({ chains: { 42161: range } });
+                expect(initTrace.changes.length).toBeGreaterThan(0);
+            }
 
-            // const initTraceRewardPool = await indexer.process({
-            //   chains: {
-            //     42161: { startBlock: 227658548, endBlock: 227658576 },
-            //   },
-            // });
-            // expect(initTraceRewardPool.changes.length).toBeGreaterThan(0);
+            console.log(`Processing trx block 228169368`);
 
             const trace = await indexer.process({
                 chains: {
-                    42161: { startBlock: 226974284, endBlock: 228169369 },
+                    42161: { startBlock: 228169368, endBlock: 228169368 },
                 },
             });
             expect(trace.changes).toMatchInlineSnapshot();
