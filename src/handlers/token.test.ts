@@ -502,5 +502,40 @@ describe('Token Handlers', () => {
               }
             `);
         });
+
+        it('Should create multiple change entities when there are multiple transfers in the same transaction', async () => {
+            const indexer = createTestIndexer();
+
+            const initBlocks = [
+                // creation of 0xefad727469e7e4e410376986ab0af8b6f9559fdc (Moo Aura Arb ezETH-wstETH)
+                200995220,
+                // first transfer of that token (to init token entities)
+                // https://arbiscan.io/tx/0x2b9a877a4fa3813a00047a6451496f656a228e417f7ad8439de9a08c9fcb6e69#eventlog
+                227111408,
+            ];
+
+            for (const block of initBlocks) {
+                const initTrace = await indexer.process({
+                    chains: {
+                        42161: { startBlock: block, endBlock: block },
+                    },
+                });
+                expect(initTrace.changes.length).toBeGreaterThan(0);
+            }
+
+            // transfer of 0xefad727469e7e4e410376986ab0af8b6f9559fdc (Moo Aura Arb ezETH-wstETH)
+            // BeefyAdapter transfers the vault token twice in the same transaction
+            // https://arbiscan.io/tx/0x837755dc168820fab77ae34f7616718ce0f615e8e074dc8f3e0cd580d5322fd2
+            const trace = await indexer.process({
+                chains: {
+                    42161: { startBlock: 260362222, endBlock: 260362222 },
+                },
+            });
+            expect(trace.changes.length).toBeGreaterThan(0);
+            expect(
+                trace,
+                'Should create multiple change entities when there are multiple transfers in the same transaction'
+            ).toMatchInlineSnapshot();
+        });
     });
 });
