@@ -13,12 +13,17 @@ export const TokenBalanceChangeId = ({
     account,
     token,
     blockNumber,
+    trxIndex,
+    logIndex,
 }: {
     chainId: ChainId;
     account: Account_t;
     token: Token_t;
     blockNumber: number;
-}) => `${chainId}-${account.address.toLowerCase()}-${token.address.toLowerCase()}-${blockNumber}`;
+    trxIndex: number;
+    logIndex: number;
+}) =>
+    `${chainId}-${account.address.toLowerCase()}-${token.address.toLowerCase()}-${blockNumber}-${trxIndex}-${logIndex}`;
 
 export const getOrCreateTokenBalanceEntity = async ({
     context,
@@ -58,6 +63,7 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
     account: Account_t;
     event: {
         block: Block_t;
+        trxIndex: number;
         logIndex: number;
         trxHash: Hex;
     };
@@ -65,7 +71,14 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
     balanceAfter: BigDecimal;
 }) => {
     return await context.TokenBalanceChange.getOrCreate({
-        id: TokenBalanceChangeId({ chainId, account, token, blockNumber: event.block.number }),
+        id: TokenBalanceChangeId({
+            chainId,
+            account,
+            token,
+            blockNumber: event.block.number,
+            trxIndex: event.trxIndex,
+            logIndex: event.logIndex,
+        }),
 
         chainId: chainId,
 
@@ -76,6 +89,7 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
         balanceBefore,
         balanceAfter,
 
+        trxIndex: event.trxIndex,
         trxHash: event.trxHash,
         logIndex: event.logIndex,
         blockNumber: BigInt(event.block.number),

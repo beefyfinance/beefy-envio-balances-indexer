@@ -49,6 +49,7 @@ RewardPool.Transfer.handler(async ({ event, context }) => {
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
+            trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
             trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
         },
@@ -60,8 +61,6 @@ RewardPool.NotifyReward.handler(async ({ event, context }) => {
 
     const chainId = toChainId(context.chain.id);
     const rewardPoolAddress = event.srcAddress.toString().toLowerCase() as Hex;
-    const trxHash = event.transaction.hash.toString().toLowerCase() as Hex;
-    const logIndex = event.logIndex;
 
     const rewardPool = await initializeRewardPool({
         context,
@@ -79,13 +78,16 @@ RewardPool.NotifyReward.handler(async ({ event, context }) => {
     await createPoolRewardedEvent({
         context,
         chainId,
-        trxHash,
-        logIndex,
         poolShareToken: shareToken,
         rewardToken: rewardToken,
         rewardVestingSeconds: event.params.duration,
         rawRewardAmount: event.params.amount,
-        block: event.block,
+        event: {
+            block: event.block,
+            trxIndex: event.transaction.transactionIndex,
+            logIndex: event.logIndex,
+            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+        },
     });
 });
 

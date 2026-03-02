@@ -24,6 +24,7 @@ export const handleTokenTransfer = async ({
     rawTransferAmount: bigint;
     event: {
         block: Block_t;
+        trxIndex: number;
         logIndex: number;
         trxHash: Hex;
     };
@@ -143,6 +144,7 @@ const updateAccountBalance = async ({
     chainId: ChainId;
     event: {
         block: Block_t;
+        trxIndex: number;
         logIndex: number;
         trxHash: Hex;
     };

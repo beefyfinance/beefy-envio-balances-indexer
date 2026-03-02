@@ -15,7 +15,7 @@ contracts:
       - event: "ProxyCreated(address proxy)"
         name: VaultOrStrategyCreated
         field_selection:
-          transaction_fields: [hash, input]
+          transaction_fields: [hash, transactionIndex, input]
 
   - name: ClassicStrategyFactory
     abi_file_path: abis/beefy/classic/ClassicVaultFactory.json
@@ -76,7 +76,7 @@ contracts:
       - event: "Initialized(uint8 version)"
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
 
   - name: ClassicStrategy
     abi_file_path: abis/beefy/classic/ClassicStrategy.json
@@ -91,13 +91,13 @@ contracts:
       - event: "Initialized(uint8 version)"
       - event: "Staked(address indexed user, uint256 amount)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
       - event: "Withdrawn(address indexed user, uint256 amount)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
       - event: "RewardAdded(uint256 reward)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
 
   - name: RewardPool
     abi_file_path: abis/beefy/common/RewardPool.json
@@ -106,10 +106,10 @@ contracts:
       - event: "Initialized(uint8 version)"
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
       - event: "NotifyReward(address indexed reward, uint256 amount, uint256 duration)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
 
   - name: ClmManager
     abi_file_path: abis/beefy/clm/ClmManager.json
@@ -118,7 +118,7 @@ contracts:
       - event: "Initialized(uint8 version)"
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
 
   - name: ClmStrategy
     abi_file_path: abis/beefy/clm/ClmStrategy.json
@@ -133,7 +133,7 @@ contracts:
       - event: "Initialized(uint8 version)"
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
 
   - name: Erc4626Adapter
     abi_file_path: abis/beefy/common/Erc4626Adapter.json
@@ -142,7 +142,7 @@ contracts:
       - event: "Initialized(uint8 version)"
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
 
   - name: Token
     abi_file_path: abis/IERC20/IERC20.json
@@ -151,7 +151,7 @@ contracts:
       - event: "Initialized(uint8 version)"
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
-          transaction_fields: [hash]
+          transaction_fields: [hash, transactionIndex]
 
 chains:
   # - id: 1313161554 # aurora

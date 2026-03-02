@@ -48,6 +48,7 @@ ClmManager.Transfer.handler(async ({ event, context }) => {
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
+            trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
             trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
         },

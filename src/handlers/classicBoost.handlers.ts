@@ -48,6 +48,7 @@ ClassicBoost.Staked.handler(async ({ event, context }) => {
         rawTransferAmount: event.params.amount,
         event: {
             block: event.block,
+            trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
             trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
         },
@@ -79,6 +80,7 @@ ClassicBoost.Withdrawn.handler(async ({ event, context }) => {
         rawTransferAmount: event.params.amount,
         event: {
             block: event.block,
+            trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
             trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
         },
@@ -99,9 +101,6 @@ ClassicBoost.RewardAdded.handler(async ({ event, context }) => {
     });
     if (!boost) return;
 
-    const trxHash = event.transaction.hash.toString().toLowerCase() as Hex;
-    const logIndex = event.logIndex;
-
     const [shareToken, rewardToken] = await Promise.all([
         getTokenOrThrow({ context, id: boost.shareToken_id }),
         getTokenOrThrow({ context, id: boost.underlyingToken_id }),
@@ -110,13 +109,16 @@ ClassicBoost.RewardAdded.handler(async ({ event, context }) => {
     await createPoolRewardedEvent({
         context,
         chainId,
-        trxHash,
-        logIndex,
         poolShareToken: shareToken,
         rewardToken: rewardToken,
         rewardVestingSeconds: 0n, // boost rewards are immediate
         rawRewardAmount: event.params.reward,
-        block: event.block,
+        event: {
+            block: event.block,
+            trxIndex: event.transaction.transactionIndex,
+            logIndex: event.logIndex,
+            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+        },
     });
 });
 

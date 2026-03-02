@@ -87,7 +87,7 @@ This enables time-travel queries since HyperIndex doesn't support them natively.
 One entry is created per transfer event per account.
 """
 type TokenBalanceChange {
-  "Unique ID: chainId-token-account-blockNumber"
+  "Unique ID: chainId-token-account-blockNumber-trxIndex-logIndex"
   id: ID!
 
   "chain id"
@@ -101,6 +101,8 @@ type TokenBalanceChange {
 
   "Transaction hash of the change"
   trxHash: Bytes! @index
+  "The transaction index"
+  trxIndex: Int! @index
   "The log index"
   logIndex: Int! @index
   "Block number of this change"
@@ -115,13 +117,15 @@ type TokenBalanceChange {
 }
 
 type PoolRewardedEvent {
-  "chain - trx hash - log index"
+  "chain - trx hash - trx index - log index"
   id: ID!
 
   "chain id"
   chainId: Int! @index
   "The trx hash"
   trxHash: Bytes! @index
+  "The transaction index"
+  trxIndex: Int! @index
   "The log index"
   logIndex: Int! @index
 
