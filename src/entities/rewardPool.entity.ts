@@ -1,7 +1,6 @@
-import type { Block_t, handlerContext as HandlerContext } from 'generated';
-import type { RewardPool_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
+import type { Block, HandlerContext, RewardPool_t, Token_t } from '../lib/schema';
 
 export const rewardPoolId = ({ chainId, rewardPoolAddress }: { chainId: ChainId; rewardPoolAddress: Hex }) =>
     `${chainId}-${rewardPoolAddress.toLowerCase()}`;
@@ -25,7 +24,7 @@ export const createRewardPool = async ({
     rewardPoolAddress: Hex;
     shareToken: Token_t;
     underlyingToken: Token_t;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<RewardPool_t> => {
     const id = rewardPoolId({ chainId, rewardPoolAddress });
 

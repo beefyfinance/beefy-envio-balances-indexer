@@ -1,15 +1,14 @@
-import { type Block_t, ClmManager } from 'generated';
-import type { ClmManager_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getClmManagerTokens } from '../effects/clmManager.effects';
 import { createClmManager, getClmManager } from '../entities/clmManager.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { type ChainId, toChainId } from '../lib/chain';
+import type { Block, ClmManager_t, HandlerContext } from '../lib/schema';
+import { ClmManager_h } from '../lib/schema';
 import { handleTokenTransfer } from '../lib/token';
 
-ClmManager.Initialized.handler(async ({ event, context }) => {
+ClmManager_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('ClmManager.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -22,7 +21,7 @@ ClmManager.Initialized.handler(async ({ event, context }) => {
     context.log.info('ClmManager initialized successfully', { managerAddress });
 });
 
-ClmManager.Transfer.handler(async ({ event, context }) => {
+ClmManager_h.Transfer.handler(async ({ event, context }) => {
     context.log.debug('ClmManager.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -64,7 +63,7 @@ const initializeClmManager = async ({
     context: HandlerContext;
     chainId: ChainId;
     managerAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClmManager_t | null> => {
     // Check if the manager already exists
     const existingManager = await getClmManager(context, chainId, managerAddress);

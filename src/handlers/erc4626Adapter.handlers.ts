@@ -1,15 +1,14 @@
-import { type Block_t, Erc4626Adapter } from 'generated';
-import type { Erc4626Adapter_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getErc4626AdapterTokens } from '../effects/erc4626Adapter.effects';
 import { createErc4626Adapter, getErc4626Adapter } from '../entities/classicErc4626Adapter.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { type ChainId, toChainId } from '../lib/chain';
+import type { Block, Erc4626Adapter_t, HandlerContext } from '../lib/schema';
+import { Erc4626Adapter_h } from '../lib/schema';
 import { handleTokenTransfer } from '../lib/token';
 
-Erc4626Adapter.Initialized.handler(async ({ event, context }) => {
+Erc4626Adapter_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('Erc4626Adapter.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -22,7 +21,7 @@ Erc4626Adapter.Initialized.handler(async ({ event, context }) => {
     context.log.info('Erc4626Adapter initialized successfully', { adapterAddress });
 });
 
-Erc4626Adapter.Transfer.handler(async ({ event, context }) => {
+Erc4626Adapter_h.Transfer.handler(async ({ event, context }) => {
     context.log.debug('Erc4626Adapter.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -64,7 +63,7 @@ const initializeErc4626Adapter = async ({
     context: HandlerContext;
     chainId: ChainId;
     adapterAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<Erc4626Adapter_t | null> => {
     // Check if the adapter already exists
     const existingAdapter = await getErc4626Adapter(context, chainId, adapterAddress);

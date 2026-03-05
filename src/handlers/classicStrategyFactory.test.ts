@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ClassicStrategyFactory Handlers', () => {
     describe('StrategyCreated event', () => {
-        it.skip('Should register ClassicStrategy when StrategyCreated event is emitted', async () => {
+        it('Should register ClassicStrategy when StrategyCreated event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

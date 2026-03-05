@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ContractFactory Handlers', () => {
     describe('ContractDeployed event', () => {
-        it.skip('Should log ContractDeployed event when ContractDeployed event is emitted', async () => {
+        it('Should log ContractDeployed event when ContractDeployed event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -15,7 +15,7 @@ describe('ContractFactory Handlers', () => {
             expect(trace, 'Should log ContractDeployed event information').toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip blacklisted proxy addresses', async () => {
+        it('Should skip blacklisted proxy addresses', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

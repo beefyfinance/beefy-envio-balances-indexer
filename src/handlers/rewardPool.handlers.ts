@@ -1,6 +1,3 @@
-import { type Block_t, RewardPool } from 'generated';
-import type { RewardPool_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getRewardPoolTokens } from '../effects/rewardPool.effects';
 import { createPoolRewardedEvent } from '../entities/poolRewarded.event';
@@ -8,9 +5,11 @@ import { createRewardPool, getRewardPool } from '../entities/rewardPool.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { type ChainId, toChainId } from '../lib/chain';
+import type { Block, HandlerContext, RewardPool_t } from '../lib/schema';
+import { RewardPool_h } from '../lib/schema';
 import { handleTokenTransfer } from '../lib/token';
 
-RewardPool.Initialized.handler(async ({ event, context }) => {
+RewardPool_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('RewardPool.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -23,7 +22,7 @@ RewardPool.Initialized.handler(async ({ event, context }) => {
     context.log.info('ClassicRewardPool initialized successfully', { rewardPoolAddress });
 });
 
-RewardPool.Transfer.handler(async ({ event, context }) => {
+RewardPool_h.Transfer.handler(async ({ event, context }) => {
     context.log.debug('RewardPool.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -56,7 +55,7 @@ RewardPool.Transfer.handler(async ({ event, context }) => {
     });
 });
 
-RewardPool.NotifyReward.handler(async ({ event, context }) => {
+RewardPool_h.NotifyReward.handler(async ({ event, context }) => {
     context.log.debug('RewardPool.NotifyReward', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -100,7 +99,7 @@ const initializeRewardPool = async ({
     context: HandlerContext;
     chainId: ChainId;
     rewardPoolAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<RewardPool_t | null> => {
     // Check if the reward pool already exists
     const existingRewardPool = await getRewardPool(context, chainId, rewardPoolAddress);

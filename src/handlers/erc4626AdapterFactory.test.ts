@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('Erc4626AdapterFactory Handlers', () => {
     describe('Erc4626AdapterCreated event', () => {
-        it.skip('Should register Erc4626Adapter when Erc4626AdapterCreated event is emitted', async () => {
+        it('Should register Erc4626Adapter when Erc4626AdapterCreated event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

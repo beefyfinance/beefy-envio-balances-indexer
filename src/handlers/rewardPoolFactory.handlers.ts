@@ -1,7 +1,7 @@
-import { RewardPoolFactory } from 'generated';
 import { isVaultBlacklisted } from '../lib/blacklist';
+import { RewardPoolFactory_h } from '../lib/schema';
 
-RewardPoolFactory.RewardPoolCreated.contractRegister(async ({ event, context }) => {
+RewardPoolFactory_h.RewardPoolCreated.contractRegister(async ({ event, context }) => {
     const contractAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
     if (isVaultBlacklisted(event.chainId, contractAddress)) return;
 
@@ -10,7 +10,7 @@ RewardPoolFactory.RewardPoolCreated.contractRegister(async ({ event, context }) 
     context.log.info('RewardPoolCreated', { contractAddress });
 });
 
-RewardPoolFactory.RewardPoolCreatedWithName.contractRegister(async ({ event, context }) => {
+RewardPoolFactory_h.RewardPoolCreatedWithName.contractRegister(async ({ event, context }) => {
     const contractAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
     if (isVaultBlacklisted(event.chainId, contractAddress)) return;
 

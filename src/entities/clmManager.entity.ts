@@ -1,7 +1,6 @@
-import type { Block_t, handlerContext as HandlerContext } from 'generated';
-import type { ClmManager_t, ClmStrategy_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
+import type { Block, ClmManager_t, ClmStrategy_t, HandlerContext, Token_t } from '../lib/schema';
 
 export const clmManagerId = ({ chainId, managerAddress }: { chainId: ChainId; managerAddress: Hex }) =>
     `${chainId}-${managerAddress.toLowerCase()}`;
@@ -27,7 +26,7 @@ export const createClmManager = async ({
     shareToken: Token_t;
     underlyingToken0: Token_t;
     underlyingToken1: Token_t;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClmManager_t> => {
     const id = clmManagerId({ chainId, managerAddress });
 
@@ -67,7 +66,7 @@ export const createClmStrategy = async ({
     chainId: ChainId;
     strategyAddress: Hex;
     clmManager: ClmManager_t;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClmStrategy_t> => {
     const id = clmStrategyId({ chainId, strategyAddress });
 

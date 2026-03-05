@@ -291,7 +291,7 @@ describe('Token Handlers', () => {
             `);
         });
 
-        it.skip('Should handle mint transfers (from zero address) correctly', async () => {
+        it('Should handle mint transfers (from zero address) correctly', async () => {
             const indexer = createTestIndexer();
 
             // process event creation + Initialize event for 0x020d570516a85c3e47d8d48c17fbcf63053cc9f5
@@ -309,7 +309,7 @@ describe('Token Handlers', () => {
             expect(trace, 'Should correctly handle mint transfers from zero address').toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle burn transfers (to zero address) correctly', async () => {
+        it('Should handle burn transfers (to zero address) correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -322,7 +322,7 @@ describe('Token Handlers', () => {
             expect(trace, 'Should correctly handle burn transfers to zero address').toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle large value transfers correctly', async () => {
+        it('Should handle large value transfers correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -334,7 +334,7 @@ describe('Token Handlers', () => {
             expect(trace, 'Should correctly handle transfers with very large values').toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle multiple transfers in the same block correctly', async () => {
+        it('Should handle multiple transfers in the same block correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

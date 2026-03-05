@@ -21,18 +21,18 @@
     "test:unit:watch": "vitest watch"
   },
   "dependencies": {
-    "@beefyfinance/blockchain-addressbook": "^0.54.177",
-    "envio": "3.0.0-alpha.13",
+    "@beefyfinance/blockchain-addressbook": "0.54.179",
+    "envio": "3.0.0-alpha.17",
     "remeda": "2.33.6",
-    "viem": "2.45.2"
+    "viem": "2.46.3"
   },
   "optionalDependencies": {
     "generated": "link:generated"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.11",
-    "@types/node": "25.2.3",
-    "lefthook": "2.1.1",
+    "@biomejs/biome": "2.4.5",
+    "@types/node": "25.3.3",
+    "lefthook": "2.1.2",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
     "vitest": "4.0.18"

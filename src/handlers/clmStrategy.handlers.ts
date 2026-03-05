@@ -1,13 +1,12 @@
-import { type Block_t, ClmStrategy } from 'generated';
-import type { ClmStrategy_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getClmStrategyManager } from '../effects/clmStrategy.effects';
 import { createClmStrategy, getClmManager, getClmStrategy } from '../entities/clmManager.entity';
 import { type ChainId, toChainId } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
+import type { Block, ClmStrategy_t, HandlerContext } from '../lib/schema';
+import { ClmStrategy_h } from '../lib/schema';
 
-ClmStrategy.Initialized.handler(async ({ event, context }) => {
+ClmStrategy_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('ClmStrategy.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -29,7 +28,7 @@ const initializeClmStrategy = async ({
     context: HandlerContext;
     chainId: ChainId;
     strategyAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClmStrategy_t | null> => {
     // Check if the strategy already exists
     const existingStrategy = await getClmStrategy(context, chainId, strategyAddress);

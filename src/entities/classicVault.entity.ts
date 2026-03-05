@@ -1,7 +1,6 @@
-import type { Block_t, handlerContext as HandlerContext } from 'generated';
-import type { ClassicVault_t, ClassicVaultStrategy_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
+import type { Block, ClassicVault_t, ClassicVaultStrategy_t, HandlerContext, Token_t } from '../lib/schema';
 
 export const classicVaultId = ({ chainId, vaultAddress }: { chainId: ChainId; vaultAddress: Hex }) =>
     `${chainId}-${vaultAddress.toLowerCase()}`;
@@ -27,7 +26,7 @@ export const createClassicVault = async ({
     shareToken: Token_t;
     underlyingToken: Token_t;
     strategyAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClassicVault_t> => {
     const id = classicVaultId({ chainId, vaultAddress });
 
@@ -75,7 +74,7 @@ export const createClassicVaultStrategy = async ({
     chainId: ChainId;
     strategyAddress: Hex;
     classicVault: ClassicVault_t;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClassicVaultStrategy_t> => {
     const id = classicVaultStrategyId({ chainId, strategyAddress });
 

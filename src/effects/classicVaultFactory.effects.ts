@@ -1,6 +1,6 @@
-import type { handlerContext as HandlerContext } from 'generated';
 import { decodeFunctionData } from 'viem';
 import type { ChainId } from '../lib/chain';
+import type { HandlerContext } from '../lib/schema';
 import { getViemClient } from '../lib/viem';
 
 const detectClassicVaultOrStrategyWithEthCall = async ({

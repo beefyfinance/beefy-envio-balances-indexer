@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ClassicStrategy Handlers', () => {
     describe('Initialized event', () => {
-        it.skip('Should create ClassicVaultStrategy entity when Initialized event is emitted', async () => {
+        it('Should create ClassicVaultStrategy entity when Initialized event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -18,7 +18,7 @@ describe('ClassicStrategy Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle already initialized ClassicStrategy gracefully', async () => {
+        it('Should handle already initialized ClassicStrategy gracefully', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -33,7 +33,7 @@ describe('ClassicStrategy Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip ClassicStrategy with zero address vault', async () => {
+        it('Should skip ClassicStrategy with zero address vault', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -45,7 +45,7 @@ describe('ClassicStrategy Handlers', () => {
             expect(trace, 'Should return null and log error when vault address is zero').toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip ClassicStrategy when parent ClassicVault does not exist', async () => {
+        it('Should skip ClassicStrategy when parent ClassicVault does not exist', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ClassicBoostFactory Handlers', () => {
     describe('BoostCreated event', () => {
-        it.skip('Should register ClassicBoost when BoostCreated event is emitted', async () => {
+        it('Should register ClassicBoost when BoostCreated event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -20,7 +20,7 @@ describe('ClassicBoostFactory Handlers', () => {
     });
 
     describe('BoostDeployed event', () => {
-        it.skip('Should register ClassicBoost when BoostDeployed event is emitted', async () => {
+        it('Should register ClassicBoost when BoostDeployed event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

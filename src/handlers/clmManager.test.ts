@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ClmManager Handlers', () => {
     describe('Initialized event', () => {
-        it.skip('Should create ClmManager entity when Initialized event is emitted', async () => {
+        it('Should create ClmManager entity when Initialized event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -18,7 +18,7 @@ describe('ClmManager Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle already initialized ClmManager gracefully', async () => {
+        it('Should handle already initialized ClmManager gracefully', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -33,7 +33,7 @@ describe('ClmManager Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip blacklisted ClmManager during initialization', async () => {
+        it('Should skip blacklisted ClmManager during initialization', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -50,7 +50,7 @@ describe('ClmManager Handlers', () => {
     });
 
     describe('Transfer event', () => {
-        it.skip('Should update balances when Transfer event is emitted', async () => {
+        it('Should update balances when Transfer event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -65,7 +65,7 @@ describe('ClmManager Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle zero value transfers correctly', async () => {
+        it('Should handle zero value transfers correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -77,7 +77,7 @@ describe('ClmManager Handlers', () => {
             expect(trace, 'Should handle zero value transfers without errors').toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle mint transfers (from zero address) correctly', async () => {
+        it('Should handle mint transfers (from zero address) correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -89,7 +89,7 @@ describe('ClmManager Handlers', () => {
             expect(trace, 'Should correctly handle mint transfers from zero address').toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle burn transfers (to zero address) correctly', async () => {
+        it('Should handle burn transfers (to zero address) correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -101,7 +101,7 @@ describe('ClmManager Handlers', () => {
             expect(trace, 'Should correctly handle burn transfers to zero address').toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle multiple transfers in the same block correctly', async () => {
+        it('Should handle multiple transfers in the same block correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

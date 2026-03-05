@@ -1,13 +1,12 @@
-import { type Block_t, ClassicStrategy } from 'generated';
-import type { ClassicVaultStrategy_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getClassicStrategyVault } from '../effects/classicStrategy.effects';
 import { createClassicVaultStrategy, getClassicVault, getClassicVaultStrategy } from '../entities/classicVault.entity';
 import { type ChainId, toChainId } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
+import type { Block, ClassicVaultStrategy_t, HandlerContext } from '../lib/schema';
+import { ClassicStrategy_h } from '../lib/schema';
 
-ClassicStrategy.Initialized.handler(async ({ event, context }) => {
+ClassicStrategy_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('ClassicStrategy.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -29,7 +28,7 @@ const initializeClassicStrategy = async ({
     context: HandlerContext;
     chainId: ChainId;
     strategyAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClassicVaultStrategy_t | null> => {
     // Check if the strategy already exists
     const existingStrategy = await getClassicVaultStrategy(context, chainId, strategyAddress);

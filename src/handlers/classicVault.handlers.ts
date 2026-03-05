@@ -1,15 +1,14 @@
-import { type Block_t, ClassicVault } from 'generated';
-import type { ClassicVault_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getClassicVaultTokens } from '../effects/classicVault.effects';
 import { createClassicVault, getClassicVault } from '../entities/classicVault.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { type ChainId, toChainId } from '../lib/chain';
+import type { Block, ClassicVault_t, HandlerContext } from '../lib/schema';
+import { ClassicVault_h } from '../lib/schema';
 import { handleTokenTransfer } from '../lib/token';
 
-ClassicVault.Initialized.handler(async ({ event, context }) => {
+ClassicVault_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('ClassicVault.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -22,7 +21,7 @@ ClassicVault.Initialized.handler(async ({ event, context }) => {
     context.log.info('ClassicVault initialized successfully', { vaultAddress });
 });
 
-ClassicVault.Transfer.handler(async ({ event, context }) => {
+ClassicVault_h.Transfer.handler(async ({ event, context }) => {
     context.log.debug('ClassicVault.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -64,7 +63,7 @@ const initializeClassicVault = async ({
     context: HandlerContext;
     chainId: ChainId;
     vaultAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClassicVault_t | null> => {
     // Check if the vault already exists
     const existingVault = await getClassicVault(context, chainId, vaultAddress);

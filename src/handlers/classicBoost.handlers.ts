@@ -1,6 +1,3 @@
-import { type Block_t, ClassicBoost } from 'generated';
-import type { ClassicBoost_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getClassicBoostTokens } from '../effects/classicBoost.effects';
 import { createClassicBoost, getClassicBoost } from '../entities/classicBoost.entity';
@@ -9,9 +6,11 @@ import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { type ChainId, toChainId } from '../lib/chain';
 import { config } from '../lib/config';
+import type { Block, ClassicBoost_t, HandlerContext } from '../lib/schema';
+import { ClassicBoost_h } from '../lib/schema';
 import { handleTokenTransfer } from '../lib/token';
 
-ClassicBoost.Initialized.handler(async ({ event, context }) => {
+ClassicBoost_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('ClassicBoost.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -24,7 +23,7 @@ ClassicBoost.Initialized.handler(async ({ event, context }) => {
     context.log.info('ClassicBoost initialized successfully', { boostAddress });
 });
 
-ClassicBoost.Staked.handler(async ({ event, context }) => {
+ClassicBoost_h.Staked.handler(async ({ event, context }) => {
     context.log.debug('ClassicBoost.Staked', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -55,7 +54,7 @@ ClassicBoost.Staked.handler(async ({ event, context }) => {
     });
 });
 
-ClassicBoost.Withdrawn.handler(async ({ event, context }) => {
+ClassicBoost_h.Withdrawn.handler(async ({ event, context }) => {
     context.log.debug('ClassicBoost.Withdrawn', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -87,7 +86,7 @@ ClassicBoost.Withdrawn.handler(async ({ event, context }) => {
     });
 });
 
-ClassicBoost.RewardAdded.handler(async ({ event, context }) => {
+ClassicBoost_h.RewardAdded.handler(async ({ event, context }) => {
     context.log.debug('ClassicBoost.RewardAdded', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -131,7 +130,7 @@ const initializeBoost = async ({
     context: HandlerContext;
     chainId: ChainId;
     boostAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClassicBoost_t | null> => {
     // Check if the boost already exists
     const existingBoost = await getClassicBoost(context, chainId, boostAddress);

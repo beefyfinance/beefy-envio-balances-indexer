@@ -1,7 +1,6 @@
-import type { Block_t, handlerContext as HandlerContext } from 'generated';
-import type { LstVault_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
+import type { Block, HandlerContext, LstVault_t, Token_t } from '../lib/schema';
 
 export const LstVaultId = ({ chainId, lstAddress }: { chainId: ChainId; lstAddress: Hex }) =>
     `${chainId}-${lstAddress.toLowerCase()}`;
@@ -25,7 +24,7 @@ export const createLstVault = async ({
     lstAddress: Hex;
     shareToken: Token_t;
     underlyingToken: Token_t;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<LstVault_t> => {
     const id = LstVaultId({ chainId, lstAddress });
 

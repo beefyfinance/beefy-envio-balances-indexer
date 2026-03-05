@@ -1,11 +1,10 @@
-import type { BigDecimal, Block_t, handlerContext as HandlerContext } from 'generated';
-import type { Account_t, Token_t, TokenBalance_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import { getOrCreateAccount } from '../entities/account.entity';
 import { getOrCreateTokenBalanceChangeEntity, getOrCreateTokenBalanceEntity } from '../entities/balance.entity';
 import type { ChainId } from './chain';
 import { config } from './config';
-import { BIG_ZERO, interpretAsDecimal } from './decimal';
+import { BIG_ZERO, type BigDecimal, interpretAsDecimal } from './decimal';
+import type { Account_t, Block, HandlerContext, Token_t, TokenBalance_t } from './schema';
 
 export const handleTokenTransfer = async ({
     context,
@@ -23,7 +22,7 @@ export const handleTokenTransfer = async ({
     receiverAddress: Hex;
     rawTransferAmount: bigint;
     event: {
-        block: Block_t;
+        block: Block;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;
@@ -137,13 +136,13 @@ const updateAccountBalance = async ({
     chainId,
 }: {
     context: HandlerContext;
-    amountDiff: BigDecimal;
+    amountDiff: InstanceType<typeof BigDecimal>;
     account: Account_t;
     balance: TokenBalance_t;
     token: Token_t;
     chainId: ChainId;
     event: {
-        block: Block_t;
+        block: Block;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;

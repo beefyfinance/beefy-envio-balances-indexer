@@ -1,9 +1,7 @@
 import type { ChainId } from '@beefyfinance/blockchain-addressbook';
-import type { Block_t } from 'generated';
-import type { PoolRewardedEvent_t, Token_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { interpretAsDecimal } from '../lib/decimal';
+import type { Block, HandlerContext, PoolRewardedEvent_t, Token_t } from '../lib/schema';
 
 const poolRewardedEventId = ({
     chainId,
@@ -33,7 +31,7 @@ export const createPoolRewardedEvent = async ({
     rewardVestingSeconds: bigint;
     rawRewardAmount: bigint;
     event: {
-        block: Block_t;
+        block: Block;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;

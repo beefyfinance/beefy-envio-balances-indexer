@@ -1,8 +1,8 @@
-import { BigDecimal, type handlerContext as HandlerContext } from 'generated';
-import type { Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import { getTokenMetadata } from '../effects/token.effects';
 import type { ChainId } from '../lib/chain';
+import { BigDecimal } from '../lib/decimal';
+import type { HandlerContext, Token_t } from '../lib/schema';
 
 export const tokenId = ({ chainId, tokenAddress }: { chainId: ChainId; tokenAddress: Hex }) =>
     `${chainId}-${tokenAddress.toLowerCase()}`;

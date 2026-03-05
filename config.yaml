@@ -1,7 +1,6 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
 name: beefy-balance-indexer
 description: Beefy Finance Balance Indexer - Tracks ERC20 balances across multiple networks
-multichain: unordered
 address_format: lowercase
 raw_events: false
 save_full_history: false

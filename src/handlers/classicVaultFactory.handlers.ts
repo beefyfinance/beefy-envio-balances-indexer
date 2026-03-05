@@ -1,8 +1,8 @@
-import { ClassicVaultFactory } from 'generated';
 import { detectClassicVaultOrStrategy } from '../effects/classicVaultFactory.effects';
 import { isVaultBlacklisted } from '../lib/blacklist';
+import { ClassicVaultFactory_h } from '../lib/schema';
 
-ClassicVaultFactory.VaultOrStrategyCreated.contractRegister(async ({ event, context }) => {
+ClassicVaultFactory_h.VaultOrStrategyCreated.contractRegister(async ({ event, context }) => {
     const proxyAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
     if (isVaultBlacklisted(event.chainId, proxyAddress)) return;
 

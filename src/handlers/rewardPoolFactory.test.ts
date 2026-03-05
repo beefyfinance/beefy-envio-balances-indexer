@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('RewardPoolFactory Handlers', () => {
     describe('RewardPoolCreated event', () => {
-        it.skip('Should register RewardPool when RewardPoolCreated event is emitted', async () => {
+        it('Should register RewardPool when RewardPoolCreated event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -18,7 +18,7 @@ describe('RewardPoolFactory Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip blacklisted proxy addresses', async () => {
+        it('Should skip blacklisted proxy addresses', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -32,7 +32,7 @@ describe('RewardPoolFactory Handlers', () => {
     });
 
     describe('RewardPoolCreatedWithName event', () => {
-        it.skip('Should register RewardPool when RewardPoolCreatedWithName event is emitted', async () => {
+        it('Should register RewardPool when RewardPoolCreatedWithName event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -47,7 +47,7 @@ describe('RewardPoolFactory Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip blacklisted proxy addresses', async () => {
+        it('Should skip blacklisted proxy addresses', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

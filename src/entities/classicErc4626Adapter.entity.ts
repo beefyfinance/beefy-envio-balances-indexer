@@ -1,7 +1,6 @@
-import type { Block_t, handlerContext as HandlerContext } from 'generated';
-import type { Erc4626Adapter_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
+import type { Block, Erc4626Adapter_t, HandlerContext, Token_t } from '../lib/schema';
 
 export const erc4626AdapterId = ({ chainId, adapterAddress }: { chainId: ChainId; adapterAddress: Hex }) =>
     `${chainId}-${adapterAddress.toLowerCase()}`;
@@ -25,7 +24,7 @@ export const createErc4626Adapter = async ({
     adapterAddress: Hex;
     shareToken: Token_t;
     underlyingToken: Token_t;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<Erc4626Adapter_t> => {
     const id = erc4626AdapterId({ chainId, adapterAddress });
 

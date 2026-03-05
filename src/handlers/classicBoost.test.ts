@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ClassicBoost Handlers', () => {
     describe('Initialized event', () => {
-        it.skip('Should create ClassicBoost entity when Initialized event is emitted', async () => {
+        it('Should create ClassicBoost entity when Initialized event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -18,7 +18,7 @@ describe('ClassicBoost Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle already initialized ClassicBoost gracefully', async () => {
+        it('Should handle already initialized ClassicBoost gracefully', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -33,7 +33,7 @@ describe('ClassicBoost Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip blacklisted ClassicBoost during initialization', async () => {
+        it('Should skip blacklisted ClassicBoost during initialization', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -50,7 +50,7 @@ describe('ClassicBoost Handlers', () => {
     });
 
     describe('Staked event', () => {
-        it.skip('Should update balances when Staked event is emitted', async () => {
+        it('Should update balances when Staked event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -65,7 +65,7 @@ describe('ClassicBoost Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle zero amount stakes correctly', async () => {
+        it('Should handle zero amount stakes correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -77,7 +77,7 @@ describe('ClassicBoost Handlers', () => {
             expect(trace, 'Should handle zero amount stakes without errors').toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle multiple stakes in the same block correctly', async () => {
+        it('Should handle multiple stakes in the same block correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -91,7 +91,7 @@ describe('ClassicBoost Handlers', () => {
     });
 
     describe('Withdrawn event', () => {
-        it.skip('Should update balances when Withdrawn event is emitted', async () => {
+        it('Should update balances when Withdrawn event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -106,7 +106,7 @@ describe('ClassicBoost Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle zero amount withdrawals correctly', async () => {
+        it('Should handle zero amount withdrawals correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -120,7 +120,7 @@ describe('ClassicBoost Handlers', () => {
     });
 
     describe('RewardAdded event', () => {
-        it.skip('Should create PoolRewardedEvent when RewardAdded event is emitted', async () => {
+        it('Should create PoolRewardedEvent when RewardAdded event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -135,7 +135,7 @@ describe('ClassicBoost Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should handle zero reward amounts correctly', async () => {
+        it('Should handle zero reward amounts correctly', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

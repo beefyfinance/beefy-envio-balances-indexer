@@ -1,15 +1,14 @@
-import { type Block_t, LstVault } from 'generated';
-import type { LstVault_t } from 'generated/src/db/Entities.gen';
-import type { HandlerContext } from 'generated/src/Types';
 import type { Hex } from 'viem';
 import { getLstVaultTokens } from '../effects/lstVault.effects';
 import { createLstVault, getLstVault } from '../entities/lstVault.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { type ChainId, toChainId } from '../lib/chain';
+import type { Block, HandlerContext, LstVault_t } from '../lib/schema';
+import { LstVault_h } from '../lib/schema';
 import { handleTokenTransfer } from '../lib/token';
 
-LstVault.Initialized.handler(async ({ event, context }) => {
+LstVault_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('LstVault.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -22,7 +21,7 @@ LstVault.Initialized.handler(async ({ event, context }) => {
     context.log.info('LstVault initialized successfully', { lstAddress });
 });
 
-LstVault.Transfer.handler(async ({ event, context }) => {
+LstVault_h.Transfer.handler(async ({ event, context }) => {
     context.log.debug('LstVault.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -64,7 +63,7 @@ const initializeLstVault = async ({
     context: HandlerContext;
     chainId: ChainId;
     lstAddress: Hex;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<LstVault_t | null> => {
     // Check if the LST vault already exists
     const existingLst = await getLstVault(context, chainId, lstAddress);

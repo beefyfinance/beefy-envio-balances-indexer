@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ClassicVaultFactory Handlers', () => {
     describe('VaultOrStrategyCreated event', () => {
-        it.skip('Should register ClassicVault when VaultOrStrategyCreated event detects a vault', async () => {
+        it('Should register ClassicVault when VaultOrStrategyCreated event detects a vault', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -18,7 +18,7 @@ describe('ClassicVaultFactory Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should register ClassicBoost when VaultOrStrategyCreated event detects a boost', async () => {
+        it('Should register ClassicBoost when VaultOrStrategyCreated event detects a boost', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -33,7 +33,7 @@ describe('ClassicVaultFactory Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip strategy when VaultOrStrategyCreated event detects a strategy', async () => {
+        it('Should skip strategy when VaultOrStrategyCreated event detects a strategy', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -48,7 +48,7 @@ describe('ClassicVaultFactory Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip blacklisted proxy addresses', async () => {
+        it('Should skip blacklisted proxy addresses', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

@@ -1,6 +1,6 @@
-import { Erc4626AdapterFactory } from 'generated';
+import { Erc4626AdapterFactory_h } from '../lib/schema';
 
-Erc4626AdapterFactory.Erc4626AdapterCreated.contractRegister(async ({ event, context }) => {
+Erc4626AdapterFactory_h.Erc4626AdapterCreated.contractRegister(async ({ event, context }) => {
     const adapterAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
 
     context.addErc4626Adapter(adapterAddress);

@@ -1,5 +1,6 @@
 import { BigDecimal } from 'generated';
 
+export { BigDecimal };
 export const DEFAULT_DECIMAL_PLACES = 50;
 
 BigDecimal.set({

@@ -1,10 +1,10 @@
-import { Token } from 'generated';
 import type { Hex } from 'viem';
 import { getOrCreateToken } from '../entities/token.entity';
 import { toChainId } from '../lib/chain';
+import { Token_h } from '../lib/schema';
 import { handleTokenTransfer } from '../lib/token';
 
-Token.Initialized.handler(async ({ event, context }) => {
+Token_h.Initialized.handler(async ({ event, context }) => {
     context.log.debug('Token.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
@@ -21,7 +21,7 @@ Token.Initialized.handler(async ({ event, context }) => {
     context.log.info('Token initialized', { tokenAddress, chainId });
 });
 
-Token.Transfer.handler(async ({ event, context }) => {
+Token_h.Transfer.handler(async ({ event, context }) => {
     context.log.debug('Token.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);

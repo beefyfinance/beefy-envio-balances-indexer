@@ -1,7 +1,7 @@
-import { BigDecimal, type Block_t, type handlerContext as HandlerContext } from 'generated';
-import type { Account_t, Token_t, TokenBalance_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
+import { BigDecimal } from '../lib/decimal';
+import type { Account_t, Block, HandlerContext, Token_t, TokenBalance_t } from '../lib/schema';
 import { accountId } from './account.entity';
 import { tokenId } from './token.entity';
 
@@ -62,13 +62,13 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
     token: Token_t;
     account: Account_t;
     event: {
-        block: Block_t;
+        block: Block;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;
     };
-    balanceBefore: BigDecimal;
-    balanceAfter: BigDecimal;
+    balanceBefore: InstanceType<typeof BigDecimal>;
+    balanceAfter: InstanceType<typeof BigDecimal>;
 }) => {
     return await context.TokenBalanceChange.getOrCreate({
         id: TokenBalanceChangeId({

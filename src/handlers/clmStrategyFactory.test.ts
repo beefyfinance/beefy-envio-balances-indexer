@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('ClmStrategyFactory Handlers', () => {
     describe('ClmStrategyCreated event', () => {
-        it.skip('Should register ClmStrategy when ClmStrategyCreated event is emitted', async () => {
+        it('Should register ClmStrategy when ClmStrategyCreated event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -18,7 +18,7 @@ describe('ClmStrategyFactory Handlers', () => {
             ).toMatchInlineSnapshot();
         });
 
-        it.skip('Should skip blacklisted proxy addresses', async () => {
+        it('Should skip blacklisted proxy addresses', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({

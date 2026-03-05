@@ -1,8 +1,9 @@
 import { S } from 'envio';
-import { type ChainId as ChainIdType, indexer } from 'generated';
+import { indexer } from 'generated';
+import type { ChainId } from 'generated/src/Types';
 import * as R from 'remeda';
 
-export type ChainId = ChainIdType;
+export type { ChainId };
 export const allChainIds = indexer.chainIds;
 export const chainIdSchema: S.Schema<ChainId, number> = S.union(
     R.pipe(

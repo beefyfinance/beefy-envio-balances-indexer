@@ -1,7 +1,6 @@
-import type { Block_t, handlerContext as HandlerContext } from 'generated';
-import type { ClassicBoost_t, Token_t } from 'generated/src/db/Entities.gen';
 import type { Hex } from 'viem';
 import type { ChainId } from '../lib/chain';
+import type { Block, ClassicBoost_t, HandlerContext, Token_t } from '../lib/schema';
 
 export const classicBoostId = ({ chainId, boostAddress }: { chainId: ChainId; boostAddress: Hex }) =>
     `${chainId}-${boostAddress.toLowerCase()}`;
@@ -25,7 +24,7 @@ export const createClassicBoost = async ({
     boostAddress: Hex;
     shareToken: Token_t;
     underlyingToken: Token_t;
-    initializedBlock: Block_t;
+    initializedBlock: Block;
 }): Promise<ClassicBoost_t> => {
     const id = classicBoostId({ chainId, boostAddress });
 

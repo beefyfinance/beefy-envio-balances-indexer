@@ -1,7 +1,7 @@
-import { ContractFactory } from 'generated';
 import { isVaultBlacklisted } from '../lib/blacklist';
+import { ContractFactory_h } from '../lib/schema';
 
-ContractFactory.ContractDeployed.contractRegister(async ({ event, context }) => {
+ContractFactory_h.ContractDeployed.contractRegister(async ({ event, context }) => {
     const contractAddress = event.params.proxy.toString().toLowerCase();
     if (isVaultBlacklisted(event.chainId, contractAddress)) return;
 
