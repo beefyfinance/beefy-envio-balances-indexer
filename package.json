@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@beefyfinance/blockchain-addressbook": "0.54.179",
-    "envio": "3.0.0-alpha.17",
+    "envio": "3.0.0-alpha.18",
     "remeda": "2.33.6",
     "viem": "2.46.3"
   },
