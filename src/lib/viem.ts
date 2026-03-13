@@ -1,5 +1,5 @@
 import type { Logger } from 'envio';
-import { createPublicClient, defineChain, http, type Chain as ViemChain } from 'viem';
+import { createPublicClient, defineChain, http, type PublicClient, type Chain as ViemChain } from 'viem';
 import {
     arbitrum,
     avalanche,
@@ -144,10 +144,16 @@ const chainMap: Record<ChainId, ViemChain> = {
     324: zksync,
 };
 
+const clients = new Map<ChainId, PublicClient>();
+
 export const getViemClient = (chainId: ChainId, logger: Logger) => {
     const rpcUrl = config.RPC_URL[chainId];
 
-    return createPublicClient({
+    if (clients.has(chainId)) {
+        return clients.get(chainId) as PublicClient;
+    }
+
+    const client = createPublicClient({
         chain: chainMap[chainId],
         // Enable multicall batching for efficiency
         // batch: {
@@ -192,4 +198,7 @@ export const getViemClient = (chainId: ChainId, logger: Logger) => {
             timeout: 30_000,
         }),
     });
+
+    clients.set(chainId, client);
+    return client;
 };
