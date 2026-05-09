@@ -403,9 +403,6 @@ chains:
           - 0x6cbaebc1333e72206fc326e810972d28f8250485
           - 0x7076a33b6525132ff77f0fee2dab2a1e79688da0
           - 0x714a52cdee18cd074baa87f1f9631b13d302e516
-          - 0x1B156C5c75E9dF4CAAb2a5cc5999aC58ff4F9090
-          - 0x99EeB92A4896a9F45E9390e2A05ceE5647BA0f95
-          - 0xfda2E1E9BE74F60738e935b06A5d9C32143B18D5
           - 0x71b5852857b85d5096d4288ad6d293f217d8e162
           - 0x71d57de132b3a090bff5027a1e88947bed1a32ba
           - 0x72a6f8e2510b9332eaf744feb1f7c19e3acb2201
@@ -1873,9 +1870,6 @@ chains:
           - 0x07ec069dc86d5ca2eb3c705c7030525a62e6e78c
           - 0x0855598ea2a256be3c180a5ef92139746eb2965a
           - 0x0885b73c80ece5ed81b038b989c4224f4d41583e
-          - 0x3D6AA308a59311D57456c2E968AdC1Dd3628869a
-          - 0x49c68eDb7aeBd968F197121453e41b8704AcdE0C
-          - 0xbf1340159c1b69Ae98Ff08BE5fC77cdc084dDc73
           - 0x0a03d2c1cfca48075992d810cc69bd9fe026384a
           - 0x0ab24bfc2503bb536ad667c00685bbb70fa90433
           - 0x0c6b9982b5b18f6d77e55fc754db6182ae2d847f
@@ -2427,7 +2421,6 @@ chains:
       - name: ClassicVaultFactory
         address:
           - 0xBC4a342B0c057501E081484A2d24e576E854F823
-          - 0x7cac900b2f504047b40f5554f633248f78bd960a
       - name: ClassicStrategyFactory
         address:
           - 0x7Cba02979594b0f535E0077E9748407a48641c89
@@ -2676,7 +2669,6 @@ chains:
         address: []
       - name: ClassicVault
         address:
-          - 0x25356aeca4210ef7553140edb9b8026089e49396
           - 0x08175349da602674a255398516187984fedd5738
           - 0x15a318cfc01b50bd77c3a8d0dd560fdf44b5c046
           - 0x15f5169d7fd528f6c8bcfb0a239833d53f454ff2
@@ -2706,7 +2698,6 @@ chains:
           - 0xfb038d9f7ed2e754612381af193f5570470c5182
       - name: ClassicBoost
         address:
-          - 0x25356aeca4210ef7553140edb9b8026089e49396
           - 0x01e8881ed2fb41e0b3df29f382faf707a0b26969
       - name: ClassicStrategy
         address: []
