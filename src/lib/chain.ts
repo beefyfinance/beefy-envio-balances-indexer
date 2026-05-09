@@ -1,17 +1,14 @@
-import { S } from 'envio';
-import { indexer } from 'generated';
-import type { ChainId } from 'generated/src/Types';
+import type { EvmChainId } from 'envio';
+import { indexer, S } from 'envio';
 import * as R from 'remeda';
 
-export type { ChainId };
-export const allChainIds = indexer.chainIds;
-export const chainIdSchema: S.Schema<ChainId, number> = S.union(
+export const chainIdSchema: S.Schema<EvmChainId, number> = S.union(
     R.pipe(
-        allChainIds,
+        indexer.chainIds,
         R.map((chainId) => S.schema(chainId))
-    ) as [S.Schema<ChainId, number>, ...Array<S.Schema<ChainId, number>>]
+    ) as [S.Schema<EvmChainId, number>, ...Array<S.Schema<EvmChainId, number>>]
 );
 
-export const toChainId = (chainId: number): ChainId => {
+export const toChainId = (chainId: number): EvmChainId => {
     return S.parseOrThrow(chainId, chainIdSchema);
 };

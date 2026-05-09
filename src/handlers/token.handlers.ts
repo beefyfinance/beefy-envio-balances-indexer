@@ -1,14 +1,14 @@
-import type { Hex } from 'viem';
+import { indexer } from 'envio';
 import { getOrCreateToken } from '../entities/token.entity';
 import { toChainId } from '../lib/chain';
-import { Token_h } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
-Token_h.Initialized.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'Token', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('Token.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const tokenAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const tokenAddress = normalizeHex(event.srcAddress);
 
     // Ensure the token exists in the database
     await getOrCreateToken({
@@ -21,11 +21,11 @@ Token_h.Initialized.handler(async ({ event, context }) => {
     context.log.info('Token initialized', { tokenAddress, chainId });
 });
 
-Token_h.Transfer.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'Token', event: 'Transfer' }, async ({ event, context }) => {
     context.log.debug('Token.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
-    const tokenAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const tokenAddress = normalizeHex(event.srcAddress);
 
     // Ensure the token exists first
     const token = await getOrCreateToken({
@@ -39,14 +39,14 @@ Token_h.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         token,
-        senderAddress: event.params.from.toString().toLowerCase() as Hex,
-        receiverAddress: event.params.to.toString().toLowerCase() as Hex,
+        senderAddress: normalizeHex(event.params.from),
+        receiverAddress: normalizeHex(event.params.to),
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+            trxHash: normalizeHex(event.transaction.hash),
         },
     });
 });

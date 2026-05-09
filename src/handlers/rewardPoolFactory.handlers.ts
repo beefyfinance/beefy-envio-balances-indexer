@@ -1,20 +1,23 @@
+import { indexer } from 'envio';
 import { isVaultBlacklisted } from '../lib/blacklist';
-import { RewardPoolFactory_h } from '../lib/schema';
 
-RewardPoolFactory_h.RewardPoolCreated.contractRegister(async ({ event, context }) => {
+indexer.contractRegister({ contract: 'RewardPoolFactory', event: 'RewardPoolCreated' }, async ({ event, context }) => {
     const contractAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
     if (isVaultBlacklisted(event.chainId, contractAddress)) return;
 
-    context.addRewardPool(contractAddress);
+    context.chain.RewardPool.add(contractAddress);
 
     context.log.info('RewardPoolCreated', { contractAddress });
 });
 
-RewardPoolFactory_h.RewardPoolCreatedWithName.contractRegister(async ({ event, context }) => {
-    const contractAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
-    if (isVaultBlacklisted(event.chainId, contractAddress)) return;
+indexer.contractRegister(
+    { contract: 'RewardPoolFactory', event: 'RewardPoolCreatedWithName' },
+    async ({ event, context }) => {
+        const contractAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
+        if (isVaultBlacklisted(event.chainId, contractAddress)) return;
 
-    context.addRewardPool(contractAddress);
+        context.chain.RewardPool.add(contractAddress);
 
-    context.log.info('RewardPoolCreatedWithName', { contractAddress });
-});
+        context.log.info('RewardPoolCreatedWithName', { contractAddress });
+    }
+);

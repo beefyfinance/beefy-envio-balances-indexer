@@ -1,8 +1,7 @@
 import { createEffect } from 'envio';
-import type { Hex } from 'viem';
 import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema } from '../lib/hex';
+import { hexSchema, normalizeHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
 export const getClmStrategyManager = createEffect(
@@ -51,7 +50,7 @@ export const getClmStrategyManager = createEffect(
             };
         }
 
-        const managerAddress = vaultResult.result.toLowerCase() as Hex;
+        const managerAddress = normalizeHex(vaultResult.result);
 
         context.log.info('ClmStrategy manager fetched', {
             strategyAddress,

@@ -1,10 +1,9 @@
+import type { Account, EvmBlock, EvmChainId, EvmOnEventContext, Token, TokenBalance } from 'envio';
 import type { Hex } from 'viem';
 import { getOrCreateAccount } from '../entities/account.entity';
 import { getOrCreateTokenBalanceChangeEntity, getOrCreateTokenBalanceEntity } from '../entities/balance.entity';
-import type { ChainId } from './chain';
 import { config } from './config';
 import { BIG_ZERO, type BigDecimal, interpretAsDecimal } from './decimal';
-import type { Account_t, Block, HandlerContext, Token_t, TokenBalance_t } from './schema';
 
 export const handleTokenTransfer = async ({
     context,
@@ -15,14 +14,14 @@ export const handleTokenTransfer = async ({
     rawTransferAmount,
     event,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
-    token: Token_t;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
+    token: Token;
     senderAddress: Hex;
     receiverAddress: Hex;
     rawTransferAmount: bigint;
     event: {
-        block: Block;
+        block: EvmBlock;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;
@@ -135,14 +134,14 @@ const updateAccountBalance = async ({
     event,
     chainId,
 }: {
-    context: HandlerContext;
+    context: EvmOnEventContext;
     amountDiff: InstanceType<typeof BigDecimal>;
-    account: Account_t;
-    balance: TokenBalance_t;
-    token: Token_t;
-    chainId: ChainId;
+    account: Account;
+    balance: TokenBalance;
+    token: Token;
+    chainId: EvmChainId;
     event: {
-        block: Block;
+        block: EvmBlock;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;

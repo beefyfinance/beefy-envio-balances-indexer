@@ -1,11 +1,11 @@
+import type { EvmChainId, EvmOnEventContext, Token } from 'envio';
 import type { Hex } from 'viem';
 import { getTokenMetadata } from '../effects/token.effects';
-import type { ChainId } from '../lib/chain';
 import { BigDecimal } from '../lib/decimal';
-import type { HandlerContext, Token_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-export const tokenId = ({ chainId, tokenAddress }: { chainId: ChainId; tokenAddress: Hex }) =>
-    `${chainId}-${tokenAddress.toLowerCase()}`;
+export const tokenId = ({ chainId, tokenAddress }: { chainId: EvmChainId; tokenAddress: Hex }) =>
+    `${chainId}-${normalizeHex(tokenAddress)}`;
 
 export const getOrCreateToken = async ({
     context,
@@ -13,8 +13,8 @@ export const getOrCreateToken = async ({
     tokenAddress,
     virtual,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     tokenAddress: Hex;
     virtual:
         | false
@@ -22,7 +22,7 @@ export const getOrCreateToken = async ({
               suffix: string;
               stakingToken: Hex;
           };
-}): Promise<Token_t> => {
+}): Promise<Token> => {
     context.log.debug('Getting or creating token', { chainId, tokenAddress, virtual });
     const id = tokenId({ chainId, tokenAddress });
     const maybeExistingToken = await context.Token.get(id);
@@ -68,7 +68,7 @@ export const getOrCreateToken = async ({
     });
 };
 
-export const getTokenOrThrow = async ({ context, id }: { context: HandlerContext; id: string }): Promise<Token_t> => {
+export const getTokenOrThrow = async ({ context, id }: { context: EvmOnEventContext; id: string }): Promise<Token> => {
     const token = await context.Token.get(id);
     if (!token) {
         throw new Error(`Token ${id} not found`);

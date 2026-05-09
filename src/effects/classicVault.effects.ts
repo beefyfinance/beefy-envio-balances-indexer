@@ -1,10 +1,9 @@
 import { createEffect } from 'envio';
 import * as R from 'remeda';
-import type { Hex } from 'viem';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema } from '../lib/hex';
+import { hexSchema, normalizeHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
 export const getClassicVaultTokens = createEffect(
@@ -26,7 +25,7 @@ export const getClassicVaultTokens = createEffect(
     async ({ input, context }) => {
         const { vaultAddress, chainId } = input;
 
-        const staticVault = staticVaultsMap[chainId]?.[vaultAddress.toLowerCase() as `0x${string}`];
+        const staticVault = staticVaultsMap[chainId]?.[normalizeHex(vaultAddress)];
         if (staticVault) {
             return {
                 shareTokenAddress: staticVault.underlyingTokenAddress,
@@ -213,9 +212,9 @@ const staticVaultsMap = R.pipe(
     staticVaults,
     R.map(({ chainId, vaultAddress, underlyingTokenAddress, strategyAddress }) => ({
         chainId,
-        vaultAddress: vaultAddress.toLowerCase() as Hex,
-        underlyingTokenAddress: underlyingTokenAddress.toLowerCase() as Hex,
-        strategyAddress: strategyAddress.toLowerCase() as Hex,
+        vaultAddress: normalizeHex(vaultAddress),
+        underlyingTokenAddress: normalizeHex(underlyingTokenAddress),
+        strategyAddress: normalizeHex(strategyAddress),
     })),
     R.groupBy(R.prop('chainId')),
     R.mapValues(R.indexBy(R.prop('vaultAddress')))

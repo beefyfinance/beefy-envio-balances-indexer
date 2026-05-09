@@ -1,11 +1,11 @@
+import type { EvmBlock, EvmChainId, EvmOnEventContext, RewardPool, Token } from 'envio';
 import type { Hex } from 'viem';
-import type { ChainId } from '../lib/chain';
-import type { Block, HandlerContext, RewardPool_t, Token_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-export const rewardPoolId = ({ chainId, rewardPoolAddress }: { chainId: ChainId; rewardPoolAddress: Hex }) =>
-    `${chainId}-${rewardPoolAddress.toLowerCase()}`;
+export const rewardPoolId = ({ chainId, rewardPoolAddress }: { chainId: EvmChainId; rewardPoolAddress: Hex }) =>
+    `${chainId}-${normalizeHex(rewardPoolAddress)}`;
 
-export const getRewardPool = async (context: HandlerContext, chainId: ChainId, rewardPoolAddress: Hex) => {
+export const getRewardPool = async (context: EvmOnEventContext, chainId: EvmChainId, rewardPoolAddress: Hex) => {
     const id = rewardPoolId({ chainId, rewardPoolAddress });
     const rewardPool = await context.RewardPool.get(id);
     return rewardPool;
@@ -19,16 +19,16 @@ export const createRewardPool = async ({
     underlyingToken,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     rewardPoolAddress: Hex;
-    shareToken: Token_t;
-    underlyingToken: Token_t;
-    initializedBlock: Block;
-}): Promise<RewardPool_t> => {
+    shareToken: Token;
+    underlyingToken: Token;
+    initializedBlock: EvmBlock;
+}): Promise<RewardPool> => {
     const id = rewardPoolId({ chainId, rewardPoolAddress });
 
-    const rewardPool: RewardPool_t = {
+    const rewardPool: RewardPool = {
         id,
         chainId,
         address: rewardPoolAddress,
@@ -43,7 +43,7 @@ export const createRewardPool = async ({
     return rewardPool;
 };
 
-export const isRewardPool = async (context: HandlerContext, chainId: ChainId, rewardPoolAddress: Hex) => {
+export const isRewardPool = async (context: EvmOnEventContext, chainId: EvmChainId, rewardPoolAddress: Hex) => {
     const id = rewardPoolId({ chainId, rewardPoolAddress });
     const rewardPool = await context.RewardPool.get(id);
     return rewardPool !== undefined;

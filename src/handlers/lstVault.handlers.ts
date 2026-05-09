@@ -1,18 +1,19 @@
+import type { EvmBlock, EvmChainId, EvmOnEventContext, LstVault } from 'envio';
+import { indexer } from 'envio';
 import type { Hex } from 'viem';
 import { getLstVaultTokens } from '../effects/lstVault.effects';
 import { createLstVault, getLstVault } from '../entities/lstVault.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
-import { type ChainId, toChainId } from '../lib/chain';
-import type { Block, HandlerContext, LstVault_t } from '../lib/schema';
-import { LstVault_h } from '../lib/schema';
+import { toChainId } from '../lib/chain';
+import { normalizeHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
-LstVault_h.Initialized.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'LstVault', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('LstVault.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const lstAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const lstAddress = normalizeHex(event.srcAddress);
     const initializedBlock = event.block;
 
     const lst = await initializeLstVault({ context, chainId, lstAddress, initializedBlock });
@@ -21,11 +22,11 @@ LstVault_h.Initialized.handler(async ({ event, context }) => {
     context.log.info('LstVault initialized successfully', { lstAddress });
 });
 
-LstVault_h.Transfer.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'LstVault', event: 'Transfer' }, async ({ event, context }) => {
     context.log.debug('LstVault.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
-    const lstAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const lstAddress = normalizeHex(event.srcAddress);
 
     // Ensure that the LST vault is initialized first
     const lst = await initializeLstVault({
@@ -42,14 +43,14 @@ LstVault_h.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         token: shareToken,
-        senderAddress: event.params.from.toString().toLowerCase() as Hex,
-        receiverAddress: event.params.to.toString().toLowerCase() as Hex,
+        senderAddress: normalizeHex(event.params.from),
+        receiverAddress: normalizeHex(event.params.to),
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+            trxHash: normalizeHex(event.transaction.hash),
         },
     });
 });
@@ -60,11 +61,11 @@ const initializeLstVault = async ({
     lstAddress,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     lstAddress: Hex;
-    initializedBlock: Block;
-}): Promise<LstVault_t | null> => {
+    initializedBlock: EvmBlock;
+}): Promise<LstVault | null> => {
     // Check if the LST vault already exists
     const existingLst = await getLstVault(context, chainId, lstAddress);
     if (existingLst) {

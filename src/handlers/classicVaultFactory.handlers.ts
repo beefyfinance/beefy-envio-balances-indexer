@@ -1,30 +1,33 @@
+import { indexer } from 'envio';
 import { detectClassicVaultOrStrategy } from '../effects/classicVaultFactory.effects';
 import { isVaultBlacklisted } from '../lib/blacklist';
-import { ClassicVaultFactory_h } from '../lib/schema';
 
-ClassicVaultFactory_h.VaultOrStrategyCreated.contractRegister(async ({ event, context }) => {
-    const proxyAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
-    if (isVaultBlacklisted(event.chainId, proxyAddress)) return;
+indexer.contractRegister(
+    { contract: 'ClassicVaultFactory', event: 'VaultOrStrategyCreated' },
+    async ({ event, context }) => {
+        const proxyAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
+        if (isVaultBlacklisted(event.chainId, proxyAddress)) return;
 
-    const transactionHash = event.transaction.hash as `0x${string}`;
-    const transactionInput = event.transaction.input as `0x${string}`;
+        const transactionHash = event.transaction.hash as `0x${string}`;
+        const transactionInput = event.transaction.input as `0x${string}`;
 
-    const { isVault, isStrategy, isBoost } = await detectClassicVaultOrStrategy({
-        log: context.log,
-        contractAddress: proxyAddress as `0x${string}`,
-        chainId: event.chainId,
-        blockNumber: event.block.number,
-        transactionHash,
-        transactionInput,
-    });
+        const { isVault, isStrategy, isBoost } = await detectClassicVaultOrStrategy({
+            log: context.log,
+            contractAddress: proxyAddress as `0x${string}`,
+            chainId: event.chainId,
+            blockNumber: event.block.number,
+            transactionHash,
+            transactionInput,
+        });
 
-    if (isVault) {
-        context.addClassicVault(proxyAddress);
-        context.log.info('Vault detected, adding to context', { proxyAddress });
-    } else if (isStrategy) {
-        context.log.info('Strategy detected, ignoring', { proxyAddress });
-    } else if (isBoost) {
-        context.addClassicBoost(proxyAddress);
-        context.log.info('Boost detected, adding to context', { proxyAddress });
+        if (isVault) {
+            context.chain.ClassicVault.add(proxyAddress);
+            context.log.info('Vault detected, adding to context', { proxyAddress });
+        } else if (isStrategy) {
+            context.log.info('Strategy detected, ignoring', { proxyAddress });
+        } else if (isBoost) {
+            context.chain.ClassicBoost.add(proxyAddress);
+            context.log.info('Boost detected, adding to context', { proxyAddress });
+        }
     }
-});
+);

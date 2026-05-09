@@ -1,68 +1,393 @@
-import { createTestIndexer } from 'generated';
+import { createTestIndexer } from 'envio';
+import { parseUnits } from 'viem';
 import { describe, expect, it } from 'vitest';
+import { ADDRESS_ZERO } from '../lib/decimal';
 
 describe('ClassicBoost Handlers', () => {
+    const boostAddr = '0x01e8881ed2fb41e0b3df29f382faf707a0b26969' as const;
+    const trxHash = '0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2';
+    const trxIndex = 7;
+    const blockNum = 2578061;
+    const timestampSec = Math.floor(Date.parse('2023-08-13T16:51:09.000Z') / 1000);
+    const transferWei = parseUnits('0.038501162192583033', 18);
+    const userAddr = '0xc29d2531651fcd304c60fbfb8073a518d8fe0a21';
+
     describe('Initialized event', () => {
         it('Should create ClassicBoost entity when Initialized event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 2578061, endBlock: 2578061 },
+                    8453: {
+                        simulate: [
+                            // Tx: https://basescan.org/tx/0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'Token',
+                                event: 'Transfer',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 5,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: {
+                                    from: ADDRESS_ZERO,
+                                    to: userAddr,
+                                    value: transferWei,
+                                },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
                 'Should create ClassicBoost entity with correct shareToken and underlyingToken'
-            ).toMatchInlineSnapshot();
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "Account": {
+                      "sets": [
+                        {
+                          "address": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                        },
+                      ],
+                    },
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 1,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "0.038501162192583033",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "TokenBalance": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "amount": "0.038501162192583033",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                        },
+                      ],
+                    },
+                    "TokenBalanceChange": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "balanceAfter": "0.038501162192583033",
+                          "balanceBefore": "0",
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-5",
+                          "logIndex": 5,
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 2,
+                  },
+                ],
+              }
+            `);
         });
 
         it('Should handle already initialized ClassicBoost gracefully', async () => {
             const indexer = createTestIndexer();
+            const dupBlock = 2855526;
+            const dupTs = Math.floor(Date.parse('2024-06-01T12:00:00.000Z') / 1000);
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 2855526, endBlock: 2855526 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: dupBlock, timestamp: dupTs },
+                                logIndex: 10,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: dupBlock, timestamp: dupTs },
+                                logIndex: 11,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
                 'Should return early without errors when ClassicBoost is already initialized'
-            ).toMatchInlineSnapshot();
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2855526n,
+                          "initializedTimestamp": "2024-06-01T12:00:00.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "block": 2855526,
+                    "chainId": 8453,
+                    "eventsProcessed": 2,
+                  },
+                ],
+              }
+            `);
         });
 
         it('Should skip blacklisted ClassicBoost during initialization', async () => {
             const indexer = createTestIndexer();
+            const badBoost = '0x0000000000000000000000000000000000000001';
+            const blk = 17539954;
+            const ts = Math.floor(Date.parse('2024-06-15T00:00:00.000Z') / 1000);
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539954, endBlock: 17539954 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blk, timestamp: ts },
+                                logIndex: 0,
+                                srcAddress: badBoost,
+                                params: { version: 1n },
+                            },
+                        ],
+                    },
                 },
             });
-            expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
                 'Should return null and log blacklist status for blacklisted ClassicBoost'
-            ).toMatchInlineSnapshot();
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "block": 17539954,
+                    "chainId": 8453,
+                    "eventsProcessed": 1,
+                  },
+                ],
+              }
+            `);
         });
     });
 
     describe('Staked event', () => {
+        const stakeAmount = parseUnits('1', 18);
+
         it('Should update balances when Staked event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539954, endBlock: 17539954 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Staked',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 20,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { user: userAddr, amount: stakeAmount },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
                 'Should update Account balances and create BalanceSnapshot when Staked event is emitted'
-            ).toMatchInlineSnapshot();
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "Account": {
+                      "sets": [
+                        {
+                          "address": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                        },
+                      ],
+                    },
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 1,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "1",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "TokenBalance": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "amount": "1",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                        },
+                      ],
+                    },
+                    "TokenBalanceChange": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "balanceAfter": "1",
+                          "balanceBefore": "0",
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-20",
+                          "logIndex": 20,
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 2,
+                  },
+                ],
+              }
+            `);
         });
 
         it('Should handle zero amount stakes correctly', async () => {
@@ -70,11 +395,81 @@ describe('ClassicBoost Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539963, endBlock: 17539963 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Staked',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 21,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { user: userAddr, amount: 0n },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should handle zero amount stakes without errors').toMatchInlineSnapshot();
+            expect(trace, 'Should handle zero amount stakes without errors').toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 2,
+                  },
+                ],
+              }
+            `);
         });
 
         it('Should handle multiple stakes in the same block correctly', async () => {
@@ -82,28 +477,290 @@ describe('ClassicBoost Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539954, endBlock: 17539954 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Staked',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 22,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { user: userAddr, amount: stakeAmount },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Staked',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 23,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { user: userAddr, amount: stakeAmount },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should process multiple Staked events in the same block correctly').toMatchInlineSnapshot();
+            expect(trace, 'Should process multiple Staked events in the same block correctly').toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "Account": {
+                      "sets": [
+                        {
+                          "address": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                        },
+                      ],
+                    },
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 1,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "2",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "TokenBalance": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "amount": "2",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                        },
+                      ],
+                    },
+                    "TokenBalanceChange": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "balanceAfter": "1",
+                          "balanceBefore": "0",
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-22",
+                          "logIndex": 22,
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "balanceAfter": "2",
+                          "balanceBefore": "1",
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-23",
+                          "logIndex": 23,
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 3,
+                  },
+                ],
+              }
+            `);
         });
     });
 
     describe('Withdrawn event', () => {
+        const withdrawAmt = parseUnits('1', 18);
+
         it('Should update balances when Withdrawn event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539954, endBlock: 17539954 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Staked',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 30,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { user: userAddr, amount: withdrawAmt },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Withdrawn',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 31,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { user: userAddr, amount: withdrawAmt },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
                 'Should update Account balances and create BalanceSnapshot when Withdrawn event is emitted'
-            ).toMatchInlineSnapshot();
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "Account": {
+                      "sets": [
+                        {
+                          "address": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                        },
+                      ],
+                    },
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "TokenBalance": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "amount": "0",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                        },
+                      ],
+                    },
+                    "TokenBalanceChange": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "balanceAfter": "1",
+                          "balanceBefore": "0",
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-30",
+                          "logIndex": 30,
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "balanceAfter": "0",
+                          "balanceBefore": "1",
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-31",
+                          "logIndex": 31,
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 3,
+                  },
+                ],
+              }
+            `);
         });
 
         it('Should handle zero amount withdrawals correctly', async () => {
@@ -111,28 +768,187 @@ describe('ClassicBoost Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539963, endBlock: 17539963 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Withdrawn',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 32,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { user: userAddr, amount: 0n },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should handle zero amount withdrawals without errors').toMatchInlineSnapshot();
+            expect(trace, 'Should handle zero amount withdrawals without errors').toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 2,
+                  },
+                ],
+              }
+            `);
         });
     });
 
     describe('RewardAdded event', () => {
+        const rewardAmt = parseUnits('0.5', 18);
+
         it('Should create PoolRewardedEvent when RewardAdded event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539954, endBlock: 17539954 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'RewardAdded',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 40,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { reward: rewardAmt },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
                 'Should create PoolRewardedEvent entity with correct reward token and amount'
-            ).toMatchInlineSnapshot();
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "PoolRewardedEvent": {
+                      "sets": [
+                        {
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2-7-40",
+                          "logIndex": 40,
+                          "poolShareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "rewardAmount": "0.5",
+                          "rewardToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "rewardVestingSeconds": 0n,
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 2,
+                  },
+                ],
+              }
+            `);
         });
 
         it('Should handle zero reward amounts correctly', async () => {
@@ -140,11 +956,98 @@ describe('ClassicBoost Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 17539963, endBlock: 17539963 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 4,
+                                srcAddress: boostAddr,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicBoost',
+                                event: 'RewardAdded',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 41,
+                                srcAddress: boostAddr,
+                                transaction: { hash: trxHash, transactionIndex: trxIndex },
+                                params: { reward: 0n },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should handle zero reward amounts without errors').toMatchInlineSnapshot();
+            expect(trace, 'Should handle zero reward amounts without errors').toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "ClassicBoost": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 2578061n,
+                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                        },
+                      ],
+                    },
+                    "PoolRewardedEvent": {
+                      "sets": [
+                        {
+                          "blockNumber": 2578061n,
+                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2-7-41",
+                          "logIndex": 41,
+                          "poolShareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "rewardAmount": "0",
+                          "rewardToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "rewardVestingSeconds": 0n,
+                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
+                          "trxIndex": 7,
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
+                          "isVirtual": true,
+                          "name": "Moo BaseSwap cbETH-WETH Boost",
+                          "symbol": "mooBaseSwapcbETH-WETH Boost",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
+                          "isVirtual": false,
+                          "name": "Moo BaseSwap cbETH-WETH",
+                          "symbol": "mooBaseSwapcbETH-WETH",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
+                    "block": 2578061,
+                    "chainId": 8453,
+                    "eventsProcessed": 2,
+                  },
+                ],
+              }
+            `);
         });
     });
 });

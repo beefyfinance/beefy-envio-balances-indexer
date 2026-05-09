@@ -1,6 +1,5 @@
-import { S } from 'envio';
+import { indexer, S } from 'envio';
 import * as R from 'remeda';
-import { allChainIds } from './chain';
 import { hexSchema } from './hex';
 
 const configSchema = S.schema({
@@ -9,7 +8,7 @@ const configSchema = S.schema({
     MINT_ADDRESS: hexSchema,
     RPC_URL: S.schema(
         R.pipe(
-            allChainIds,
+            indexer.chainIds,
             R.map((chainId) => [chainId, S.string] as const),
             R.fromEntries()
         )
@@ -22,7 +21,7 @@ export const config = S.parseOrThrow(
         BURN_ADDRESS: '0x000000000000000000000000000000000000dead',
         MINT_ADDRESS: '0x0000000000000000000000000000000000000000',
         RPC_URL: R.pipe(
-            allChainIds,
+            indexer.chainIds,
             R.map((chainId) => [chainId, process.env[`ENVIO_RPC_URL_${chainId}`] ?? null] as const),
             R.fromEntries()
         ),

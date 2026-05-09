@@ -1,12 +1,12 @@
+import type { Account, EvmBlock, EvmChainId, EvmOnEventContext, Token, TokenBalance } from 'envio';
 import type { Hex } from 'viem';
-import type { ChainId } from '../lib/chain';
 import { BigDecimal } from '../lib/decimal';
-import type { Account_t, Block, HandlerContext, Token_t, TokenBalance_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 import { accountId } from './account.entity';
 import { tokenId } from './token.entity';
 
-export const tokenBalanceId = ({ chainId, account, token }: { chainId: ChainId; account: Account_t; token: Token_t }) =>
-    `${chainId}-${account.address.toLowerCase()}-${token.address.toLowerCase()}`;
+export const tokenBalanceId = ({ chainId, account, token }: { chainId: EvmChainId; account: Account; token: Token }) =>
+    `${chainId}-${normalizeHex(account.address)}-${normalizeHex(token.address)}`;
 
 export const TokenBalanceChangeId = ({
     chainId,
@@ -16,14 +16,14 @@ export const TokenBalanceChangeId = ({
     trxIndex,
     logIndex,
 }: {
-    chainId: ChainId;
-    account: Account_t;
-    token: Token_t;
+    chainId: EvmChainId;
+    account: Account;
+    token: Token;
     blockNumber: number;
     trxIndex: number;
     logIndex: number;
 }) =>
-    `${chainId}-${account.address.toLowerCase()}-${token.address.toLowerCase()}-${blockNumber}-${trxIndex}-${logIndex}`;
+    `${chainId}-${normalizeHex(account.address)}-${normalizeHex(token.address)}-${blockNumber}-${trxIndex}-${logIndex}`;
 
 export const getOrCreateTokenBalanceEntity = async ({
     context,
@@ -31,11 +31,11 @@ export const getOrCreateTokenBalanceEntity = async ({
     account,
     chainId,
 }: {
-    context: HandlerContext;
-    account: Account_t;
-    token: Token_t;
-    chainId: ChainId;
-}): Promise<TokenBalance_t> => {
+    context: EvmOnEventContext;
+    account: Account;
+    token: Token;
+    chainId: EvmChainId;
+}): Promise<TokenBalance> => {
     return await context.TokenBalance.getOrCreate({
         id: tokenBalanceId({ chainId, account, token }),
 
@@ -57,12 +57,12 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
     chainId,
     event,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
-    token: Token_t;
-    account: Account_t;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
+    token: Token;
+    account: Account;
     event: {
-        block: Block;
+        block: EvmBlock;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;

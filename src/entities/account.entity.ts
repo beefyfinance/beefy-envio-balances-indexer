@@ -1,19 +1,19 @@
+import type { Account, EvmChainId, EvmOnEventContext } from 'envio';
 import type { Hex } from 'viem';
 import { isAccountBlacklisted } from '../lib/blacklist';
-import type { ChainId } from '../lib/chain';
-import type { Account_t, HandlerContext } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-export const accountId = ({ accountAddress }: { accountAddress: Hex }) => `${accountAddress.toLowerCase()}`;
+export const accountId = ({ accountAddress }: { accountAddress: Hex }) => `${normalizeHex(accountAddress)}`;
 
 export const getOrCreateAccount = async ({
     context,
     chainId,
     accountAddress,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     accountAddress: Hex;
-}): Promise<Account_t | null> => {
+}): Promise<Account | null> => {
     const blacklisted = await isAccountBlacklisted(chainId, accountAddress);
     if (blacklisted) {
         context.log.debug('Account is blacklisted', { chainId, accountAddress });

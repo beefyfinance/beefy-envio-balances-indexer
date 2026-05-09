@@ -1,11 +1,11 @@
+import type { ClmManager, ClmStrategy, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
 import type { Hex } from 'viem';
-import type { ChainId } from '../lib/chain';
-import type { Block, ClmManager_t, ClmStrategy_t, HandlerContext, Token_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-export const clmManagerId = ({ chainId, managerAddress }: { chainId: ChainId; managerAddress: Hex }) =>
-    `${chainId}-${managerAddress.toLowerCase()}`;
+export const clmManagerId = ({ chainId, managerAddress }: { chainId: EvmChainId; managerAddress: Hex }) =>
+    `${chainId}-${normalizeHex(managerAddress)}`;
 
-export const getClmManager = async (context: HandlerContext, chainId: ChainId, managerAddress: Hex) => {
+export const getClmManager = async (context: EvmOnEventContext, chainId: EvmChainId, managerAddress: Hex) => {
     const id = clmManagerId({ chainId, managerAddress });
     const manager = await context.ClmManager.get(id);
     return manager;
@@ -20,17 +20,17 @@ export const createClmManager = async ({
     underlyingToken1,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     managerAddress: Hex;
-    shareToken: Token_t;
-    underlyingToken0: Token_t;
-    underlyingToken1: Token_t;
-    initializedBlock: Block;
-}): Promise<ClmManager_t> => {
+    shareToken: Token;
+    underlyingToken0: Token;
+    underlyingToken1: Token;
+    initializedBlock: EvmBlock;
+}): Promise<ClmManager> => {
     const id = clmManagerId({ chainId, managerAddress });
 
-    const manager: ClmManager_t = {
+    const manager: ClmManager = {
         id,
         chainId,
         address: managerAddress,
@@ -46,10 +46,10 @@ export const createClmManager = async ({
     return manager;
 };
 
-export const clmStrategyId = ({ chainId, strategyAddress }: { chainId: ChainId; strategyAddress: Hex }) =>
-    `${chainId}-${strategyAddress.toLowerCase()}`;
+export const clmStrategyId = ({ chainId, strategyAddress }: { chainId: EvmChainId; strategyAddress: Hex }) =>
+    `${chainId}-${normalizeHex(strategyAddress)}`;
 
-export const getClmStrategy = async (context: HandlerContext, chainId: ChainId, strategyAddress: Hex) => {
+export const getClmStrategy = async (context: EvmOnEventContext, chainId: EvmChainId, strategyAddress: Hex) => {
     const id = clmStrategyId({ chainId, strategyAddress });
     const strategy = await context.ClmStrategy.get(id);
     return strategy;
@@ -62,15 +62,15 @@ export const createClmStrategy = async ({
     clmManager,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     strategyAddress: Hex;
-    clmManager: ClmManager_t;
-    initializedBlock: Block;
-}): Promise<ClmStrategy_t> => {
+    clmManager: ClmManager;
+    initializedBlock: EvmBlock;
+}): Promise<ClmStrategy> => {
     const id = clmStrategyId({ chainId, strategyAddress });
 
-    const strategy: ClmStrategy_t = {
+    const strategy: ClmStrategy = {
         id,
         chainId,
         address: strategyAddress,

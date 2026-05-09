@@ -1,18 +1,19 @@
+import type { ClassicVault, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
+import { indexer } from 'envio';
 import type { Hex } from 'viem';
 import { getClassicVaultTokens } from '../effects/classicVault.effects';
 import { createClassicVault, getClassicVault } from '../entities/classicVault.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
-import { type ChainId, toChainId } from '../lib/chain';
-import type { Block, ClassicVault_t, HandlerContext } from '../lib/schema';
-import { ClassicVault_h } from '../lib/schema';
+import { toChainId } from '../lib/chain';
+import { normalizeHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
-ClassicVault_h.Initialized.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'ClassicVault', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClassicVault.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const vaultAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const vaultAddress = normalizeHex(event.srcAddress);
     const initializedBlock = event.block;
 
     const vault = await initializeClassicVault({ context, chainId, vaultAddress, initializedBlock });
@@ -21,11 +22,11 @@ ClassicVault_h.Initialized.handler(async ({ event, context }) => {
     context.log.info('ClassicVault initialized successfully', { vaultAddress });
 });
 
-ClassicVault_h.Transfer.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'ClassicVault', event: 'Transfer' }, async ({ event, context }) => {
     context.log.debug('ClassicVault.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
-    const vaultAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const vaultAddress = normalizeHex(event.srcAddress);
 
     // Ensure that the vault is initialized first
     const vault = await initializeClassicVault({
@@ -42,14 +43,14 @@ ClassicVault_h.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         token: shareToken,
-        senderAddress: event.params.from.toString().toLowerCase() as Hex,
-        receiverAddress: event.params.to.toString().toLowerCase() as Hex,
+        senderAddress: normalizeHex(event.params.from),
+        receiverAddress: normalizeHex(event.params.to),
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+            trxHash: normalizeHex(event.transaction.hash),
         },
     });
 });
@@ -60,11 +61,11 @@ const initializeClassicVault = async ({
     vaultAddress,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     vaultAddress: Hex;
-    initializedBlock: Block;
-}): Promise<ClassicVault_t | null> => {
+    initializedBlock: EvmBlock;
+}): Promise<ClassicVault | null> => {
     // Check if the vault already exists
     const existingVault = await getClassicVault(context, chainId, vaultAddress);
     if (existingVault) {

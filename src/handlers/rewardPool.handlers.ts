@@ -1,19 +1,20 @@
+import type { EvmBlock, EvmChainId, EvmOnEventContext, RewardPool } from 'envio';
+import { indexer } from 'envio';
 import type { Hex } from 'viem';
 import { getRewardPoolTokens } from '../effects/rewardPool.effects';
 import { createPoolRewardedEvent } from '../entities/poolRewarded.event';
 import { createRewardPool, getRewardPool } from '../entities/rewardPool.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
-import { type ChainId, toChainId } from '../lib/chain';
-import type { Block, HandlerContext, RewardPool_t } from '../lib/schema';
-import { RewardPool_h } from '../lib/schema';
+import { toChainId } from '../lib/chain';
+import { normalizeHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
-RewardPool_h.Initialized.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'RewardPool', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('RewardPool.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const rewardPoolAddress = normalizeHex(event.srcAddress);
     const initializedBlock = event.block;
 
     const rewardPool = await initializeRewardPool({ context, chainId, rewardPoolAddress, initializedBlock });
@@ -22,11 +23,11 @@ RewardPool_h.Initialized.handler(async ({ event, context }) => {
     context.log.info('ClassicRewardPool initialized successfully', { rewardPoolAddress });
 });
 
-RewardPool_h.Transfer.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'RewardPool', event: 'Transfer' }, async ({ event, context }) => {
     context.log.debug('RewardPool.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const rewardPoolAddress = normalizeHex(event.srcAddress);
 
     // Ensure that the reward pool is initialized first
     const rewardPool = await initializeRewardPool({
@@ -43,23 +44,23 @@ RewardPool_h.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         token: shareToken,
-        senderAddress: event.params.from.toString().toLowerCase() as Hex,
-        receiverAddress: event.params.to.toString().toLowerCase() as Hex,
+        senderAddress: normalizeHex(event.params.from),
+        receiverAddress: normalizeHex(event.params.to),
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+            trxHash: normalizeHex(event.transaction.hash),
         },
     });
 });
 
-RewardPool_h.NotifyReward.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'RewardPool', event: 'NotifyReward' }, async ({ event, context }) => {
     context.log.debug('RewardPool.NotifyReward', { event });
 
     const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const rewardPoolAddress = normalizeHex(event.srcAddress);
 
     const rewardPool = await initializeRewardPool({
         context,
@@ -85,7 +86,7 @@ RewardPool_h.NotifyReward.handler(async ({ event, context }) => {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+            trxHash: normalizeHex(event.transaction.hash),
         },
     });
 });
@@ -96,11 +97,11 @@ const initializeRewardPool = async ({
     rewardPoolAddress,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     rewardPoolAddress: Hex;
-    initializedBlock: Block;
-}): Promise<RewardPool_t | null> => {
+    initializedBlock: EvmBlock;
+}): Promise<RewardPool | null> => {
     // Check if the reward pool already exists
     const existingRewardPool = await getRewardPool(context, chainId, rewardPoolAddress);
     if (existingRewardPool) {

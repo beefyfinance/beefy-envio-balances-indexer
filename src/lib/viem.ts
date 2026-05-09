@@ -1,4 +1,4 @@
-import type { Logger } from 'envio';
+import type { EvmChainId, Logger } from 'envio';
 import { createPublicClient, defineChain, http, type PublicClient, type Chain as ViemChain } from 'viem';
 import {
     arbitrum,
@@ -30,7 +30,6 @@ import {
     sonic,
     zksync,
 } from 'viem/chains';
-import type { ChainId } from './chain';
 import { config } from './config';
 
 const _emerald = defineChain({
@@ -101,7 +100,7 @@ const hyperevm = defineChain({
     },
 });
 
-const chainMap: Record<ChainId, ViemChain> = {
+const chainMap: Record<EvmChainId, ViemChain> = {
     // 1313161554: aurora,
     42161: arbitrum,
     43114: avalanche,
@@ -144,9 +143,9 @@ const chainMap: Record<ChainId, ViemChain> = {
     324: zksync,
 };
 
-const clients = new Map<ChainId, PublicClient>();
+const clients = new Map<EvmChainId, PublicClient>();
 
-export const getViemClient = (chainId: ChainId, logger: Logger) => {
+export const getViemClient = (chainId: EvmChainId, logger: Logger) => {
     const rpcUrl = config.RPC_URL[chainId];
 
     if (clients.has(chainId)) {

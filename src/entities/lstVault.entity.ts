@@ -1,11 +1,11 @@
+import type { EvmBlock, EvmChainId, EvmOnEventContext, LstVault, Token } from 'envio';
 import type { Hex } from 'viem';
-import type { ChainId } from '../lib/chain';
-import type { Block, HandlerContext, LstVault_t, Token_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-export const LstVaultId = ({ chainId, lstAddress }: { chainId: ChainId; lstAddress: Hex }) =>
-    `${chainId}-${lstAddress.toLowerCase()}`;
+export const LstVaultId = ({ chainId, lstAddress }: { chainId: EvmChainId; lstAddress: Hex }) =>
+    `${chainId}-${normalizeHex(lstAddress)}`;
 
-export const getLstVault = async (context: HandlerContext, chainId: ChainId, lstAddress: Hex) => {
+export const getLstVault = async (context: EvmOnEventContext, chainId: EvmChainId, lstAddress: Hex) => {
     const id = LstVaultId({ chainId, lstAddress });
     const lst = await context.LstVault.get(id);
     return lst;
@@ -19,16 +19,16 @@ export const createLstVault = async ({
     underlyingToken,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     lstAddress: Hex;
-    shareToken: Token_t;
-    underlyingToken: Token_t;
-    initializedBlock: Block;
-}): Promise<LstVault_t> => {
+    shareToken: Token;
+    underlyingToken: Token;
+    initializedBlock: EvmBlock;
+}): Promise<LstVault> => {
     const id = LstVaultId({ chainId, lstAddress });
 
-    const lst: LstVault_t = {
+    const lst: LstVault = {
         id,
         chainId,
         address: lstAddress,

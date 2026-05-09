@@ -1,18 +1,19 @@
+import type { ClmManager, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
+import { indexer } from 'envio';
 import type { Hex } from 'viem';
 import { getClmManagerTokens } from '../effects/clmManager.effects';
 import { createClmManager, getClmManager } from '../entities/clmManager.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
-import { type ChainId, toChainId } from '../lib/chain';
-import type { Block, ClmManager_t, HandlerContext } from '../lib/schema';
-import { ClmManager_h } from '../lib/schema';
+import { toChainId } from '../lib/chain';
+import { normalizeHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
-ClmManager_h.Initialized.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'ClmManager', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClmManager.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const managerAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const managerAddress = normalizeHex(event.srcAddress);
     const initializedBlock = event.block;
 
     const manager = await initializeClmManager({ context, chainId, managerAddress, initializedBlock });
@@ -21,11 +22,11 @@ ClmManager_h.Initialized.handler(async ({ event, context }) => {
     context.log.info('ClmManager initialized successfully', { managerAddress });
 });
 
-ClmManager_h.Transfer.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'ClmManager', event: 'Transfer' }, async ({ event, context }) => {
     context.log.debug('ClmManager.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
-    const managerAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const managerAddress = normalizeHex(event.srcAddress);
 
     // Ensure that the manager is initialized first
     const manager = await initializeClmManager({
@@ -42,14 +43,14 @@ ClmManager_h.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         token: shareToken,
-        senderAddress: event.params.from.toString().toLowerCase() as Hex,
-        receiverAddress: event.params.to.toString().toLowerCase() as Hex,
+        senderAddress: normalizeHex(event.params.from),
+        receiverAddress: normalizeHex(event.params.to),
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+            trxHash: normalizeHex(event.transaction.hash),
         },
     });
 });
@@ -60,11 +61,11 @@ const initializeClmManager = async ({
     managerAddress,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     managerAddress: Hex;
-    initializedBlock: Block;
-}): Promise<ClmManager_t | null> => {
+    initializedBlock: EvmBlock;
+}): Promise<ClmManager | null> => {
     // Check if the manager already exists
     const existingManager = await getClmManager(context, chainId, managerAddress);
     if (existingManager) {

@@ -1,8 +1,9 @@
+import { indexer } from 'envio';
 import { isVaultBlacklisted } from '../lib/blacklist';
-import { ContractFactory_h } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-ContractFactory_h.ContractDeployed.contractRegister(async ({ event, context }) => {
-    const contractAddress = event.params.proxy.toString().toLowerCase();
+indexer.contractRegister({ contract: 'ContractFactory', event: 'ContractDeployed' }, async ({ event, context }) => {
+    const contractAddress = normalizeHex(event.params.proxy);
     if (isVaultBlacklisted(event.chainId, contractAddress)) return;
 
     // const rewardPoolName = event.params.rewardPoolName; // Property doesn't exist

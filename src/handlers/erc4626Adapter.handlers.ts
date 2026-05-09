@@ -1,18 +1,19 @@
+import type { Erc4626Adapter, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
+import { indexer } from 'envio';
 import type { Hex } from 'viem';
 import { getErc4626AdapterTokens } from '../effects/erc4626Adapter.effects';
 import { createErc4626Adapter, getErc4626Adapter } from '../entities/classicErc4626Adapter.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
-import { type ChainId, toChainId } from '../lib/chain';
-import type { Block, Erc4626Adapter_t, HandlerContext } from '../lib/schema';
-import { Erc4626Adapter_h } from '../lib/schema';
+import { toChainId } from '../lib/chain';
+import { normalizeHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
-Erc4626Adapter_h.Initialized.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('Erc4626Adapter.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const adapterAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const adapterAddress = normalizeHex(event.srcAddress);
     const initializedBlock = event.block;
 
     const adapter = await initializeErc4626Adapter({ context, chainId, adapterAddress, initializedBlock });
@@ -21,11 +22,11 @@ Erc4626Adapter_h.Initialized.handler(async ({ event, context }) => {
     context.log.info('Erc4626Adapter initialized successfully', { adapterAddress });
 });
 
-Erc4626Adapter_h.Transfer.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Transfer' }, async ({ event, context }) => {
     context.log.debug('Erc4626Adapter.Transfer', { event });
 
     const chainId = toChainId(context.chain.id);
-    const adapterAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const adapterAddress = normalizeHex(event.srcAddress);
 
     // Ensure that the adapter is initialized first
     const adapter = await initializeErc4626Adapter({
@@ -42,14 +43,14 @@ Erc4626Adapter_h.Transfer.handler(async ({ event, context }) => {
         context,
         chainId,
         token: shareToken,
-        senderAddress: event.params.from.toString().toLowerCase() as Hex,
-        receiverAddress: event.params.to.toString().toLowerCase() as Hex,
+        senderAddress: normalizeHex(event.params.from),
+        receiverAddress: normalizeHex(event.params.to),
         rawTransferAmount: event.params.value,
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: event.transaction.hash.toString().toLowerCase() as Hex,
+            trxHash: normalizeHex(event.transaction.hash),
         },
     });
 });
@@ -60,11 +61,11 @@ const initializeErc4626Adapter = async ({
     adapterAddress,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     adapterAddress: Hex;
-    initializedBlock: Block;
-}): Promise<Erc4626Adapter_t | null> => {
+    initializedBlock: EvmBlock;
+}): Promise<Erc4626Adapter | null> => {
     // Check if the adapter already exists
     const existingAdapter = await getErc4626Adapter(context, chainId, adapterAddress);
     if (existingAdapter) {

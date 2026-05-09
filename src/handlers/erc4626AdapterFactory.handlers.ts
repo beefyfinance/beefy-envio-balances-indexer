@@ -1,9 +1,12 @@
-import { Erc4626AdapterFactory_h } from '../lib/schema';
+import { indexer } from 'envio';
 
-Erc4626AdapterFactory_h.Erc4626AdapterCreated.contractRegister(async ({ event, context }) => {
-    const adapterAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
+indexer.contractRegister(
+    { contract: 'Erc4626AdapterFactory', event: 'Erc4626AdapterCreated' },
+    async ({ event, context }) => {
+        const adapterAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
 
-    context.addErc4626Adapter(adapterAddress);
+        context.chain.Erc4626Adapter.add(adapterAddress);
 
-    context.log.info('Erc4626AdapterCreated', { adapterAddress });
-});
+        context.log.info('Erc4626AdapterCreated', { adapterAddress });
+    }
+);

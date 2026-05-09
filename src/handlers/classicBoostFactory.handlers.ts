@@ -1,17 +1,17 @@
-import { ClassicBoostFactory_h } from '../lib/schema';
+import { indexer } from 'envio';
 
-ClassicBoostFactory_h.BoostCreated.contractRegister(async ({ event, context }) => {
+indexer.contractRegister({ contract: 'ClassicBoostFactory', event: 'BoostCreated' }, async ({ event, context }) => {
     const boostAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
 
-    context.addClassicBoost(boostAddress);
+    context.chain.ClassicBoost.add(boostAddress);
 
     context.log.info('BoostDeployed', { boostAddress });
 });
 
-ClassicBoostFactory_h.BoostDeployed.contractRegister(async ({ event, context }) => {
+indexer.contractRegister({ contract: 'ClassicBoostFactory', event: 'BoostDeployed' }, async ({ event, context }) => {
     const boostAddress = event.params.boost; // already lowercase by `address_format: lowercase`
 
-    context.addClassicBoost(boostAddress);
+    context.chain.ClassicBoost.add(boostAddress);
 
     context.log.info('BoostDeployed', { boostAddress });
 });

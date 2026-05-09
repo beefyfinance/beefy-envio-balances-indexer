@@ -1,6 +1,5 @@
 packages:
   - "."
-  - "generated"
 
 # TODO: enable this when we are out of alpha
 # scan: pnpx snyk test envio@3.0.0-alpha.11

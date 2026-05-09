@@ -64,7 +64,7 @@ pnpm codegen
 pnpm tsc --noEmit
 
 # Run indexer (requires Docker)
-TUI_OFF=true pnpm dev
+ENVIO_TUI=false pnpm dev
 
 # Run tests
 pnpm test

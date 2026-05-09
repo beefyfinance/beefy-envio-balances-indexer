@@ -1,11 +1,14 @@
+import { indexer } from 'envio';
 import { isVaultBlacklisted } from '../lib/blacklist';
-import { ClmStrategyFactory_h } from '../lib/schema';
 
-ClmStrategyFactory_h.ClmStrategyCreated.contractRegister(async ({ event, context }) => {
-    const contractAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
-    if (isVaultBlacklisted(event.chainId, contractAddress)) return;
+indexer.contractRegister(
+    { contract: 'ClmStrategyFactory', event: 'ClmStrategyCreated' },
+    async ({ event, context }) => {
+        const contractAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
+        if (isVaultBlacklisted(event.chainId, contractAddress)) return;
 
-    context.addClmStrategy(contractAddress);
+        context.chain.ClmStrategy.add(contractAddress);
 
-    context.log.info('ClmStrategyCreated', { contractAddress });
-});
+        context.log.info('ClmStrategyCreated', { contractAddress });
+    }
+);

@@ -1,6 +1,5 @@
+import type { EvmChainId, EvmOnEventContext } from 'envio';
 import { decodeFunctionData } from 'viem';
-import type { ChainId } from '../lib/chain';
-import type { HandlerContext } from '../lib/schema';
 import { getViemClient } from '../lib/viem';
 
 const detectClassicVaultOrStrategyWithEthCall = async ({
@@ -11,10 +10,10 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     log,
 }: {
     contractAddress: `0x${string}`;
-    chainId: ChainId;
+    chainId: EvmChainId;
     blockNumber?: number;
     transactionHash: `0x${string}`;
-    log: HandlerContext['log'];
+    log: EvmOnEventContext['log'];
 }): Promise<{
     isVault: boolean;
     isStrategy: boolean;
@@ -117,7 +116,8 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     };
 };
 
-const vaultOrStrategyFactoryAbi = [
+/** Minimal ABI for parsing factory tx input (`cloneVault` / `cloneContract` / `booooost`). */
+export const vaultOrStrategyFactoryAbi = [
     {
         inputs: [{ internalType: 'address', name: 'implementation', type: 'address' }],
         name: 'cloneContract',
@@ -195,11 +195,11 @@ export async function detectClassicVaultOrStrategy({
     log,
 }: {
     contractAddress: `0x${string}`;
-    chainId: ChainId;
+    chainId: EvmChainId;
     transactionInput: `0x${string}`;
     transactionHash: `0x${string}`;
     blockNumber?: number;
-    log: HandlerContext['log'];
+    log: EvmOnEventContext['log'];
 }): Promise<{
     isStrategy: boolean;
     isVault: boolean;

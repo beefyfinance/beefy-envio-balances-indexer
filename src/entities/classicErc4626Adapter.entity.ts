@@ -1,11 +1,11 @@
+import type { Erc4626Adapter, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
 import type { Hex } from 'viem';
-import type { ChainId } from '../lib/chain';
-import type { Block, Erc4626Adapter_t, HandlerContext, Token_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-export const erc4626AdapterId = ({ chainId, adapterAddress }: { chainId: ChainId; adapterAddress: Hex }) =>
-    `${chainId}-${adapterAddress.toLowerCase()}`;
+export const erc4626AdapterId = ({ chainId, adapterAddress }: { chainId: EvmChainId; adapterAddress: Hex }) =>
+    `${chainId}-${normalizeHex(adapterAddress)}`;
 
-export const getErc4626Adapter = async (context: HandlerContext, chainId: ChainId, adapterAddress: Hex) => {
+export const getErc4626Adapter = async (context: EvmOnEventContext, chainId: EvmChainId, adapterAddress: Hex) => {
     const id = erc4626AdapterId({ chainId, adapterAddress });
     const adapter = await context.Erc4626Adapter.get(id);
     return adapter;
@@ -19,16 +19,16 @@ export const createErc4626Adapter = async ({
     underlyingToken,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     adapterAddress: Hex;
-    shareToken: Token_t;
-    underlyingToken: Token_t;
-    initializedBlock: Block;
-}): Promise<Erc4626Adapter_t> => {
+    shareToken: Token;
+    underlyingToken: Token;
+    initializedBlock: EvmBlock;
+}): Promise<Erc4626Adapter> => {
     const id = erc4626AdapterId({ chainId, adapterAddress });
 
-    const adapter: Erc4626Adapter_t = {
+    const adapter: Erc4626Adapter = {
         id,
         chainId,
         address: adapterAddress,
@@ -43,7 +43,7 @@ export const createErc4626Adapter = async ({
     return adapter;
 };
 
-export const isErc4626Adapter = async (context: HandlerContext, chainId: ChainId, adapterAddress: Hex) => {
+export const isErc4626Adapter = async (context: EvmOnEventContext, chainId: EvmChainId, adapterAddress: Hex) => {
     const id = erc4626AdapterId({ chainId, adapterAddress });
     const adapter = await context.Erc4626Adapter.get(id);
     return adapter !== undefined;

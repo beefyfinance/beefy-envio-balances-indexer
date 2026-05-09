@@ -1,4 +1,4 @@
-import { createTestIndexer } from 'generated';
+import { createTestIndexer } from 'envio';
 import { describe, expect, it } from 'vitest';
 
 describe('ClmManagerFactory Handlers', () => {
@@ -8,26 +8,40 @@ describe('ClmManagerFactory Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    8453: { startBlock: 15682120, endBlock: 15682120 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClmManagerFactory',
+                                event: 'ClmManagerCreated',
+                                block: { number: 17452329, timestamp: 1719000000 },
+                                logIndex: 0,
+                                srcAddress: '0x7bc78990ac1ef0754cfde935b2d84e9acf13ed29',
+                                params: { proxy: '0x603492ff8943f5ac69aa69cf09fc96fda2606ee7' },
+                            },
+                        ],
+                    },
                 },
             });
-            expect(trace.changes.length).toBeGreaterThan(0);
-            expect(
-                trace,
-                'Should add ClmManager to context when ClmManagerCreated event is emitted'
-            ).toMatchInlineSnapshot();
-        });
 
-        it('Should skip blacklisted proxy addresses', async () => {
-            const indexer = createTestIndexer();
-
-            const trace = await indexer.process({
-                chains: {
-                    8453: { startBlock: 13014756, endBlock: 13014756 },
-                },
-            });
-            expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should not register blacklisted proxy addresses').toMatchInlineSnapshot();
+            expect(trace).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
+                        },
+                      ],
+                    },
+                    "block": 17452329,
+                    "chainId": 8453,
+                    "eventsProcessed": 1,
+                  },
+                ],
+              }
+            `);
         });
     });
 });

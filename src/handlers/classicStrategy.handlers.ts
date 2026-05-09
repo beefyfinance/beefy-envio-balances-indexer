@@ -1,16 +1,17 @@
+import type { ClassicVaultStrategy, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
+import { indexer } from 'envio';
 import type { Hex } from 'viem';
 import { getClassicStrategyVault } from '../effects/classicStrategy.effects';
 import { createClassicVaultStrategy, getClassicVault, getClassicVaultStrategy } from '../entities/classicVault.entity';
-import { type ChainId, toChainId } from '../lib/chain';
+import { toChainId } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
-import type { Block, ClassicVaultStrategy_t, HandlerContext } from '../lib/schema';
-import { ClassicStrategy_h } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-ClassicStrategy_h.Initialized.handler(async ({ event, context }) => {
+indexer.onEvent({ contract: 'ClassicStrategy', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClassicStrategy.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const strategyAddress = event.srcAddress.toString().toLowerCase() as Hex;
+    const strategyAddress = normalizeHex(event.srcAddress);
     const initializedBlock = event.block;
 
     const strategy = await initializeClassicStrategy({ context, chainId, strategyAddress, initializedBlock });
@@ -25,11 +26,11 @@ const initializeClassicStrategy = async ({
     strategyAddress,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     strategyAddress: Hex;
-    initializedBlock: Block;
-}): Promise<ClassicVaultStrategy_t | null> => {
+    initializedBlock: EvmBlock;
+}): Promise<ClassicVaultStrategy | null> => {
     // Check if the strategy already exists
     const existingStrategy = await getClassicVaultStrategy(context, chainId, strategyAddress);
     if (existingStrategy) {

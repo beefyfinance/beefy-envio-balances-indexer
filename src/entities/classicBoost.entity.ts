@@ -1,11 +1,11 @@
+import type { ClassicBoost, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
 import type { Hex } from 'viem';
-import type { ChainId } from '../lib/chain';
-import type { Block, ClassicBoost_t, HandlerContext, Token_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
-export const classicBoostId = ({ chainId, boostAddress }: { chainId: ChainId; boostAddress: Hex }) =>
-    `${chainId}-${boostAddress.toLowerCase()}`;
+export const classicBoostId = ({ chainId, boostAddress }: { chainId: EvmChainId; boostAddress: Hex }) =>
+    `${chainId}-${normalizeHex(boostAddress)}`;
 
-export const getClassicBoost = async (context: HandlerContext, chainId: ChainId, boostAddress: Hex) => {
+export const getClassicBoost = async (context: EvmOnEventContext, chainId: EvmChainId, boostAddress: Hex) => {
     const id = classicBoostId({ chainId, boostAddress });
     const boost = await context.ClassicBoost.get(id);
     return boost;
@@ -19,16 +19,16 @@ export const createClassicBoost = async ({
     underlyingToken,
     initializedBlock,
 }: {
-    context: HandlerContext;
-    chainId: ChainId;
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
     boostAddress: Hex;
-    shareToken: Token_t;
-    underlyingToken: Token_t;
-    initializedBlock: Block;
-}): Promise<ClassicBoost_t> => {
+    shareToken: Token;
+    underlyingToken: Token;
+    initializedBlock: EvmBlock;
+}): Promise<ClassicBoost> => {
     const id = classicBoostId({ chainId, boostAddress });
 
-    const boost: ClassicBoost_t = {
+    const boost: ClassicBoost = {
         id,
         chainId,
         address: boostAddress,
@@ -43,7 +43,7 @@ export const createClassicBoost = async ({
     return boost;
 };
 
-export const isClassicBoost = async (context: HandlerContext, chainId: ChainId, boostAddress: Hex) => {
+export const isClassicBoost = async (context: EvmOnEventContext, chainId: EvmChainId, boostAddress: Hex) => {
     const id = classicBoostId({ chainId, boostAddress });
     const boost = await context.ClassicBoost.get(id);
     return boost !== undefined;

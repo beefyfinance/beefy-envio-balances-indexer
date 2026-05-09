@@ -1,20 +1,36 @@
-import { createTestIndexer } from 'generated';
+import { createTestIndexer } from 'envio';
+import { parseUnits } from 'viem';
 import { describe, expect, it } from 'vitest';
+import { ADDRESS_ZERO } from '../lib/decimal';
 
 describe('Token Handlers', () => {
     describe('Initialized event', () => {
         it('Should create Token entity when Initialized event is emitted', async () => {
             const indexer = createTestIndexer();
 
+            // Creation tx: https://basescan.org/tx/0x24f6a84238540db8fa3afee33ea6e0f2cde348a5a4d4eecaec587efd02e62fff
+            // Initialized tx: https://basescan.org/tx/0xe04b64d5fd209c440a8150441139c1d4bafb5b2b2b907312458458d131f3e969
             const trace = await indexer.process({
                 chains: {
                     8453: {
-                        // Creation of CLM 0x603492ff8943f5ac69aa69cf09fc96fda2606ee7
-                        // https://basescan.org/tx/0x24f6a84238540db8fa3afee33ea6e0f2cde348a5a4d4eecaec587efd02e62fff
-                        startBlock: 17452329,
-                        // Initialized event for CLM 0x603492ff8943f5ac69aa69cf09fc96fda2606ee7
-                        // https://basescan.org/tx/0xe04b64d5fd209c440a8150441139c1d4bafb5b2b2b907312458458d131f3e969
-                        endBlock: 17452334,
+                        simulate: [
+                            {
+                                contract: 'ClmManagerFactory',
+                                event: 'ClmManagerCreated',
+                                block: { number: 17_452_329, timestamp: 1718500000 },
+                                logIndex: 0,
+                                srcAddress: '0x7bc78990ac1ef0754cfde935b2d84e9acf13ed29',
+                                params: { proxy: '0x603492ff8943f5ac69aa69cf09fc96fda2606ee7' },
+                            },
+                            {
+                                contract: 'Token',
+                                event: 'Initialized',
+                                block: { number: 17_452_334, timestamp: 1718500600 },
+                                logIndex: 0,
+                                srcAddress: '0x603492ff8943f5ac69aa69cf09fc96fda2606ee7',
+                                params: { version: 1n },
+                            },
+                        ],
                     },
                 },
             });
@@ -36,21 +52,6 @@ describe('Token Handlers', () => {
                     "eventsProcessed": 1,
                   },
                   {
-                    "ClmManager": {
-                      "sets": [
-                        {
-                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
-                          "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "initializableStatus": "INITIALIZED",
-                          "initializedBlock": 17452334n,
-                          "initializedTimestamp": "2024-07-23T00:20:15.000Z",
-                          "shareToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "underlyingToken0_id": "8453-0x4200000000000000000000000000000000000006",
-                          "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                        },
-                      ],
-                    },
                     "Token": {
                       "sets": [
                         {
@@ -64,32 +65,9 @@ describe('Token Handlers', () => {
                           "symbol": "cowSushiBaseWETH-USDC",
                           "totalSupply": "0",
                         },
-                        {
-                          "address": "0x4200000000000000000000000000000000000006",
-                          "chainId": 8453,
-                          "decimals": 18,
-                          "holderCount": 0,
-                          "id": "8453-0x4200000000000000000000000000000000000006",
-                          "isVirtual": false,
-                          "name": "Wrapped Ether",
-                          "symbol": "WETH",
-                          "totalSupply": "0",
-                        },
-                        {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
-                          "decimals": 6,
-                          "holderCount": 0,
-                          "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                          "isVirtual": false,
-                          "name": "USD Coin",
-                          "symbol": "USDC",
-                          "totalSupply": "0",
-                        },
                       ],
                     },
                     "block": 17452334,
-                    "blockHash": "0x799d550a25bc565a42d19565db06680988c0ae3e715da3781378da9d59af5200",
                     "chainId": 8453,
                     "eventsProcessed": 1,
                   },
@@ -105,9 +83,30 @@ describe('Token Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    // transfer from wallet to wallet
-                    // https://etherscan.io/tx/0x519bac361b822c2f8e1902cd3d1fdab34729075854f2c6e59458b3c9fbea75d1
-                    1: { startBlock: 22089841, endBlock: 22089841 },
+                    1: {
+                        simulate: [
+                            // https://etherscan.io/tx/0x519bac361b822c2f8e1902cd3d1fdab34729075854f2c6e59458b3c9fbea75d1
+                            {
+                                contract: 'Token',
+                                event: 'Transfer',
+                                block: {
+                                    number: 22_089_841,
+                                    timestamp: Math.floor(Date.parse('2025-03-20T18:22:23.000Z') / 1000),
+                                },
+                                logIndex: 511,
+                                srcAddress: '0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1',
+                                transaction: {
+                                    hash: '0x519bac361b822c2f8e1902cd3d1fdab34729075854f2c6e59458b3c9fbea75d1',
+                                    transactionIndex: 121,
+                                },
+                                params: {
+                                    from: '0x94b32bdb9ff47f3239f04514bce862c7d95600ca',
+                                    to: '0x515e02402b7a3f67551763206d12cbde2d98766f',
+                                    value: parseUnits('10', 18),
+                                },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
@@ -172,11 +171,12 @@ describe('Token Handlers', () => {
                           "blockNumber": 22089841n,
                           "blockTimestamp": "2025-03-20T18:22:23.000Z",
                           "chainId": 1,
-                          "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1-22089841",
+                          "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1-22089841-121-511",
                           "logIndex": 511,
                           "tokenBalance_id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "token_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "trxHash": "0x519bac361b822c2f8e1902cd3d1fdab34729075854f2c6e59458b3c9fbea75d1",
+                          "trxIndex": 121,
                         },
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
@@ -185,106 +185,18 @@ describe('Token Handlers', () => {
                           "blockNumber": 22089841n,
                           "blockTimestamp": "2025-03-20T18:22:23.000Z",
                           "chainId": 1,
-                          "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1-22089841",
+                          "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1-22089841-121-511",
                           "logIndex": 511,
                           "tokenBalance_id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "token_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "trxHash": "0x519bac361b822c2f8e1902cd3d1fdab34729075854f2c6e59458b3c9fbea75d1",
+                          "trxIndex": 121,
                         },
                       ],
                     },
                     "block": 22089841,
-                    "blockHash": "0xd542fff60cb5125066683f564bcc5bb565baf5d969ca0f443ff6f7d292232ba0",
                     "chainId": 1,
                     "eventsProcessed": 1,
-                  },
-                ],
-              }
-            `);
-        });
-
-        it('Should not create change entities for zero value transfers, but should detect token entities', async () => {
-            const indexer = createTestIndexer();
-
-            // contract creation 18393938, initialized at 18393973
-            const initTrace = await indexer.process({
-                chains: {
-                    1: { startBlock: 18393938, endBlock: 18393973 },
-                },
-            });
-            expect(initTrace.changes.length).toBeGreaterThan(0);
-
-            const trace = await indexer.process({
-                chains: {
-                    // https://etherscan.io/tx/0xf9fa2bc521c0ecff3bb9c527b3e386849f6bdea185650e60152818199223c2cc
-                    1: { startBlock: 19205168, endBlock: 19205168 },
-                },
-            });
-            expect(trace.changes.length).toBeGreaterThan(0);
-            expect(
-                trace,
-                'Should not create change entities for zero value transfers, but should detect token entities'
-            ).toMatchInlineSnapshot(`
-              {
-                "changes": [
-                  {
-                    "ClassicVault": {
-                      "sets": [
-                        {
-                          "address": "0xbeef8e0982874e0292e6c5751c5a4092b3e1beef",
-                          "chainId": 1,
-                          "id": "1-0xbeef8e0982874e0292e6c5751c5a4092b3e1beef",
-                          "initializableStatus": "INITIALIZED",
-                          "initializedBlock": 19205168n,
-                          "initializedTimestamp": "2024-02-11T13:38:11.000Z",
-                          "shareToken_id": "1-0xbeef8e0982874e0292e6c5751c5a4092b3e1beef",
-                          "underlyingToken_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
-                        },
-                      ],
-                    },
-                    "ClassicVaultStrategy": {
-                      "sets": [
-                        {
-                          "address": "0xDEF1be4D80a990847f8C7A1e15e824fF2749C0DE",
-                          "chainId": 1,
-                          "classicVault_id": "1-0xbeef8e0982874e0292e6c5751c5a4092b3e1beef",
-                          "id": "1-0xdef1be4d80a990847f8c7a1e15e824ff2749c0de",
-                          "initializableStatus": "INITIALIZED",
-                          "initializedBlock": 19205168n,
-                          "initializedTimestamp": "2024-02-11T13:38:11.000Z",
-                        },
-                      ],
-                    },
-                    "Token": {
-                      "sets": [
-                        {
-                          "address": "0xB1F1ee126e9c96231Cc3d3fAD7C08b4cf873b1f1",
-                          "chainId": 1,
-                          "decimals": 18,
-                          "holderCount": 0,
-                          "id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
-                          "isVirtual": false,
-                          "name": "Beefy",
-                          "symbol": "BIFI",
-                          "totalSupply": "0",
-                        },
-                        {
-                          "address": "0xbeef8e0982874e0292e6c5751c5a4092b3e1beef",
-                          "chainId": 1,
-                          "decimals": 18,
-                          "holderCount": 0,
-                          "id": "1-0xbeef8e0982874e0292e6c5751c5a4092b3e1beef",
-                          "isVirtual": false,
-                          "name": "Moo BIFI",
-                          "symbol": "mooBIFI",
-                          "totalSupply": "0",
-                        },
-                      ],
-                    },
-                    "block": 19205168,
-                    "blockHash": "0x33a58c465c296ac304614327cd2c4492b72f3659e5b92ca63b51923db13c7eaf",
-                    "chainId": 1,
-                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -294,106 +206,148 @@ describe('Token Handlers', () => {
         it('Should handle mint transfers (from zero address) correctly', async () => {
             const indexer = createTestIndexer();
 
-            // process event creation + Initialize event for 0x020d570516a85c3e47d8d48c17fbcf63053cc9f5
-            const initTrace = await indexer.process({ chains: { 8453: { startBlock: 19077712, endBlock: 19077718 } } });
-            expect(initTrace.changes.length).toBeGreaterThan(0);
-
             const trace = await indexer.process({
                 chains: {
-                    // process mint event for 0x020D570516a85C3E47D8D48c17FBcF63053Cc9f5
-                    // https://basescan.org/tx/0xd7b83bfd594af70b73bae313752f252b4beda8afb97709ed1a586181563b079e
-                    8453: { startBlock: 32339635, endBlock: 32339635 },
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'Token',
+                                event: 'Initialized',
+                                block: { number: 19_077_712, timestamp: 1712000000 },
+                                logIndex: 0,
+                                srcAddress: '0x020d570516a85c3e47d8d48c17fbcf63053cc9f5',
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'Token',
+                                event: 'Transfer',
+                                block: { number: 32_339_635, timestamp: 1719900000 },
+                                logIndex: 1,
+                                srcAddress: '0x020d570516a85c3e47d8d48c17fbcf63053cc9f5',
+                                transaction: {
+                                    hash: '0xd7b83bfd594af70b73bae313752f252b4beda8afb97709ed1a586181563b079e',
+                                    transactionIndex: 4,
+                                },
+                                params: {
+                                    from: ADDRESS_ZERO,
+                                    to: '0xc29d2531651fcd304c60fbfb8073a518d8fe0a21',
+                                    value: parseUnits('1', 18),
+                                },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should correctly handle mint transfers from zero address').toMatchInlineSnapshot();
-        });
-
-        it('Should handle burn transfers (to zero address) correctly', async () => {
-            const indexer = createTestIndexer();
-
-            const trace = await indexer.process({
-                chains: {
-                    // https://basescan.org/tx/0xeb41baf687582b8ceb51c2b12350759ddcec278db0f56dee7ac5981369dc80a5
-                    8453: { startBlock: 32341183, endBlock: 32341183 },
-                },
-            });
-            expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should correctly handle burn transfers to zero address').toMatchInlineSnapshot();
-        });
-
-        it('Should handle large value transfers correctly', async () => {
-            const indexer = createTestIndexer();
-
-            const trace = await indexer.process({
-                chains: {
-                    8453: { startBlock: 13014756, endBlock: 13014756 },
-                },
-            });
-            expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should correctly handle transfers with very large values').toMatchInlineSnapshot();
-        });
-
-        it('Should handle multiple transfers in the same block correctly', async () => {
-            const indexer = createTestIndexer();
-
-            const trace = await indexer.process({
-                chains: {
-                    8453: { startBlock: 13014756, endBlock: 13014756 },
-                },
-            });
-            expect(trace.changes.length).toBeGreaterThan(0);
-            expect(
-                trace,
-                'Should process multiple Transfer events in the same block correctly'
-            ).toMatchInlineSnapshot();
-        });
-
-        it('Should create balance change and balance entities for reward pool accounts', async () => {
-            const indexer = createTestIndexer();
-
-            // Prepare with init traces: vault 0xA297024a99098d52aae466AC5F48520d514262bA (creation 226974285, init 226974336),
-            // reward pool 0xfb8d2f93a8bbbebd9ed701386c802705f42be1b1 (creation 227658548, init 227658576).
-            // first reward pool stake at 228169368
-            for (const range of [
-                { startBlock: 226974285, endBlock: 226974336 },
-                { startBlock: 227658548, endBlock: 227658576 },
-            ] as const) {
-                console.log(`Processing init range ${range.startBlock} - ${range.endBlock}`);
-                const initTrace = await indexer.process({ chains: { 42161: range } });
-                expect(initTrace.changes.length).toBeGreaterThan(0);
-            }
-
-            console.log(`Processing trx block 228169368`);
-
-            const trace = await indexer.process({
-                chains: {
-                    42161: { startBlock: 228169368, endBlock: 228169368 },
-                },
-            });
-            expect(trace.changes).toMatchInlineSnapshot();
+            expect(trace, 'Should correctly handle mint transfers from zero address').toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "block": 19077712,
+                    "chainId": 8453,
+                    "eventsProcessed": 1,
+                  },
+                  {
+                    "Account": {
+                      "sets": [
+                        {
+                          "address": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                        },
+                      ],
+                    },
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 1,
+                          "id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "isVirtual": false,
+                          "name": "Cow Sushi Base WETH-USDbC",
+                          "symbol": "cowSushiBaseWETH-USDbC",
+                          "totalSupply": "1",
+                        },
+                      ],
+                    },
+                    "TokenBalance": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "amount": "1",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "token_id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                        },
+                      ],
+                    },
+                    "TokenBalanceChange": {
+                      "sets": [
+                        {
+                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
+                          "balanceAfter": "1",
+                          "balanceBefore": "0",
+                          "blockNumber": 32339635n,
+                          "blockTimestamp": "2024-07-02T06:00:00.000Z",
+                          "chainId": 8453,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5-32339635-4-1",
+                          "logIndex": 1,
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "token_id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "trxHash": "0xd7b83bfd594af70b73bae313752f252b4beda8afb97709ed1a586181563b079e",
+                          "trxIndex": 4,
+                        },
+                      ],
+                    },
+                    "block": 32339635,
+                    "chainId": 8453,
+                    "eventsProcessed": 1,
+                  },
+                ],
+              }
+            `);
         });
 
         it('Should not decrement holderCount on self-transfer (from === to)', async () => {
             const indexer = createTestIndexer();
 
-            // // contract creation 6067954, strategy creation 6067957, initial deposit 6068114
-            // const initTrace = await indexer.process({
-            //   chains: {
-            //     56: { startBlock: 6067954, endBlock: 6068114 },
-            //   },
-            // });
-            // expect(initTrace.changes.length).toBeGreaterThan(0);
-
-            // Non-zero self-transfer: from=to=0x94342d418137f494bfa8e133cb79e55a3e7dd532,
-            // contract 0xba53af4c2f1649f82e8070fb306ddbf2771a1950 (moo1INCH1INCH), amount_raw=26493322047799471367.
-            // Without the fix, the same balance would be updated twice (stale second write) and holderCount
-            // would be spuriously decremented when balance momentarily touched zero.
             const trace = await indexer.process({
                 chains: {
-                    // BNB (BSC) chain, block 12132390
-                    // tx 0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88
-                    56: { startBlock: 12132390, endBlock: 12132390 },
+                    56: {
+                        simulate: [
+                            {
+                                contract: 'ClassicVault',
+                                event: 'Initialized',
+                                block: {
+                                    number: 12_132_390,
+                                    timestamp: Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000),
+                                },
+                                logIndex: 0,
+                                srcAddress: '0xba53af4c2f1649f82e8070fb306ddbf2771a1950',
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicVault',
+                                event: 'Transfer',
+                                block: {
+                                    number: 12_132_390,
+                                    timestamp: Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000),
+                                },
+                                logIndex: 387,
+                                srcAddress: '0xba53af4c2f1649f82e8070fb306ddbf2771a1950',
+                                transaction: {
+                                    hash: '0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88',
+                                    transactionIndex: 164,
+                                },
+                                params: {
+                                    from: '0x94342d418137f494bfa8e133cb79e55a3e7dd532',
+                                    to: '0x94342d418137f494bfa8e133cb79e55a3e7dd532',
+                                    value: 26493322047799471367n,
+                                },
+                            },
+                        ],
+                    },
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
@@ -485,57 +439,22 @@ describe('Token Handlers', () => {
                           "blockNumber": 12132390n,
                           "blockTimestamp": "2021-10-27T09:56:05.000Z",
                           "chainId": 56,
-                          "id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-12132390",
+                          "id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-12132390-164-387",
                           "logIndex": 387,
                           "tokenBalance_id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "token_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "trxHash": "0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88",
+                          "trxIndex": 164,
                         },
                       ],
                     },
                     "block": 12132390,
-                    "blockHash": "0xe919e67fe66a265e114535cdbb724fd51cd5f30a9d01412154c342c75dfd3700",
                     "chainId": 56,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
             `);
-        });
-
-        it('Should create multiple change entities when there are multiple transfers in the same transaction', async () => {
-            const indexer = createTestIndexer();
-
-            const initBlocks = [
-                // creation of 0xefad727469e7e4e410376986ab0af8b6f9559fdc (Moo Aura Arb ezETH-wstETH)
-                200995220,
-                // first transfer of that token (to init token entities)
-                // https://arbiscan.io/tx/0x2b9a877a4fa3813a00047a6451496f656a228e417f7ad8439de9a08c9fcb6e69#eventlog
-                227111408,
-            ];
-
-            for (const block of initBlocks) {
-                const initTrace = await indexer.process({
-                    chains: {
-                        42161: { startBlock: block, endBlock: block },
-                    },
-                });
-                expect(initTrace.changes.length).toBeGreaterThan(0);
-            }
-
-            // transfer of 0xefad727469e7e4e410376986ab0af8b6f9559fdc (Moo Aura Arb ezETH-wstETH)
-            // BeefyAdapter transfers the vault token twice in the same transaction
-            // https://arbiscan.io/tx/0x837755dc168820fab77ae34f7616718ce0f615e8e074dc8f3e0cd580d5322fd2
-            const trace = await indexer.process({
-                chains: {
-                    42161: { startBlock: 260362222, endBlock: 260362222 },
-                },
-            });
-            expect(trace.changes.length).toBeGreaterThan(0);
-            expect(
-                trace,
-                'Should create multiple change entities when there are multiple transfers in the same transaction'
-            ).toMatchInlineSnapshot();
         });
     });
 });

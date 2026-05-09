@@ -1,7 +1,8 @@
 import type { ChainId } from '@beefyfinance/blockchain-addressbook';
+import type { EvmBlock, EvmOnEventContext, PoolRewardedEvent, Token } from 'envio';
 import type { Hex } from 'viem';
 import { interpretAsDecimal } from '../lib/decimal';
-import type { Block, HandlerContext, PoolRewardedEvent_t, Token_t } from '../lib/schema';
+import { normalizeHex } from '../lib/hex';
 
 const poolRewardedEventId = ({
     chainId,
@@ -13,7 +14,7 @@ const poolRewardedEventId = ({
     trxHash: Hex;
     trxIndex: number;
     logIndex: number;
-}) => `${chainId}-${trxHash.toLowerCase()}-${trxIndex.toString()}-${logIndex.toString()}`;
+}) => `${chainId}-${normalizeHex(trxHash)}-${trxIndex.toString()}-${logIndex.toString()}`;
 
 export const createPoolRewardedEvent = async ({
     context,
@@ -24,14 +25,14 @@ export const createPoolRewardedEvent = async ({
     rawRewardAmount,
     event,
 }: {
-    context: HandlerContext;
+    context: EvmOnEventContext;
     chainId: ChainId;
-    poolShareToken: Token_t;
-    rewardToken: Token_t;
+    poolShareToken: Token;
+    rewardToken: Token;
     rewardVestingSeconds: bigint;
     rawRewardAmount: bigint;
     event: {
-        block: Block;
+        block: EvmBlock;
         trxIndex: number;
         logIndex: number;
         trxHash: Hex;
@@ -44,7 +45,7 @@ export const createPoolRewardedEvent = async ({
         logIndex: event.logIndex,
     });
 
-    const poolRewardedEvent: PoolRewardedEvent_t = {
+    const poolRewardedEvent: PoolRewardedEvent = {
         id,
         chainId,
         trxHash: event.trxHash,

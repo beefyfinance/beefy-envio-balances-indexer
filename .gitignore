@@ -32,8 +32,7 @@ artifacts
 cache
 *.res.js
 *.res.mjs
-generated
 .env
-
+.envio
 networks_config.yaml
 *.log
