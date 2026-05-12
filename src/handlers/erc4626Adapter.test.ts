@@ -210,6 +210,37 @@ describe('Erc4626Adapter Handlers', () => {
               }
             `);
         });
+
+        // TODO: find an on-chain Erc4626Adapter where `asset()` succeeds but the returned
+        // address is not a valid ERC20 (decimals/name/symbol revert), exercising the
+        // `getTokenMetadata -> status: 'invalid'` path in `getOrCreateToken`. Then drop the
+        // `.skip`, fill in srcAddress + chainId, and let the inline snapshot regenerate.
+        // biome-ignore lint/suspicious/noSkippedTests: intentional placeholder; see TODO above
+        it.skip('Should skip Erc4626Adapter when underlying token metadata is invalid', async () => {
+            const indexer = createTestIndexer();
+
+            const trace = await indexer.process({
+                chains: {
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'Erc4626Adapter',
+                                event: 'Initialized',
+                                block: { number: 17539954, timestamp: 1719900000 },
+                                logIndex: 0,
+                                srcAddress: '0x0000000000000000000000000000000000000000',
+                                params: { version: 1n },
+                            },
+                        ],
+                    },
+                },
+            });
+            expect(trace.changes.length).toBeGreaterThan(0);
+            expect(
+                trace,
+                'Should return null and log blacklist status when underlying token metadata is invalid'
+            ).toMatchInlineSnapshot();
+        });
     });
 
     describe('Transfer event', () => {

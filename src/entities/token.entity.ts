@@ -22,7 +22,7 @@ export const getOrCreateToken = async ({
               suffix: string;
               stakingToken: Hex;
           };
-}): Promise<Token> => {
+}): Promise<Token | null> => {
     context.log.debug('Getting or creating token', { chainId, tokenAddress, virtual });
     const id = tokenId({ chainId, tokenAddress });
     const maybeExistingToken = await context.Token.get(id);
@@ -34,10 +34,15 @@ export const getOrCreateToken = async ({
     let isVirtual = false;
 
     if (virtual === false) {
-        tokenMetadata = await context.effect(getTokenMetadata, {
+        const result = await context.effect(getTokenMetadata, {
             tokenAddress: tokenAddress,
             chainId: chainId,
         });
+        if (result.status === 'invalid') {
+            context.log.error('[INVALID_TOKEN] skipping token creation', { chainId, tokenAddress });
+            return null;
+        }
+        tokenMetadata = { name: result.name, symbol: result.symbol, decimals: result.decimals };
         isVirtual = false;
     } else {
         isVirtual = true;
@@ -45,6 +50,14 @@ export const getOrCreateToken = async ({
             tokenAddress: virtual.stakingToken,
             chainId: chainId,
         });
+        if (stakingTokenMetadata.status === 'invalid') {
+            context.log.error('[INVALID_TOKEN] skipping virtual token creation (staking token invalid)', {
+                chainId,
+                tokenAddress,
+                stakingToken: virtual.stakingToken,
+            });
+            return null;
+        }
         tokenMetadata = {
             name: `${stakingTokenMetadata.name} ${virtual.suffix}`,
             symbol: `${stakingTokenMetadata.symbol} ${virtual.suffix}`,

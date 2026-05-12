@@ -105,6 +105,16 @@ const initializeLstVault = async ({
         }),
     ]);
 
+    if (!shareToken || !underlyingToken) {
+        logBlacklistStatus(context.log, 'maybe_blacklisted', 'LstVault', {
+            contractAddress: lstAddress,
+            shareTokenAddress,
+            underlyingTokenAddress,
+            reason: 'invalid_token_metadata',
+        });
+        return null;
+    }
+
     // Create LST vault entity
     return await createLstVault({
         context,

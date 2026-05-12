@@ -10,13 +10,13 @@ indexer.onEvent({ contract: 'Token', event: 'Initialized' }, async ({ event, con
     const chainId = toChainId(context.chain.id);
     const tokenAddress = normalizeHex(event.srcAddress);
 
-    // Ensure the token exists in the database
-    await getOrCreateToken({
+    const token = await getOrCreateToken({
         context,
         chainId,
         tokenAddress,
         virtual: false,
     });
+    if (!token) return;
 
     context.log.info('Token initialized', { tokenAddress, chainId });
 });
@@ -27,13 +27,13 @@ indexer.onEvent({ contract: 'Token', event: 'Transfer' }, async ({ event, contex
     const chainId = toChainId(context.chain.id);
     const tokenAddress = normalizeHex(event.srcAddress);
 
-    // Ensure the token exists first
     const token = await getOrCreateToken({
         context,
         chainId,
         tokenAddress,
         virtual: false,
     });
+    if (!token) return;
 
     await handleTokenTransfer({
         context,

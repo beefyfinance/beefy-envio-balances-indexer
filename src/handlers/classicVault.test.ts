@@ -211,6 +211,47 @@ describe('ClassicVault Handlers', () => {
               }
             `);
         });
+
+        // Monad chain 143: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 is the Ethereum-mainnet
+        // USDC address mistakenly deployed/registered as a vault on monad. Its `want()` succeeds
+        // and returns an underlying address, but that returned address is not a valid ERC20 on
+        // monad (decimals/name/symbol revert), so it exercises the new `getTokenMetadata` ->
+        // `status: 'invalid'` path in `getOrCreateToken`.
+        it('Should skip ClassicVault when underlying token metadata is invalid', async () => {
+            const indexer = createTestIndexer();
+
+            const trace = await indexer.process({
+                chains: {
+                    143: {
+                        simulate: [
+                            {
+                                contract: 'ClassicVault',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 0,
+                                srcAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+                                params: { version: 1n },
+                            },
+                        ],
+                    },
+                },
+            });
+            expect(trace.changes.length).toBeGreaterThan(0);
+            expect(
+                trace,
+                'Should return null and log blacklist status when underlying token metadata is invalid'
+            ).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "block": 12132390,
+                    "chainId": 143,
+                    "eventsProcessed": 1,
+                  },
+                ],
+              }
+            `);
+        });
     });
 
     describe('Transfer event', () => {

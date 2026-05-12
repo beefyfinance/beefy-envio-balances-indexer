@@ -175,6 +175,16 @@ const initializeBoost = async ({
         }),
     ]);
 
+    if (!shareToken || !underlyingToken) {
+        logBlacklistStatus(context.log, 'maybe_blacklisted', 'ClassicBoost', {
+            contractAddress: boostAddress,
+            shareTokenAddress,
+            underlyingTokenAddress,
+            reason: 'invalid_token_metadata',
+        });
+        return null;
+    }
+
     // Create boost entity
     return await createClassicBoost({
         context,

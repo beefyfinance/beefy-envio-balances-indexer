@@ -141,6 +141,16 @@ const initializeRewardPool = async ({
         }),
     ]);
 
+    if (!shareToken || !underlyingToken) {
+        logBlacklistStatus(context.log, 'maybe_blacklisted', 'RewardPool', {
+            contractAddress: rewardPoolAddress,
+            shareTokenAddress,
+            underlyingTokenAddress,
+            reason: 'invalid_token_metadata',
+        });
+        return null;
+    }
+
     // Create reward pool entity
     return await createRewardPool({
         context,

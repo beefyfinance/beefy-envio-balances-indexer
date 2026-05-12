@@ -225,6 +225,38 @@ describe('ClmManager Handlers', () => {
               }
             `);
         });
+
+        // TODO: find an on-chain ClmManager where `wants()` succeeds but at least one of the
+        // returned token0/token1 addresses is not a valid ERC20 (decimals/name/symbol revert),
+        // so this exercises the `getTokenMetadata -> status: 'invalid'` path in
+        // `getOrCreateToken`. Then drop the `.skip`, fill in srcAddress + chainId, and let
+        // the inline snapshot regenerate.
+        // biome-ignore lint/suspicious/noSkippedTests: intentional placeholder; see TODO above
+        it.skip('Should skip ClmManager when underlying token metadata is invalid', async () => {
+            const indexer = createTestIndexer();
+
+            const trace = await indexer.process({
+                chains: {
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClmManager',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 0,
+                                srcAddress: '0x0000000000000000000000000000000000000000',
+                                params: { version: 1n },
+                            },
+                        ],
+                    },
+                },
+            });
+            expect(trace.changes.length).toBeGreaterThan(0);
+            expect(
+                trace,
+                'Should return null and log blacklist status when underlying token metadata is invalid'
+            ).toMatchInlineSnapshot();
+        });
     });
 
     describe('Transfer event', () => {

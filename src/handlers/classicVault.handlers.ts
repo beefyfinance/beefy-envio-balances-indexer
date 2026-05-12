@@ -108,6 +108,16 @@ const initializeClassicVault = async ({
         }),
     ]);
 
+    if (!shareToken || !underlyingToken) {
+        logBlacklistStatus(context.log, 'maybe_blacklisted', 'ClassicVault', {
+            contractAddress: vaultAddress,
+            shareTokenAddress,
+            underlyingTokenAddress,
+            reason: 'invalid_token_metadata',
+        });
+        return null;
+    }
+
     // Create vault entity
     return await createClassicVault({
         context,

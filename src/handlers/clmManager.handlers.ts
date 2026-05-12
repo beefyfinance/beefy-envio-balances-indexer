@@ -113,6 +113,17 @@ const initializeClmManager = async ({
         }),
     ]);
 
+    if (!shareToken || !underlyingToken0 || !underlyingToken1) {
+        logBlacklistStatus(context.log, 'maybe_blacklisted', 'ClmManager', {
+            contractAddress: managerAddress,
+            shareTokenAddress,
+            underlyingToken0Address,
+            underlyingToken1Address,
+            reason: 'invalid_token_metadata',
+        });
+        return null;
+    }
+
     // Create CLM manager entity
     return await createClmManager({
         context,

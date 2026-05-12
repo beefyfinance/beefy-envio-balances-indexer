@@ -108,6 +108,16 @@ const initializeErc4626Adapter = async ({
         }),
     ]);
 
+    if (!shareToken || !underlyingToken) {
+        logBlacklistStatus(context.log, 'maybe_blacklisted', 'Erc4626Adapter', {
+            contractAddress: adapterAddress,
+            shareTokenAddress,
+            underlyingTokenAddress,
+            reason: 'invalid_token_metadata',
+        });
+        return null;
+    }
+
     // Create ERC4626 adapter entity
     return await createErc4626Adapter({
         context,
