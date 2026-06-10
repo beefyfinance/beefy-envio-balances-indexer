@@ -1,11 +1,19 @@
 packages:
   - "."
 
-# TODO: enable this when we are out of alpha
-# scan: pnpx snyk test envio@3.0.0-alpha.11
-#minimumReleaseAge: 10080 # 1 week
-#minimumReleaseAge: 1440 # 1 day
-minimumReleaseAge: 180 # 3 hours
-onlyBuiltDependencies:
-  - "@biomejs/biome"
-  - lefthook
+minimumReleaseAge: 10080 # 1 week
+minimumReleaseAgeExclude:
+  - envio-darwin-arm64@3.1.2
+  - envio-darwin-x64@3.1.2
+  - envio-linux-arm64@3.1.2
+  - envio-linux-x64-musl@3.1.2
+  - envio-linux-x64@3.1.2
+  - envio@3.1.2
+
+allowBuilds:
+  "@biomejs/biome": true
+  lefthook: true
+  esbuild: false
+
+trustPolicy: no-downgrade
+trustPolicyExclude: []

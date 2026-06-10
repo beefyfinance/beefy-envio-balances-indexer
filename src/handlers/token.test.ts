@@ -243,6 +243,21 @@ describe('Token Handlers', () => {
               {
                 "changes": [
                   {
+                    "Token": {
+                      "sets": [
+                        {
+                          "address": "0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "chainId": 8453,
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "isVirtual": false,
+                          "name": "Cow Sushi Base WETH-USDbC",
+                          "symbol": "cowSushiBaseWETH-USDbC",
+                          "totalSupply": "0",
+                        },
+                      ],
+                    },
                     "block": 19077712,
                     "chainId": 8453,
                     "eventsProcessed": 1,
