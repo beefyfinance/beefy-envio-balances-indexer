@@ -24,7 +24,7 @@ export const getWrappedNativeDecimals = (chainId: EvmChainId): number => {
 };
 
 export const getBeefySwapperAddress = (chainId: EvmChainId): Hex => {
-    const address = getChain(chainId).platforms.beefyfinance.beefySwapper;
+    const address = getChain(chainId).platforms.beefyfinance?.beefySwapper;
     if (!address) {
         throw new Error(`Addressbook missing platforms.beefyfinance.beefySwapper for chain ${chainId}`);
     }
@@ -32,7 +32,7 @@ export const getBeefySwapperAddress = (chainId: EvmChainId): Hex => {
 };
 
 export const getBeefyOracleAddress = (chainId: EvmChainId): Hex => {
-    const address = getChain(chainId).platforms.beefyfinance.beefyOracle;
+    const address = getChain(chainId).platforms.beefyfinance?.beefyOracle;
     if (!address) {
         throw new Error(`Addressbook missing platforms.beefyfinance.beefyOracle for chain ${chainId}`);
     }

@@ -1,5 +1,5 @@
 import type { Hex } from 'viem';
-import type { ChainOracleConfig } from '../../config/oracle';
+import type { ChainOracleWithBeefyPricing } from '../../config/oracle';
 import { BEEFY_SWAPPER_VALUE_SCALER } from '../../lib/decimal';
 import type { FetchToken } from '../../lib/schema';
 import { beefySwapperAbi } from '../abis/beefy/common/BeefySwapper';
@@ -65,7 +65,7 @@ const parseSwapperToNativePrice = (
 };
 
 export const buildBeefyOracleFreshPriceCalls = (
-    oracleConfig: ChainOracleConfig,
+    oracleConfig: ChainOracleWithBeefyPricing,
     tokenAddresses: readonly Hex[]
 ): OracleMulticallContract[] =>
     tokenAddresses.map((tokenAddress) => ({
@@ -76,7 +76,7 @@ export const buildBeefyOracleFreshPriceCalls = (
     }));
 
 export const buildBeefySwapperToNativeCalls = (
-    oracleConfig: ChainOracleConfig,
+    oracleConfig: ChainOracleWithBeefyPricing,
     tokens: readonly FetchToken[]
 ): OracleMulticallContract[] =>
     tokens.map((token) => {

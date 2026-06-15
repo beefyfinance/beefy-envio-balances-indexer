@@ -326,6 +326,10 @@ describe('Token Handlers', () => {
 
         it('Should not decrement holderCount on self-transfer (from === to)', async () => {
             const indexer = createTestIndexer();
+            const blockNum = 12_132_390;
+            const timestampSec = Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000);
+            const vaultAddress = '0xba53af4c2f1649f82e8070fb306ddbf2771a1950' as const;
+            const strategyAddress = '0xe807517273de0161d8309bc9363193f2162b9b65' as const;
 
             const trace = await indexer.process({
                 chains: {
@@ -334,23 +338,25 @@ describe('Token Handlers', () => {
                             {
                                 contract: 'ClassicVault',
                                 event: 'Initialized',
-                                block: {
-                                    number: 12_132_390,
-                                    timestamp: Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000),
-                                },
+                                block: { number: blockNum, timestamp: timestampSec },
                                 logIndex: 0,
-                                srcAddress: '0xba53af4c2f1649f82e8070fb306ddbf2771a1950',
+                                srcAddress: vaultAddress,
+                                params: { version: 1n },
+                            },
+                            {
+                                contract: 'ClassicStrategy',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 1,
+                                srcAddress: strategyAddress,
                                 params: { version: 1n },
                             },
                             {
                                 contract: 'ClassicVault',
                                 event: 'Transfer',
-                                block: {
-                                    number: 12_132_390,
-                                    timestamp: Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000),
-                                },
+                                block: { number: blockNum, timestamp: timestampSec },
                                 logIndex: 387,
-                                srcAddress: '0xba53af4c2f1649f82e8070fb306ddbf2771a1950',
+                                srcAddress: vaultAddress,
                                 transaction: {
                                     hash: '0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88',
                                     transactionIndex: 164,
@@ -381,11 +387,152 @@ describe('Token Handlers', () => {
                         },
                       ],
                     },
+                    "Classic": {
+                      "sets": [
+                        {
+                          "address": "0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "boostRewardToNativePrices": [],
+                          "boostRewardToken_ids": [],
+                          "boostRewardTokensOrder": [],
+                          "chainId": 56,
+                          "classicVaultStrategy_id": "56-0xe807517273de0161d8309bc9363193f2162b9b65",
+                          "classicVault_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterToken_ids": [],
+                          "erc4626AdapterTokensOrder": [],
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 12132390n,
+                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "nativeToUSDPrice": "452.83830981",
+                          "pausableStatus": "RUNNING",
+                          "rewardPoolToken_ids": [],
+                          "rewardPoolTokensOrder": [],
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "rewardToken_ids": [],
+                          "rewardTokensOrder": [],
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [
+                            "0",
+                          ],
+                          "underlyingBreakdownToken_ids": [
+                            "56-0x111111111117dc0aa78b770fa6a738034120c302",
+                          ],
+                          "underlyingBreakdownTokensOrder": [
+                            "0x111111111117dc0aa78b770fa6a738034120c302",
+                          ],
+                          "underlyingPlatform": "UNKNOWN",
+                          "underlyingToNativePrice": "0",
+                          "underlyingToken_id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultToken_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [
+                            "1081841.858326645878430335",
+                          ],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                      ],
+                    },
+                    "ClassicSnapshot": {
+                      "sets": [
+                        {
+                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "boostRewardToNativePrices": [],
+                          "chainId": 56,
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-3600-1635325200",
+                          "nativeToUSDPrice": "452.83830981",
+                          "period": 3600n,
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "roundedTimestamp": "2021-10-27T09:00:00.000Z",
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [
+                            "0",
+                          ],
+                          "underlyingToNativePrice": "0",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [
+                            "1081841.858326645878430335",
+                          ],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                        {
+                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "boostRewardToNativePrices": [],
+                          "chainId": 56,
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-86400-1635292800",
+                          "nativeToUSDPrice": "452.83830981",
+                          "period": 86400n,
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "roundedTimestamp": "2021-10-27T00:00:00.000Z",
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [
+                            "0",
+                          ],
+                          "underlyingToNativePrice": "0",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [
+                            "1081841.858326645878430335",
+                          ],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                        {
+                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "boostRewardToNativePrices": [],
+                          "chainId": 56,
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-604800-1635033600",
+                          "nativeToUSDPrice": "452.83830981",
+                          "period": 604800n,
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "roundedTimestamp": "2021-10-24T00:00:00.000Z",
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [
+                            "0",
+                          ],
+                          "underlyingToNativePrice": "0",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [
+                            "1081841.858326645878430335",
+                          ],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                      ],
+                    },
                     "ClassicVault": {
                       "sets": [
                         {
                           "address": "0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "chainId": 56,
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
@@ -405,6 +552,7 @@ describe('Token Handlers', () => {
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
                           "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "pausableStatus": "RUNNING",
                         },
                       ],
                     },
@@ -465,7 +613,7 @@ describe('Token Handlers', () => {
                     },
                     "block": 12132390,
                     "chainId": 56,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                 ],
               }

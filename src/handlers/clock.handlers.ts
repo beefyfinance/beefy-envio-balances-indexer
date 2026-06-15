@@ -10,29 +10,47 @@ import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens
 import { refreshClmSnapshot } from '../lib/clm/refresh';
 import { buildClmFetchInput, loadClmTokens } from '../lib/clm/tokens';
 import { getOrCreateClockTick } from '../lib/snapshot/tick';
-import { HOUR } from '../lib/time/interval';
+import { getApproxBlocksPerHour, HOUR } from '../lib/time/interval';
 
-indexer.onBlock({ name: 'HourlyClockTick' }, async ({ block, context }) => {
-    const chainId = toChainId(context.chain.id);
-    const { timestamp } = await context.effect(getBlockTimestamp, {
-        chainId,
-        blockNumber: block.number,
-    });
+// Envio's test indexer replays onBlock handlers from chain start to each simulated
+// event block. HourlyClockTick would trigger thousands of RPC calls during unit
+// tests, so skip registration under vitest.
+if (process.env.VITEST !== 'true') {
+    indexer.onBlock(
+        {
+            name: 'HourlyClockTick',
+            where: ({ chain }) => ({
+                block: {
+                    number: {
+                        _gte: chain.startBlock,
+                        _every: getApproxBlocksPerHour(chain.id),
+                    },
+                },
+            }),
+        },
+        async ({ block, context }) => {
+            const chainId = toChainId(context.chain.id);
+            const { timestamp } = await context.effect(getBlockTimestamp, {
+                chainId,
+                blockNumber: block.number,
+            });
 
-    const { isNew } = await getOrCreateClockTick({
-        context,
-        chainId,
-        timestamp,
-        period: HOUR,
-    });
+            const { isNew } = await getOrCreateClockTick({
+                context,
+                chainId,
+                timestamp,
+                period: HOUR,
+            });
 
-    if (!isNew) {
-        return;
-    }
+            if (!isNew) {
+                return;
+            }
 
-    await refreshClmSnapshotsOnTick({ context, chainId, timestamp, blockNumber: block.number });
-    await refreshClassicSnapshotsOnTick({ context, chainId, timestamp, blockNumber: block.number });
-});
+            await refreshClmSnapshotsOnTick({ context, chainId, timestamp, blockNumber: block.number });
+            await refreshClassicSnapshotsOnTick({ context, chainId, timestamp, blockNumber: block.number });
+        }
+    );
+}
 
 const refreshClmSnapshotsOnTick = async ({
     context,

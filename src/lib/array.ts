@@ -45,5 +45,6 @@ export function zipSameLength<A, B>(a: readonly A[], b: readonly B[]): Array<[A,
     if (a.length !== b.length) {
         throw new Error(`zipSameLength: length mismatch (${a.length} vs ${b.length})`);
     }
+    // biome-ignore lint/style/noNonNullAssertion: we checked the length above
     return a.map((item, i) => [item, b[i]!]);
 }

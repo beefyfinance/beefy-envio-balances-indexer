@@ -54,6 +54,8 @@ describe('RewardPool Handlers', () => {
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
@@ -131,6 +133,8 @@ describe('RewardPool Handlers', () => {
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
@@ -297,6 +301,8 @@ describe('RewardPool Handlers', () => {
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
@@ -426,6 +432,8 @@ describe('RewardPool Handlers', () => {
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
@@ -513,6 +521,8 @@ describe('RewardPool Handlers', () => {
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
@@ -629,6 +639,8 @@ describe('RewardPool Handlers', () => {
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
@@ -762,6 +774,8 @@ describe('RewardPool Handlers', () => {
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
@@ -921,6 +935,22 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
+                    "RewardPool": {
+                      "sets": [
+                        {
+                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
+                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 17539954n,
+                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                        },
+                      ],
+                    },
                     "RewardPoolRewardedEvent": {
                       "sets": [
                         {
@@ -935,20 +965,6 @@ describe('RewardPool Handlers', () => {
                           "rewardVestingSeconds": 86400n,
                           "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                           "trxIndex": 2,
-                        },
-                      ],
-                    },
-                    "RewardPool": {
-                      "sets": [
-                        {
-                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
-                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "initializableStatus": "INITIALIZED",
-                          "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
-                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
                       ],
                     },
@@ -1018,6 +1034,22 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
+                    "RewardPool": {
+                      "sets": [
+                        {
+                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
+                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 17539954n,
+                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                        },
+                      ],
+                    },
                     "RewardPoolRewardedEvent": {
                       "sets": [
                         {
@@ -1032,20 +1064,6 @@ describe('RewardPool Handlers', () => {
                           "rewardVestingSeconds": 0n,
                           "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                           "trxIndex": 2,
-                        },
-                      ],
-                    },
-                    "RewardPool": {
-                      "sets": [
-                        {
-                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
-                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "initializableStatus": "INITIALIZED",
-                          "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
-                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
                       ],
                     },
@@ -1130,6 +1148,22 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
+                    "RewardPool": {
+                      "sets": [
+                        {
+                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
+                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 17539954n,
+                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                        },
+                      ],
+                    },
                     "RewardPoolRewardedEvent": {
                       "sets": [
                         {
@@ -1157,20 +1191,6 @@ describe('RewardPool Handlers', () => {
                           "rewardVestingSeconds": 200n,
                           "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                           "trxIndex": 2,
-                        },
-                      ],
-                    },
-                    "RewardPool": {
-                      "sets": [
-                        {
-                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
-                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "initializableStatus": "INITIALIZED",
-                          "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
-                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
                       ],
                     },

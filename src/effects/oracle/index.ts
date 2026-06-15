@@ -36,6 +36,10 @@ const fetchNativeToUSDPriceFromConfig = async (
     const { priceOracleType } = oracleConfig;
     const blockTag = { blockNumber: BigInt(blockNumber) };
 
+    if (priceOracleType === 'noop') {
+        return 0n;
+    }
+
     if (priceOracleType === 'chainlink') {
         const [result] = await client.multicall({
             allowFailure: true,

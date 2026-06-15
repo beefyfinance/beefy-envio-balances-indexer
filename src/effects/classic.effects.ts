@@ -1,7 +1,7 @@
 import { createEffect, type Logger, S } from 'envio';
 import * as R from 'remeda';
 import type { Hex } from 'viem';
-import { getChainOracleConfig } from '../config/oracle';
+import { getChainOracleConfig, hasBeefyTokenPricing } from '../config/oracle';
 import { splitBatchResults, zipSameLength } from '../lib/array';
 import { chainIdSchema } from '../lib/chain';
 import {
@@ -165,7 +165,7 @@ const fetchClassicStateRaw = async ({
     ]);
 
     const tokensToRefresh: Hex[] = [];
-    if (oracleConfig) {
+    if (hasBeefyTokenPricing(oracleConfig)) {
         tokensToRefresh.push(normalizeHex(oracleConfig.wrappedNativeAddress));
         for (const token of boostRewardTokens) {
             tokensToRefresh.push(normalizeHex(token.address));
@@ -182,13 +182,19 @@ const fetchClassicStateRaw = async ({
         }
     }
 
-    const swapperBoostCalls = oracleConfig ? buildBeefySwapperToNativeCalls(oracleConfig, boostRewardTokens) : [];
-    const swapperRewardCalls = oracleConfig ? buildBeefySwapperToNativeCalls(oracleConfig, rewardTokens) : [];
-    const swapperUnderlyingCalls = oracleConfig
+    const swapperBoostCalls = hasBeefyTokenPricing(oracleConfig)
+        ? buildBeefySwapperToNativeCalls(oracleConfig, boostRewardTokens)
+        : [];
+    const swapperRewardCalls = hasBeefyTokenPricing(oracleConfig)
+        ? buildBeefySwapperToNativeCalls(oracleConfig, rewardTokens)
+        : [];
+    const swapperUnderlyingCalls = hasBeefyTokenPricing(oracleConfig)
         ? buildBeefySwapperToNativeCalls(oracleConfig, underlyingBreakdownTokens)
         : [];
 
-    const oracleFreshCalls = oracleConfig ? buildBeefyOracleFreshPriceCalls(oracleConfig, tokensToRefresh) : [];
+    const oracleFreshCalls = hasBeefyTokenPricing(oracleConfig)
+        ? buildBeefyOracleFreshPriceCalls(oracleConfig, tokensToRefresh)
+        : [];
 
     const rawResults = await client.multicall({
         allowFailure: true,
@@ -287,7 +293,7 @@ const fetchClassicStateRaw = async ({
         swapperBoostResults,
         zipSameLength(boostRewardTokens, boostFresh).map(([token, freshPrice]) => ({
             decimals: token.decimals,
-            freshPrice: oracleConfig ? freshPrice : undefined,
+            freshPrice: hasBeefyTokenPricing(oracleConfig) ? freshPrice : undefined,
         }))
     );
 
@@ -295,7 +301,7 @@ const fetchClassicStateRaw = async ({
         swapperRewardResults,
         zipSameLength(rewardTokens, rewardFresh).map(([token, freshPrice]) => ({
             decimals: token.decimals,
-            freshPrice: oracleConfig ? freshPrice : undefined,
+            freshPrice: hasBeefyTokenPricing(oracleConfig) ? freshPrice : undefined,
         }))
     );
 
@@ -303,7 +309,7 @@ const fetchClassicStateRaw = async ({
         swapperUnderlyingResults,
         zipSameLength(underlyingBreakdownTokens, underlyingFresh).map(([token, freshPrice]) => ({
             decimals: token.decimals,
-            freshPrice: oracleConfig ? freshPrice : undefined,
+            freshPrice: hasBeefyTokenPricing(oracleConfig) ? freshPrice : undefined,
         }))
     );
 

@@ -31,7 +31,7 @@ describe('ClassicStrategyFactory Handlers', () => {
                       "sets": [
                         {
                           "address": "0x00000000000000000000000000000000feed1010",
-                          "contract": "ClassicStrategy",
+                          "contract": "ClassicStrategyStratHarvest0",
                         },
                       ],
                     },

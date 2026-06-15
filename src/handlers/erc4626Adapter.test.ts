@@ -45,6 +45,7 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
@@ -129,6 +130,7 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "address": "0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
                           "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13522734n,
@@ -304,6 +306,7 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
@@ -440,6 +443,7 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
@@ -534,6 +538,7 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
@@ -657,6 +662,7 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
@@ -797,6 +803,7 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,

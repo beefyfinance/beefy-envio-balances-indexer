@@ -1,7 +1,7 @@
 import { createEffect, type Logger, S } from 'envio';
 import * as R from 'remeda';
 import type { Hex } from 'viem';
-import { getChainOracleConfig } from '../config/oracle';
+import { getChainOracleConfig, hasBeefyTokenPricing } from '../config/oracle';
 import { splitBatchResults, zipSameLength } from '../lib/array';
 import { chainIdSchema } from '../lib/chain';
 import type { ClmTokens } from '../lib/clm/tokens';
@@ -178,7 +178,7 @@ const fetchClmStateRaw = async ({
     }));
 
     const tokensToRefresh: Hex[] = [];
-    if (oracleConfig) {
+    if (hasBeefyTokenPricing(oracleConfig)) {
         tokensToRefresh.push(normalizeHex(oracleConfig.wrappedNativeAddress));
         tokensToRefresh.push(normalizeHex(underlyingToken0Address));
         tokensToRefresh.push(normalizeHex(underlyingToken1Address));
@@ -194,19 +194,25 @@ const fetchClmStateRaw = async ({
         { address: underlyingToken0Address, decimals: underlyingToken0Decimals },
         { address: underlyingToken1Address, decimals: underlyingToken1Decimals },
     ];
-    const swapperOutputTokens = oracleConfig
+    const swapperOutputTokens = hasBeefyTokenPricing(oracleConfig)
         ? outputTokenAddresses.map((address) => ({
               address,
               decimals: oracleConfig.wrappedNativeDecimals,
           }))
         : [];
 
-    const oracleFreshCalls = oracleConfig ? buildBeefyOracleFreshPriceCalls(oracleConfig, tokensToRefresh) : [];
-    const swapperUnderlyingCalls = oracleConfig
+    const oracleFreshCalls = hasBeefyTokenPricing(oracleConfig)
+        ? buildBeefyOracleFreshPriceCalls(oracleConfig, tokensToRefresh)
+        : [];
+    const swapperUnderlyingCalls = hasBeefyTokenPricing(oracleConfig)
         ? buildBeefySwapperToNativeCalls(oracleConfig, swapperUnderlyingTokens)
         : [];
-    const swapperRewardCalls = oracleConfig ? buildBeefySwapperToNativeCalls(oracleConfig, rewardTokens) : [];
-    const swapperOutputCalls = oracleConfig ? buildBeefySwapperToNativeCalls(oracleConfig, swapperOutputTokens) : [];
+    const swapperRewardCalls = hasBeefyTokenPricing(oracleConfig)
+        ? buildBeefySwapperToNativeCalls(oracleConfig, rewardTokens)
+        : [];
+    const swapperOutputCalls = hasBeefyTokenPricing(oracleConfig)
+        ? buildBeefySwapperToNativeCalls(oracleConfig, swapperOutputTokens)
+        : [];
 
     const rawResults = await client.multicall({
         allowFailure: true,
@@ -304,7 +310,7 @@ const fetchClmStateRaw = async ({
     let rewardToNativePrices: bigint[] = [];
     let outputToNativePrices: bigint[] = [];
 
-    if (oracleConfig) {
+    if (hasBeefyTokenPricing(oracleConfig)) {
         const clmLogContext = { managerAddress, chainId };
         const underlyingToNativePrices = parseBeefySwapperToNativePrices(swapperUnderlyingResults, [
             {

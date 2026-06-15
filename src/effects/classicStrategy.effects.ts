@@ -1,4 +1,5 @@
 import { createEffect, S } from 'envio';
+import { staticStrategyVaultMap } from '../config/classic/staticVaults';
 import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema, normalizeHex } from '../lib/hex';
@@ -21,6 +22,13 @@ export const getClassicStrategyVault = createEffect(
     },
     async ({ input, context }) => {
         const { strategyAddress, chainId, blockNumber } = input;
+        const normalizedStrategy = normalizeHex(strategyAddress);
+
+        const staticVaultAddress = staticStrategyVaultMap[chainId]?.[normalizedStrategy];
+        if (staticVaultAddress) {
+            return { vaultAddress: staticVaultAddress };
+        }
+
         const client = getViemClient(chainId, context.log);
 
         context.log.debug('Fetching ClassicStrategy vault', { strategyAddress, chainId });
