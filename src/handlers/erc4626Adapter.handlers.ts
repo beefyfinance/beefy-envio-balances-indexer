@@ -1,11 +1,17 @@
-import type { Erc4626Adapter, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
+import type { ClassicErc4626Adapter, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import { indexer } from 'envio';
 import type { Hex } from 'viem';
+import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { getErc4626AdapterTokens } from '../effects/erc4626Adapter.effects';
+import { getClassic, linkClassicErc4626Adapter } from '../entities/classic.entity';
 import { createErc4626Adapter, getErc4626Adapter } from '../entities/classicErc4626Adapter.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { toChainId } from '../lib/chain';
+import { isClassicVaultStakedToken } from '../lib/classic/init';
+import { handleClassicErc4626AdapterTransfer } from '../lib/classic/position';
+import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens';
+import { interpretAsDecimal } from '../lib/decimal';
 import { normalizeHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
@@ -19,6 +25,21 @@ indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Initialized' }, async ({ e
     const adapter = await initializeErc4626Adapter({ context, chainId, adapterAddress, initializedBlock });
     if (!adapter) return;
 
+    const underlyingToken = await getTokenOrThrow({ context, id: adapter.underlyingToken_id });
+    const isClassicAdapter = await isClassicVaultStakedToken({
+        context,
+        chainId,
+        stakedTokenAddress: normalizeHex(underlyingToken.address),
+    });
+    if (!isClassicAdapter) return;
+
+    const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
+    if (!classic) return;
+
+    const shareToken = await getTokenOrThrow({ context, id: adapter.shareToken_id });
+    await linkClassicErc4626Adapter({ context, classic, adapterShareToken: shareToken });
+    context.ClassicErc4626Adapter.set({ ...adapter, classic_id: classic.id });
+
     context.log.info('Erc4626Adapter initialized successfully', { adapterAddress });
 });
 
@@ -28,7 +49,6 @@ indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Transfer' }, async ({ even
     const chainId = toChainId(context.chain.id);
     const adapterAddress = normalizeHex(event.srcAddress);
 
-    // Ensure that the adapter is initialized first
     const adapter = await initializeErc4626Adapter({
         context,
         chainId,
@@ -53,6 +73,39 @@ indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Transfer' }, async ({ even
             trxHash: normalizeHex(event.transaction.hash),
         },
     });
+
+    if (!adapter.classic_id) return;
+
+    const classic = await context.Classic.get(adapter.classic_id);
+    if (!classic || classic.initializableStatus !== 'INITIALIZED' || !classic.classicVaultStrategy_id) return;
+
+    const tokenContext = await loadClassicTokens({ context, classic });
+    const fetchInput = await buildClassicFetchInput({
+        context,
+        chainId,
+        classic,
+        tokens: tokenContext,
+        blockNumber: event.block.number,
+    });
+    const rawState = await context.effect(fetchClassicState, fetchInput);
+    const state = parseFetchedClassicState(rawState, tokenContext);
+
+    await handleClassicErc4626AdapterTransfer({
+        context,
+        chainId,
+        classic,
+        adapter,
+        fromAddress: normalizeHex(event.params.from),
+        toAddress: normalizeHex(event.params.to),
+        transferAmount: interpretAsDecimal(event.params.value, shareToken.decimals),
+        state,
+        event: {
+            block: event.block,
+            trxIndex: event.transaction.transactionIndex,
+            logIndex: event.logIndex,
+            trxHash: normalizeHex(event.transaction.hash),
+        },
+    });
 });
 
 const initializeErc4626Adapter = async ({
@@ -65,8 +118,7 @@ const initializeErc4626Adapter = async ({
     chainId: EvmChainId;
     adapterAddress: Hex;
     initializedBlock: EvmBlock;
-}): Promise<Erc4626Adapter | null> => {
-    // Check if the adapter already exists
+}): Promise<ClassicErc4626Adapter | null> => {
     const existingAdapter = await getErc4626Adapter(context, chainId, adapterAddress);
     if (existingAdapter) {
         return existingAdapter;
@@ -74,7 +126,6 @@ const initializeErc4626Adapter = async ({
 
     context.log.info('Initializing Erc4626Adapter', { adapterAddress, chainId });
 
-    // Fetch underlying tokens using effect
     const { shareTokenAddress, underlyingTokenAddress, blacklistStatus } = await context.effect(
         getErc4626AdapterTokens,
         {
@@ -92,7 +143,6 @@ const initializeErc4626Adapter = async ({
         return null;
     }
 
-    // Create tokens
     const [shareToken, underlyingToken] = await Promise.all([
         getOrCreateToken({
             context,
@@ -118,7 +168,6 @@ const initializeErc4626Adapter = async ({
         return null;
     }
 
-    // Create ERC4626 adapter entity
     return await createErc4626Adapter({
         context,
         chainId,

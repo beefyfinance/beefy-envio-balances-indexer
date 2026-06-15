@@ -1,6 +1,7 @@
 import type { EvmChainId, EvmOnEventContext } from 'envio';
 import { decodeFunctionData } from 'viem';
 import { getViemClient } from '../lib/viem';
+import { classicVaultFactoryAbi, classicVaultFactoryDetectionAbi } from './abis/beefy/classic/ClassicVaultFactory';
 
 const detectClassicVaultOrStrategyWithEthCall = async ({
     contractAddress,
@@ -27,40 +28,19 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
         contracts: [
             {
                 address: contractAddress as `0x${string}`,
-                abi: [
-                    {
-                        name: 'vault',
-                        type: 'function',
-                        inputs: [],
-                        outputs: [],
-                    },
-                ],
+                abi: classicVaultFactoryDetectionAbi,
                 functionName: 'vault',
                 args: [],
             },
             {
                 address: contractAddress as `0x${string}`,
-                abi: [
-                    {
-                        name: 'strategy',
-                        type: 'function',
-                        inputs: [],
-                        outputs: [],
-                    },
-                ],
+                abi: classicVaultFactoryDetectionAbi,
                 functionName: 'strategy',
                 args: [],
             },
             {
                 address: contractAddress as `0x${string}`,
-                abi: [
-                    {
-                        name: 'rewardToken',
-                        type: 'function',
-                        inputs: [],
-                        outputs: [],
-                    },
-                ],
+                abi: classicVaultFactoryDetectionAbi,
                 functionName: 'rewardToken',
                 args: [],
             },
@@ -116,42 +96,13 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     };
 };
 
-/** Minimal ABI for parsing factory tx input (`cloneVault` / `cloneContract` / `booooost`). */
-export const vaultOrStrategyFactoryAbi = [
-    {
-        inputs: [{ internalType: 'address', name: 'implementation', type: 'address' }],
-        name: 'cloneContract',
-        outputs: [{ internalType: 'address', name: '', type: 'address' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'cloneVault',
-        outputs: [{ internalType: 'contract BeefyVaultV7', name: '', type: 'address' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [
-            { internalType: 'address', name: 'mooToken', type: 'address' },
-            { internalType: 'address', name: 'rewardToken', type: 'address' },
-            { internalType: 'uint256', name: 'duration_in_sec', type: 'uint256' },
-        ],
-        name: 'booooost',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-] as const;
-
 const detectClassicVaultOrStrategyWithTransactionInput = async ({
     transactionInput,
 }: {
     transactionInput: `0x${string}`;
 }) => {
     const trxData = decodeFunctionData({
-        abi: vaultOrStrategyFactoryAbi,
+        abi: classicVaultFactoryAbi,
         data: transactionInput,
     });
 

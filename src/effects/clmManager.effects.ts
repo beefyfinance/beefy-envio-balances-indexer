@@ -4,6 +4,7 @@ import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { clmManagerAbi } from './abis/beefy/clm/ClmManager';
 
 export const getClmManagerTokens = createEffect(
     {
@@ -32,18 +33,7 @@ export const getClmManagerTokens = createEffect(
             contracts: [
                 {
                     address: managerAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'wants',
-                            outputs: [
-                                { name: 'token0', type: 'address' },
-                                { name: 'token1', type: 'address' },
-                            ],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: clmManagerAbi,
                     functionName: 'wants',
                     args: [],
                 },

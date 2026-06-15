@@ -888,7 +888,7 @@ describe('RewardPool Handlers', () => {
     describe('NotifyReward event', () => {
         const rewardToken = '0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1';
 
-        it('Should create PoolRewardedEvent when NotifyReward event is emitted', async () => {
+        it('Should create RewardPoolRewardedEvent when NotifyReward event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -916,12 +916,12 @@ describe('RewardPool Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should create PoolRewardedEvent entity with correct reward token, amount, and vesting duration'
+                'Should create RewardPoolRewardedEvent entity with correct reward token, amount, and vesting duration'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
-                    "PoolRewardedEvent": {
+                    "RewardPoolRewardedEvent": {
                       "sets": [
                         {
                           "blockNumber": 17539954n,
@@ -1018,7 +1018,7 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
-                    "PoolRewardedEvent": {
+                    "RewardPoolRewardedEvent": {
                       "sets": [
                         {
                           "blockNumber": 17539954n,
@@ -1130,7 +1130,7 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
-                    "PoolRewardedEvent": {
+                    "RewardPoolRewardedEvent": {
                       "sets": [
                         {
                           "blockNumber": 17539954n,

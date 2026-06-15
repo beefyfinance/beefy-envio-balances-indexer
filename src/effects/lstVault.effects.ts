@@ -4,6 +4,7 @@ import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { lstVaultAbi } from './abis/beefy/lst/LstVault';
 
 export const getLstVaultTokens = createEffect(
     {
@@ -31,15 +32,7 @@ export const getLstVaultTokens = createEffect(
             contracts: [
                 {
                     address: lstAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'asset',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: lstVaultAbi,
                     functionName: 'asset',
                     args: [],
                 },

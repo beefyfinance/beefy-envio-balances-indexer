@@ -5,6 +5,7 @@ import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema, normalizeHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { classicVaultAbi } from './abis/beefy/classic/ClassicVault';
 
 export const getClassicVaultTokens = createEffect(
     {
@@ -45,44 +46,20 @@ export const getClassicVaultTokens = createEffect(
                 // token (BeefyVaultV4 and before)
                 {
                     address: vaultAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'token',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: classicVaultAbi,
                     functionName: 'token',
                     args: [],
                 },
                 // token (BeefyVaultV5 and after)
                 {
                     address: vaultAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'want',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: classicVaultAbi,
                     functionName: 'want',
                     args: [],
                 },
                 {
                     address: vaultAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'strategy',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: classicVaultAbi,
                     functionName: 'strategy',
                     args: [],
                 },

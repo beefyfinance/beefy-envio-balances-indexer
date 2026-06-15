@@ -880,7 +880,7 @@ describe('ClassicBoost Handlers', () => {
     describe('RewardAdded event', () => {
         const rewardAmt = parseUnits('0.5', 18);
 
-        it('Should create PoolRewardedEvent when RewardAdded event is emitted', async () => {
+        it('Should create RewardPoolRewardedEvent when RewardAdded event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -911,7 +911,7 @@ describe('ClassicBoost Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should create PoolRewardedEvent entity with correct reward token and amount'
+                'Should create RewardPoolRewardedEvent entity with correct reward token and amount'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
@@ -930,7 +930,7 @@ describe('ClassicBoost Handlers', () => {
                         },
                       ],
                     },
-                    "PoolRewardedEvent": {
+                    "RewardPoolRewardedEvent": {
                       "sets": [
                         {
                           "blockNumber": 2578061n,
@@ -1029,7 +1029,7 @@ describe('ClassicBoost Handlers', () => {
                         },
                       ],
                     },
-                    "PoolRewardedEvent": {
+                    "RewardPoolRewardedEvent": {
                       "sets": [
                         {
                           "blockNumber": 2578061n,

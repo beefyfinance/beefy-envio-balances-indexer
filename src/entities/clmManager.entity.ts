@@ -34,6 +34,7 @@ export const createClmManager = async ({
         id,
         chainId,
         address: managerAddress,
+        clm_id: undefined,
         shareToken_id: shareToken.id,
         underlyingToken0_id: underlyingToken0.id,
         underlyingToken1_id: underlyingToken1.id,
@@ -76,6 +77,7 @@ export const createClmStrategy = async ({
         address: strategyAddress,
         clmManager_id: clmManager.id,
         initializableStatus: 'INITIALIZED',
+        pausableStatus: 'RUNNING',
         initializedBlock: BigInt(initializedBlock.number),
         initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };

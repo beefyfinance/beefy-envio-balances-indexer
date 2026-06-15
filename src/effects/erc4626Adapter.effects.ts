@@ -4,6 +4,7 @@ import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { erc4626AdapterAbi } from './abis/beefy/common/Erc4626Adapter';
 
 export const getErc4626AdapterTokens = createEffect(
     {
@@ -31,15 +32,7 @@ export const getErc4626AdapterTokens = createEffect(
             contracts: [
                 {
                     address: adapterAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'asset',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: erc4626AdapterAbi,
                     functionName: 'asset',
                     args: [],
                 },

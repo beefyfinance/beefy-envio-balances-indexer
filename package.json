@@ -18,7 +18,8 @@
     "test:lint": "biome ci",
     "test:ts": "tsc --noEmit",
     "test:unit": "vitest run",
-    "test:unit:watch": "vitest watch --reporter=verbose"
+    "test:unit:watch": "vitest watch --reporter=verbose",
+    "parity:diff": "tsx scripts/parity-diff.ts"
   },
   "dependencies": {
     "@beefyfinance/blockchain-addressbook": "0.54.213",

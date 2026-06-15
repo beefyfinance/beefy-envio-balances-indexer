@@ -34,6 +34,8 @@ export const createRewardPool = async ({
         address: rewardPoolAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
+        classic_id: undefined,
+        clm_id: undefined,
         initializableStatus: 'INITIALIZED',
         initializedBlock: BigInt(initializedBlock.number),
         initializedTimestamp: new Date(initializedBlock.timestamp * 1000),

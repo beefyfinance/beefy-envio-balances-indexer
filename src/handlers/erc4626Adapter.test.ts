@@ -13,7 +13,7 @@ describe('Erc4626Adapter Handlers', () => {
     const trxIdx = 3;
 
     describe('Initialized event', () => {
-        it('Should create Erc4626Adapter entity when Initialized event is emitted', async () => {
+        it('Should create ClassicErc4626Adapter entity when Initialized event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -35,12 +35,12 @@ describe('Erc4626Adapter Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should create Erc4626Adapter entity with correct shareToken and underlyingToken'
+                'Should create ClassicErc4626Adapter entity with correct shareToken and underlyingToken'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -89,7 +89,7 @@ describe('Erc4626Adapter Handlers', () => {
             `);
         });
 
-        it('Should handle already initialized Erc4626Adapter gracefully', async () => {
+        it('Should handle already initialized ClassicErc4626Adapter gracefully', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -119,12 +119,12 @@ describe('Erc4626Adapter Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should return early without errors when Erc4626Adapter is already initialized'
+                'Should return early without errors when ClassicErc4626Adapter is already initialized'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
@@ -173,7 +173,7 @@ describe('Erc4626Adapter Handlers', () => {
             `);
         });
 
-        it('Should skip blacklisted Erc4626Adapter during initialization', async () => {
+        it('Should skip blacklisted ClassicErc4626Adapter during initialization', async () => {
             const indexer = createTestIndexer();
             // No ERC4626 asset() implementation → effect returns blacklisted (avoid reserved precompile addrs).
             const badAdapter = '0x1111111111111111111111111111111111111111' as const;
@@ -197,7 +197,7 @@ describe('Erc4626Adapter Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should return null and log blacklist status for blacklisted Erc4626Adapter'
+                'Should return null and log blacklist status for blacklisted ClassicErc4626Adapter'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
@@ -216,7 +216,7 @@ describe('Erc4626Adapter Handlers', () => {
         // `getTokenMetadata -> status: 'invalid'` path in `getOrCreateToken`. Then drop the
         // `.skip`, fill in srcAddress + chainId, and let the inline snapshot regenerate.
         // biome-ignore lint/suspicious/noSkippedTests: intentional placeholder; see TODO above
-        it.skip('Should skip Erc4626Adapter when underlying token metadata is invalid', async () => {
+        it.skip('Should skip ClassicErc4626Adapter when underlying token metadata is invalid', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -299,7 +299,7 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -435,7 +435,7 @@ describe('Erc4626Adapter Handlers', () => {
               {
                 "changes": [
                   {
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -529,7 +529,7 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -652,7 +652,7 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -792,7 +792,7 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",

@@ -1,8 +1,9 @@
-import { createEffect } from 'envio';
+import { createEffect, S } from 'envio';
 import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema, normalizeHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { clmStrategyAbi } from './abis/beefy/clm/ClmStrategy';
 
 export const getClmStrategyManager = createEffect(
     {
@@ -10,6 +11,7 @@ export const getClmStrategyManager = createEffect(
         input: {
             strategyAddress: hexSchema,
             chainId: chainIdSchema,
+            blockNumber: S.number,
         },
         output: {
             managerAddress: hexSchema,
@@ -18,25 +20,18 @@ export const getClmStrategyManager = createEffect(
         cache: true,
     },
     async ({ input, context }) => {
-        const { strategyAddress, chainId } = input;
+        const { strategyAddress, chainId, blockNumber } = input;
         const client = getViemClient(chainId, context.log);
 
         context.log.debug('Fetching ClmStrategy manager', { strategyAddress, chainId });
 
         const [vaultResult] = await client.multicall({
             allowFailure: true,
+            blockNumber: BigInt(blockNumber),
             contracts: [
                 {
                     address: strategyAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'vault',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: clmStrategyAbi,
                     functionName: 'vault',
                     args: [],
                 },

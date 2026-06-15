@@ -1,10 +1,21 @@
 import type { ClassicVaultStrategy, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import { indexer } from 'envio';
 import type { Hex } from 'viem';
+import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { getClassicStrategyVault } from '../effects/classicStrategy.effects';
+import {
+    getClassic,
+    getClassicOrThrow,
+    linkClassicVaultStrategy,
+    setClassicPausableStatus,
+} from '../entities/classic.entity';
+import { createClassicHarvestEvent } from '../entities/classicHarvestEvent.entity';
 import { createClassicVaultStrategy, getClassicVault, getClassicVaultStrategy } from '../entities/classicVault.entity';
 import { toChainId } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
+import { ensureClassicAggregate, maybeFinalizeClassic } from '../lib/classic/init';
+import { refreshClassic, refreshClassicFees } from '../lib/classic/refresh';
+import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens';
+import { ADDRESS_ZERO, interpretAsDecimal } from '../lib/decimal';
 import { normalizeHex } from '../lib/hex';
 
 indexer.onEvent({ contract: 'ClassicStrategy', event: 'Initialized' }, async ({ event, context }) => {
@@ -17,8 +28,183 @@ indexer.onEvent({ contract: 'ClassicStrategy', event: 'Initialized' }, async ({ 
     const strategy = await initializeClassicStrategy({ context, chainId, strategyAddress, initializedBlock });
     if (!strategy) return;
 
+    const classicVault = await context.ClassicVault.get(strategy.classicVault_id);
+    if (!classicVault) {
+        context.log.warn('ClassicVault not found for strategy initialization', { strategyAddress });
+        return;
+    }
+
+    let classic = await ensureClassicAggregate({ context, chainId, classicVault, initializedBlock });
+    await linkClassicVaultStrategy({ context, classic, strategy });
+    classic = await getClassicOrThrow(context, classic.id);
+
+    await maybeFinalizeClassic({
+        context,
+        chainId,
+        classic,
+        strategy,
+        timestamp: event.block.timestamp,
+        blockNumber: event.block.number,
+    });
+
     context.log.info('ClassicStrategy initialized successfully', { strategyAddress });
 });
+
+indexer.onEvent({ contract: 'ClassicStrategyStratHarvest0', event: 'StratHarvest' }, async ({ event, context }) => {
+    await handleClassicStrategyHarvest({ event, context, compoundedAmount: event.params.wantHarvested });
+});
+
+indexer.onEvent({ contract: 'ClassicStrategyStratHarvest1', event: 'StratHarvest' }, async ({ event, context }) => {
+    await handleClassicStrategyHarvest({ event, context, compoundedAmount: event.params.wantHarvested });
+});
+
+indexer.onEvent({ contract: 'ClassicStrategy', event: 'ChargedFees' }, async ({ event, context }) => {
+    await handleClassicStrategyChargedFees({
+        event,
+        context,
+        callFees: 0n,
+        beefyFees: event.params.beefyFee,
+        strategistFees: event.params.liquidityFee,
+    });
+});
+
+indexer.onEvent({ contract: 'ClassicStrategy', event: 'ChargedFeesV2' }, async ({ event, context }) => {
+    await handleClassicStrategyChargedFees({
+        event,
+        context,
+        callFees: event.params.callFees,
+        beefyFees: event.params.beefyFees,
+        strategistFees: event.params.strategistFees,
+    });
+});
+
+indexer.onEvent({ contract: 'ClassicStrategy', event: 'Paused' }, async ({ event, context }) => {
+    await handleClassicStrategyPauseChange({ event, context, pausableStatus: 'PAUSED' });
+});
+
+indexer.onEvent({ contract: 'ClassicStrategy', event: 'Unpaused' }, async ({ event, context }) => {
+    await handleClassicStrategyPauseChange({ event, context, pausableStatus: 'RUNNING' });
+});
+
+const handleClassicStrategyHarvest = async ({
+    event,
+    context,
+    compoundedAmount,
+}: {
+    event: {
+        srcAddress: string;
+        block: EvmBlock;
+        transaction: { transactionIndex: number; hash: string };
+        logIndex: number;
+        params: { wantHarvested: bigint };
+    };
+    context: EvmOnEventContext;
+    compoundedAmount: bigint;
+}) => {
+    const chainId = toChainId(context.chain.id);
+    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategy = await getClassicVaultStrategy(context, chainId, strategyAddress);
+    if (!strategy) return;
+
+    const classicVault = await context.ClassicVault.get(strategy.classicVault_id);
+    if (!classicVault) return;
+    const classic = await getClassic(context, chainId, classicVault.address);
+    if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
+
+    const tokenContext = await loadClassicTokens({ context, classic });
+    const fetchInput = await buildClassicFetchInput({
+        context,
+        chainId,
+        classic,
+        tokens: tokenContext,
+        blockNumber: event.block.number,
+    });
+    const rawState = await context.effect(fetchClassicState, fetchInput);
+    const state = parseFetchedClassicState(rawState, tokenContext);
+
+    await createClassicHarvestEvent({
+        context,
+        chainId,
+        classic,
+        strategy,
+        state,
+        compoundedAmount: interpretAsDecimal(compoundedAmount, tokenContext.underlyingToken.decimals),
+        event: {
+            block: event.block,
+            trxIndex: event.transaction.transactionIndex,
+            logIndex: event.logIndex,
+            trxHash: normalizeHex(event.transaction.hash),
+        },
+    });
+
+    await refreshClassic({
+        context,
+        classic,
+        state,
+        timestamp: event.block.timestamp,
+    });
+};
+
+const handleClassicStrategyChargedFees = async ({
+    event,
+    context,
+    callFees,
+    beefyFees,
+    strategistFees,
+}: {
+    event: { srcAddress: string; block: EvmBlock };
+    context: EvmOnEventContext;
+    callFees: bigint;
+    beefyFees: bigint;
+    strategistFees: bigint;
+}) => {
+    const chainId = toChainId(context.chain.id);
+    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategy = await getClassicVaultStrategy(context, chainId, strategyAddress);
+    if (!strategy) return;
+
+    const classicVault = await context.ClassicVault.get(strategy.classicVault_id);
+    if (!classicVault) return;
+    const classic = await getClassic(context, chainId, classicVault.address);
+    if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
+
+    const tokenContext = await loadClassicTokens({ context, classic });
+    await refreshClassicFees({
+        context,
+        classic,
+        callFees: interpretAsDecimal(callFees, tokenContext.underlyingToken.decimals),
+        beefyFees: interpretAsDecimal(beefyFees, tokenContext.underlyingToken.decimals),
+        strategistFees: interpretAsDecimal(strategistFees, tokenContext.underlyingToken.decimals),
+        timestamp: event.block.timestamp,
+    });
+};
+
+const handleClassicStrategyPauseChange = async ({
+    event,
+    context,
+    pausableStatus,
+}: {
+    event: { srcAddress: string };
+    context: EvmOnEventContext;
+    pausableStatus: 'RUNNING' | 'PAUSED';
+}) => {
+    const chainId = toChainId(context.chain.id);
+    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategy = await getClassicVaultStrategy(context, chainId, strategyAddress);
+    if (!strategy) return;
+
+    context.ClassicVaultStrategy.set({
+        ...strategy,
+        pausableStatus,
+    });
+
+    const classicVault = await context.ClassicVault.get(strategy.classicVault_id);
+    if (!classicVault) return;
+    const classic = await getClassic(context, chainId, classicVault.address);
+    if (!classic) return;
+
+    await setClassicPausableStatus({ context, classic, pausableStatus });
+};
 
 const initializeClassicStrategy = async ({
     context,
@@ -43,6 +229,7 @@ const initializeClassicStrategy = async ({
     const { vaultAddress } = await context.effect(getClassicStrategyVault, {
         strategyAddress,
         chainId,
+        blockNumber: initializedBlock.number,
     });
 
     if (vaultAddress === ADDRESS_ZERO) {

@@ -36,6 +36,7 @@ export const createClassicVault = async ({
         address: vaultAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
+        classic_id: undefined,
         initializableStatus: 'INITIALIZED',
         initializedBlock: BigInt(initializedBlock.number),
         initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
@@ -88,6 +89,7 @@ export const createClassicVaultStrategy = async ({
         address: strategyAddress,
         classicVault_id: classicVault.id,
         initializableStatus: 'INITIALIZED',
+        pausableStatus: 'RUNNING',
         initializedBlock: BigInt(initializedBlock.number),
         initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };

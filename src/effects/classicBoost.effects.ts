@@ -4,6 +4,7 @@ import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { classicBoostAbi } from './abis/beefy/classic/ClassicBoost';
 
 export const getClassicBoostTokens = createEffect(
     {
@@ -14,7 +15,8 @@ export const getClassicBoostTokens = createEffect(
         },
         output: {
             shareTokenAddress: hexSchema,
-            underlyingTokenAddress: hexSchema,
+            stakedTokenAddress: hexSchema,
+            rewardTokenAddress: hexSchema,
             blacklistStatus: blacklistStatus,
         },
         rateLimit: false,
@@ -26,21 +28,19 @@ export const getClassicBoostTokens = createEffect(
 
         context.log.debug('Fetching ClassicBoost tokens', { boostAddress, chainId });
 
-        const [underlyingTokenResult] = await client.multicall({
+        const [underlyingTokenResult, rewardTokenResult] = await client.multicall({
             allowFailure: true,
             contracts: [
                 {
                     address: boostAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'stakedToken',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: classicBoostAbi,
                     functionName: 'stakedToken',
+                    args: [],
+                },
+                {
+                    address: boostAddress as `0x${string}`,
+                    abi: classicBoostAbi,
+                    functionName: 'rewardToken',
                     args: [],
                 },
             ],
@@ -53,26 +53,35 @@ export const getClassicBoostTokens = createEffect(
             context.log.error('ClassicBoost stakedToken call failed', { boostAddress, chainId });
             return {
                 shareTokenAddress,
-                underlyingTokenAddress: ADDRESS_ZERO,
+                stakedTokenAddress: ADDRESS_ZERO,
+                rewardTokenAddress: ADDRESS_ZERO,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
-        const underlyingTokenAddress = underlyingTokenResult.result;
+        const stakedTokenAddress = underlyingTokenResult.result;
+        const rewardTokenAddress = rewardTokenResult.status === 'success' ? rewardTokenResult.result : ADDRESS_ZERO;
 
-        context.log.info('ClassicBoost data fetched', { boostAddress, shareTokenAddress, underlyingTokenAddress });
+        context.log.info('ClassicBoost data fetched', {
+            boostAddress,
+            shareTokenAddress,
+            stakedTokenAddress,
+            rewardTokenAddress,
+        });
 
-        if (underlyingTokenAddress === ADDRESS_ZERO) {
+        if (stakedTokenAddress === ADDRESS_ZERO) {
             return {
                 shareTokenAddress,
-                underlyingTokenAddress,
+                stakedTokenAddress,
+                rewardTokenAddress,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         return {
             shareTokenAddress,
-            underlyingTokenAddress,
+            stakedTokenAddress,
+            rewardTokenAddress,
             blacklistStatus: 'ok' as const,
         };
     }

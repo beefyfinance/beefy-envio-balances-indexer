@@ -1,4 +1,4 @@
-import type { ClassicBoost, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
+import type { Classic, ClassicBoost, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
 import type { Hex } from 'viem';
 import { normalizeHex } from '../lib/hex';
 
@@ -17,6 +17,8 @@ export const createClassicBoost = async ({
     boostAddress,
     shareToken,
     underlyingToken,
+    rewardToken,
+    classic,
     initializedBlock,
 }: {
     context: EvmOnEventContext;
@@ -24,6 +26,8 @@ export const createClassicBoost = async ({
     boostAddress: Hex;
     shareToken: Token;
     underlyingToken: Token;
+    rewardToken: Token;
+    classic?: Classic;
     initializedBlock: EvmBlock;
 }): Promise<ClassicBoost> => {
     const id = classicBoostId({ chainId, boostAddress });
@@ -34,6 +38,8 @@ export const createClassicBoost = async ({
         address: boostAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
+        rewardToken_id: rewardToken.id,
+        classic_id: classic?.id,
         initializableStatus: 'INITIALIZED',
         initializedBlock: BigInt(initializedBlock.number),
         initializedTimestamp: new Date(initializedBlock.timestamp * 1000),

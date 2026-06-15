@@ -4,6 +4,7 @@ import { chainIdSchema } from '../lib/chain';
 import { ADDRESS_ZERO } from '../lib/decimal';
 import { hexSchema } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { rewardPoolAbi } from './abis/beefy/common/RewardPool';
 
 export const getRewardPoolTokens = createEffect(
     {
@@ -31,15 +32,7 @@ export const getRewardPoolTokens = createEffect(
             contracts: [
                 {
                     address: rewardPoolAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'stakedToken',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    abi: rewardPoolAbi,
                     functionName: 'stakedToken',
                     args: [],
                 },
