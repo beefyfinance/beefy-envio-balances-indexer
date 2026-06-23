@@ -29,7 +29,7 @@ export const getClassicVaultTokens = createEffect(
         const staticVault = staticVaultsMap[chainId]?.[normalizeHex(vaultAddress)];
         if (staticVault) {
             return {
-                shareTokenAddress: staticVault.underlyingTokenAddress,
+                shareTokenAddress: vaultAddress,
                 underlyingTokenAddress: staticVault.underlyingTokenAddress,
                 strategyAddress: staticVault.strategyAddress,
                 blacklistStatus: 'ok' as const,

@@ -4,8 +4,8 @@ import type { Hex } from 'viem';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { fetchClmState, parseFetchedClmState } from '../effects/clm.effects';
 import { getRewardPoolTokens } from '../effects/rewardPool.effects';
-import { addClassicRewardToken, getClassic, linkClassicRewardPool } from '../entities/classic.entity';
-import { addClmRewardToken, getClm, linkClmRewardPool } from '../entities/clm.entity';
+import { addClassicRewardToken, getClassic } from '../entities/classic.entity';
+import { addClmRewardToken, getClm } from '../entities/clm.entity';
 import { createRewardPool, getRewardPool } from '../entities/rewardPool.entity';
 import { createRewardPoolRewardedEvent } from '../entities/rewardPoolRewarded.event';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
@@ -19,6 +19,7 @@ import { handleClmRewardPoolRewardPaid, handleClmRewardPoolTransfer } from '../l
 import { buildClmFetchInput, loadClmTokens } from '../lib/clm/tokens';
 import { interpretAsDecimal } from '../lib/decimal';
 import { normalizeHex } from '../lib/hex';
+import { maybeLinkRewardPoolProducts } from '../lib/rewardPool/link';
 import { handleTokenTransfer } from '../lib/token';
 
 indexer.onEvent({ contract: 'RewardPool', event: 'Initialized' }, async ({ event, context }) => {
@@ -31,35 +32,9 @@ indexer.onEvent({ contract: 'RewardPool', event: 'Initialized' }, async ({ event
     const rewardPool = await initializeRewardPool({ context, chainId, rewardPoolAddress, initializedBlock });
     if (!rewardPool) return;
 
-    const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
-    const isClmPool = await isClmManagerRewardPool({
-        context,
-        chainId,
-        stakedTokenAddress: normalizeHex(underlyingToken.address),
-    });
-    if (isClmPool) {
-        const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
-        if (clm) {
-            const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
-            await linkClmRewardPool({ context, clm, rewardPoolShareToken: shareToken });
-        }
-    } else {
-        const isClassicPool = await isClassicVaultStakedToken({
-            context,
-            chainId,
-            stakedTokenAddress: normalizeHex(underlyingToken.address),
-        });
-        if (isClassicPool) {
-            const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
-            if (classic) {
-                const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
-                await linkClassicRewardPool({ context, classic, rewardPoolShareToken: shareToken });
-                context.RewardPool.set({ ...rewardPool, classic_id: classic.id });
-            }
-        }
-    }
+    await maybeLinkRewardPoolProducts({ context, chainId, rewardPool });
 
-    context.log.info('ClassicRewardPool initialized successfully', { rewardPoolAddress });
+    context.log.info('RewardPool initialized successfully', { rewardPoolAddress });
 });
 
 indexer.onEvent({ contract: 'RewardPool', event: 'Transfer' }, async ({ event, context }) => {
@@ -69,13 +44,15 @@ indexer.onEvent({ contract: 'RewardPool', event: 'Transfer' }, async ({ event, c
     const rewardPoolAddress = normalizeHex(event.srcAddress);
 
     // Ensure that the reward pool is initialized first
-    const rewardPool = await initializeRewardPool({
+    let rewardPool = await initializeRewardPool({
         context,
         chainId,
         rewardPoolAddress,
         initializedBlock: event.block,
     });
     if (!rewardPool) return;
+
+    rewardPool = await maybeLinkRewardPoolProducts({ context, chainId, rewardPool });
 
     const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
 
@@ -139,10 +116,14 @@ indexer.onEvent({ contract: 'RewardPool', event: 'NotifyReward' }, async ({ even
     });
     if (!rewardPool) return;
 
-    const [shareToken, rewardToken] = await Promise.all([
-        getTokenOrThrow({ context, id: rewardPool.shareToken_id }),
-        getTokenOrThrow({ context, id: rewardPool.underlyingToken_id }),
-    ]);
+    const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
+    const rewardToken = await getOrCreateToken({
+        context,
+        chainId,
+        tokenAddress: normalizeHex(event.params.reward),
+        virtual: false,
+    });
+    if (!rewardToken) return;
 
     await createRewardPoolRewardedEvent({
         context,

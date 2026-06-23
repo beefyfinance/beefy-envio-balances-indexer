@@ -72,28 +72,27 @@ const refreshClmSnapshotsOnTick = async ({
         return;
     }
 
-    const fetchInputs = await Promise.all(
+    const loaded = await Promise.all(
         clms.map(async (clm) => {
             const tokens = await loadClmTokens({ context, clm });
-            return buildClmFetchInput({ clm, tokens, blockNumber });
+            return { clm, tokens, fetchInput: buildClmFetchInput({ clm, tokens, blockNumber }) };
         })
     );
 
-    const { states } = await context.effect(fetchClmStates, { requests: fetchInputs });
+    const { states } = await context.effect(fetchClmStates, { requests: loaded.map((entry) => entry.fetchInput) });
 
-    for (let i = 0; i < clms.length; i++) {
-        const clm = clms[i];
+    for (let i = 0; i < loaded.length; i++) {
+        const entry = loaded[i];
         const rawState = states[i];
-        if (!clm || !rawState || !isClmInitialized(clm)) {
+        if (!entry || !rawState || !isClmInitialized(entry.clm)) {
             continue;
         }
 
-        const tokenContext = await loadClmTokens({ context, clm });
-        const state = parseFetchedClmState(rawState, tokenContext);
+        const state = parseFetchedClmState(rawState, entry.tokens);
 
         await refreshClmSnapshot({
             context,
-            clm,
+            clm: entry.clm,
             state,
             timestamp,
         });
@@ -120,28 +119,31 @@ const refreshClassicSnapshotsOnTick = async ({
         return;
     }
 
-    const fetchInputs = await Promise.all(
+    const loaded = await Promise.all(
         classics.map(async (classic) => {
             const tokens = await loadClassicTokens({ context, classic });
-            return buildClassicFetchInput({ context, chainId, classic, tokens, blockNumber });
+            return {
+                classic,
+                tokens,
+                fetchInput: await buildClassicFetchInput({ context, chainId, classic, tokens, blockNumber }),
+            };
         })
     );
 
-    const { states } = await context.effect(fetchClassicStates, { requests: fetchInputs });
+    const { states } = await context.effect(fetchClassicStates, { requests: loaded.map((entry) => entry.fetchInput) });
 
-    for (let i = 0; i < classics.length; i++) {
-        const classic = classics[i];
+    for (let i = 0; i < loaded.length; i++) {
+        const entry = loaded[i];
         const rawState = states[i];
-        if (!classic || !rawState || !isClassicInitialized(classic)) {
+        if (!entry || !rawState || !isClassicInitialized(entry.classic)) {
             continue;
         }
 
-        const tokenContext = await loadClassicTokens({ context, classic });
-        const state = parseFetchedClassicState(rawState, tokenContext);
+        const state = parseFetchedClassicState(rawState, entry.tokens);
 
         await refreshClassicSnapshot({
             context,
-            classic,
+            classic: entry.classic,
             state,
             timestamp,
         });

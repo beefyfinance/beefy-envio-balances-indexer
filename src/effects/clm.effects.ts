@@ -11,6 +11,7 @@ import { fetchTokenSchema, type ToBigDecimal } from '../lib/schema';
 import { getViemClient } from '../lib/viem';
 import { clmManagerAbi } from './abis/beefy/clm/ClmManager';
 import { clmStrategyAbi } from './abis/beefy/clm/ClmStrategy';
+import { ierc20Abi } from './abis/IERC20/IERC20';
 import {
     buildBeefyOracleFreshPriceCalls,
     buildBeefySwapperToNativeCalls,
@@ -173,7 +174,7 @@ const fetchClmStateRaw = async ({
 
     const rewardPoolCalls = R.map(rewardPoolTokenAddresses, (address) => ({
         address: address as `0x${string}`,
-        abi: clmManagerAbi,
+        abi: ierc20Abi,
         functionName: 'totalSupply' as const,
     }));
 

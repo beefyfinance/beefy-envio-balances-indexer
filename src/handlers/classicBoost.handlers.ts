@@ -9,7 +9,7 @@ import { createRewardPoolRewardedEvent } from '../entities/rewardPoolRewarded.ev
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { toChainId } from '../lib/chain';
-import { isClassicVaultStakedToken, linkClassicBoost } from '../lib/classic/init';
+import { isClassicVaultStakedToken, linkClassicBoost, tryLinkClassicBoost } from '../lib/classic/init';
 import {
     handleClassicBoostRewardPaid,
     handleClassicBoostStake,
@@ -58,8 +58,9 @@ indexer.onEvent({ contract: 'ClassicBoost', event: 'Staked' }, async ({ event, c
     // Ensure that the boost virtual token is created first
     // otherwise, handleTokenTransfer will try and create it and fail because
     // it's not aware it is being virtual
-    const boost = await initializeBoost({ context, chainId, boostAddress, initializedBlock });
+    let boost = await initializeBoost({ context, chainId, boostAddress, initializedBlock });
     if (!boost) return;
+    boost = await tryLinkClassicBoost({ context, chainId, boost });
 
     const shareToken = await getTokenOrThrow({ context, id: boost.shareToken_id });
 
@@ -99,13 +100,14 @@ indexer.onEvent({ contract: 'ClassicBoost', event: 'Withdrawn' }, async ({ event
     const chainId = toChainId(context.chain.id);
     const boostAddress = normalizeHex(event.srcAddress);
 
-    const boost = await initializeBoost({
+    let boost = await initializeBoost({
         context,
         chainId,
         boostAddress,
         initializedBlock: event.block,
     });
     if (!boost) return;
+    boost = await tryLinkClassicBoost({ context, chainId, boost });
 
     const shareToken = await getTokenOrThrow({ context, id: boost.shareToken_id });
 
@@ -180,13 +182,15 @@ indexer.onEvent({ contract: 'ClassicBoost', event: 'RewardPaid' }, async ({ even
     const chainId = toChainId(context.chain.id);
     const boostAddress = normalizeHex(event.srcAddress);
 
-    const boost = await initializeBoost({
+    let boost = await initializeBoost({
         context,
         chainId,
         boostAddress,
         initializedBlock: event.block,
     });
-    if (!boost?.classic_id) return;
+    if (!boost) return;
+    boost = await tryLinkClassicBoost({ context, chainId, boost });
+    if (!boost.classic_id) return;
 
     const classic = await context.Classic.get(boost.classic_id);
     if (!classic || classic.initializableStatus !== 'INITIALIZED') return;

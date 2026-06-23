@@ -8,7 +8,7 @@ import { createErc4626Adapter, getErc4626Adapter } from '../entities/classicErc4
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { toChainId } from '../lib/chain';
-import { isClassicVaultStakedToken } from '../lib/classic/init';
+import { isClassicVaultStakedToken, tryLinkClassicErc4626Adapter } from '../lib/classic/init';
 import { handleClassicErc4626AdapterTransfer } from '../lib/classic/position';
 import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens';
 import { interpretAsDecimal } from '../lib/decimal';
@@ -49,13 +49,14 @@ indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Transfer' }, async ({ even
     const chainId = toChainId(context.chain.id);
     const adapterAddress = normalizeHex(event.srcAddress);
 
-    const adapter = await initializeErc4626Adapter({
+    let adapter = await initializeErc4626Adapter({
         context,
         chainId,
         adapterAddress,
         initializedBlock: event.block,
     });
     if (!adapter) return;
+    adapter = await tryLinkClassicErc4626Adapter({ context, chainId, adapter });
 
     const shareToken = await getTokenOrThrow({ context, id: adapter.shareToken_id });
 

@@ -87,11 +87,15 @@ indexer.onEvent({ contract: 'ClmStrategy', event: 'ClaimedRewards' }, async ({ e
     const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
     if (!strategy) return;
 
-    const clm = await getClmOrThrow(context, strategy.clmManager_id);
-    const collectedOutputAmounts = clm.outputTokensOrder.map(() => 0n);
-    if (clm.outputTokensOrder.length > 0) {
-        collectedOutputAmounts[0] = event.params.fees;
-    }
+    const clm = await getClmForStrategy({ context, strategy });
+    const initData = await context.effect(getClmStrategyInitData, {
+        strategyAddress: normalizeHex(strategy.address),
+        chainId,
+        blockNumber: event.block.number,
+    });
+    const collectedOutputAmounts = clm.outputTokensOrder.map((address) =>
+        normalizeHex(address) === normalizeHex(initData.outputTokenAddress) ? event.params.fees : 0n
+    );
 
     await handleClmCollection({
         context,
@@ -256,7 +260,9 @@ const handleClmHarvest = async ({
         state,
         compoundedAmount0: interpretAsDecimal(compoundedAmount0, tokenContext.underlyingToken0.decimals),
         compoundedAmount1: interpretAsDecimal(compoundedAmount1, tokenContext.underlyingToken1.decimals),
-        collectedOutputAmounts: collectedOutputAmounts.map((amount) => interpretAsDecimal(amount, 18)),
+        collectedOutputAmounts: collectedOutputAmounts.map((amount, index) =>
+            interpretAsDecimal(amount, tokenContext.outputTokens[index]?.decimals ?? 18)
+        ),
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
@@ -313,7 +319,9 @@ const handleClmCollection = async ({
         state,
         collectedAmount0: interpretAsDecimal(collectedAmount0, tokenContext.underlyingToken0.decimals),
         collectedAmount1: interpretAsDecimal(collectedAmount1, tokenContext.underlyingToken1.decimals),
-        collectedOutputAmounts: collectedOutputAmounts.map((amount) => interpretAsDecimal(amount, 18)),
+        collectedOutputAmounts: collectedOutputAmounts.map((amount, index) =>
+            interpretAsDecimal(amount, tokenContext.outputTokens[index]?.decimals ?? 18)
+        ),
         event: {
             block: event.block,
             trxIndex: event.transaction.transactionIndex,

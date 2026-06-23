@@ -417,24 +417,16 @@ describe('Token Handlers', () => {
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
                           "underlyingAmount": "1081841.858326645878430335",
-                          "underlyingBreakdownToNativePrices": [
-                            "0",
-                          ],
-                          "underlyingBreakdownToken_ids": [
-                            "56-0x111111111117dc0aa78b770fa6a738034120c302",
-                          ],
-                          "underlyingBreakdownTokensOrder": [
-                            "0x111111111117dc0aa78b770fa6a738034120c302",
-                          ],
+                          "underlyingBreakdownToNativePrices": [],
+                          "underlyingBreakdownToken_ids": [],
+                          "underlyingBreakdownTokensOrder": [],
                           "underlyingPlatform": "UNKNOWN",
                           "underlyingToNativePrice": "0",
                           "underlyingToken_id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
                           "vaultTokenTotalSupply": "945591.987127200030222661",
                           "vaultToken_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "vaultUnderlyingBalance": "1081841.858326645878430335",
-                          "vaultUnderlyingBreakdownBalances": [
-                            "1081841.858326645878430335",
-                          ],
+                          "vaultUnderlyingBreakdownBalances": [],
                           "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
                         },
                       ],
@@ -458,15 +450,11 @@ describe('Token Handlers', () => {
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
                           "underlyingAmount": "1081841.858326645878430335",
-                          "underlyingBreakdownToNativePrices": [
-                            "0",
-                          ],
+                          "underlyingBreakdownToNativePrices": [],
                           "underlyingToNativePrice": "0",
                           "vaultTokenTotalSupply": "945591.987127200030222661",
                           "vaultUnderlyingBalance": "1081841.858326645878430335",
-                          "vaultUnderlyingBreakdownBalances": [
-                            "1081841.858326645878430335",
-                          ],
+                          "vaultUnderlyingBreakdownBalances": [],
                           "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
                         },
                         {
@@ -486,15 +474,11 @@ describe('Token Handlers', () => {
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
                           "underlyingAmount": "1081841.858326645878430335",
-                          "underlyingBreakdownToNativePrices": [
-                            "0",
-                          ],
+                          "underlyingBreakdownToNativePrices": [],
                           "underlyingToNativePrice": "0",
                           "vaultTokenTotalSupply": "945591.987127200030222661",
                           "vaultUnderlyingBalance": "1081841.858326645878430335",
-                          "vaultUnderlyingBreakdownBalances": [
-                            "1081841.858326645878430335",
-                          ],
+                          "vaultUnderlyingBreakdownBalances": [],
                           "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
                         },
                         {
@@ -514,15 +498,11 @@ describe('Token Handlers', () => {
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
                           "underlyingAmount": "1081841.858326645878430335",
-                          "underlyingBreakdownToNativePrices": [
-                            "0",
-                          ],
+                          "underlyingBreakdownToNativePrices": [],
                           "underlyingToNativePrice": "0",
                           "vaultTokenTotalSupply": "945591.987127200030222661",
                           "vaultUnderlyingBalance": "1081841.858326645878430335",
-                          "vaultUnderlyingBreakdownBalances": [
-                            "1081841.858326645878430335",
-                          ],
+                          "vaultUnderlyingBreakdownBalances": [],
                           "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
                         },
                       ],

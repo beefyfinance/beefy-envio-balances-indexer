@@ -1,6 +1,7 @@
 import type {
     Classic,
     ClassicBoost,
+    ClassicErc4626Adapter,
     ClassicVault,
     ClassicVaultStrategy,
     EvmChainId,
@@ -20,7 +21,7 @@ import {
     linkClassicRewardPool,
     linkClassicVaultStrategy,
 } from '../../entities/classic.entity';
-import { getOrCreateToken } from '../../entities/token.entity';
+import { getOrCreateToken, getTokenOrThrow } from '../../entities/token.entity';
 import { normalizeHex } from '../hex';
 import { refreshClassic } from './refresh';
 import { buildClassicFetchInput, loadClassicTokens } from './tokens';
@@ -209,4 +210,75 @@ export const linkClassicErc4626AdapterToClassic = async ({
 }) => {
     await linkClassicErc4626Adapter({ context, classic, adapterShareToken });
     return (await getClassic(context, chainId, classic.address)) as Classic;
+};
+
+export const tryLinkClassicBoost = async ({
+    context,
+    chainId,
+    boost,
+}: {
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
+    boost: ClassicBoost;
+}): Promise<ClassicBoost> => {
+    if (boost.classic_id) {
+        return boost;
+    }
+
+    const stakedToken = await getTokenOrThrow({ context, id: boost.underlyingToken_id });
+    if (
+        !(await isClassicVaultStakedToken({
+            context,
+            chainId,
+            stakedTokenAddress: normalizeHex(stakedToken.address),
+        }))
+    ) {
+        return boost;
+    }
+
+    const classic = await getClassic(context, chainId, stakedToken.address);
+    if (!classic) {
+        return boost;
+    }
+
+    const rewardToken = await getTokenOrThrow({ context, id: boost.rewardToken_id });
+    await linkClassicBoost({ context, classic, boost, rewardToken });
+
+    return (await context.ClassicBoost.get(boost.id)) ?? boost;
+};
+
+export const tryLinkClassicErc4626Adapter = async ({
+    context,
+    chainId,
+    adapter,
+}: {
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
+    adapter: ClassicErc4626Adapter;
+}): Promise<ClassicErc4626Adapter> => {
+    if (adapter.classic_id) {
+        return adapter;
+    }
+
+    const underlyingToken = await getTokenOrThrow({ context, id: adapter.underlyingToken_id });
+    if (
+        !(await isClassicVaultStakedToken({
+            context,
+            chainId,
+            stakedTokenAddress: normalizeHex(underlyingToken.address),
+        }))
+    ) {
+        return adapter;
+    }
+
+    const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
+    if (!classic) {
+        return adapter;
+    }
+
+    const shareToken = await getTokenOrThrow({ context, id: adapter.shareToken_id });
+    await linkClassicErc4626Adapter({ context, classic, adapterShareToken: shareToken });
+    context.ClassicErc4626Adapter.set({ ...adapter, classic_id: classic.id });
+
+    return (await context.ClassicErc4626Adapter.get(adapter.id)) ?? adapter;
 };

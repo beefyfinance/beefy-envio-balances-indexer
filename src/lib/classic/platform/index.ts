@@ -367,5 +367,9 @@ export const getVaultTokenBreakdown = async ({
         return [{ tokenAddress: underlyingTokenAddress, rawBalance: totalAssetsResult.result }];
     }
 
+    if (platform === PLATFORM_UNKNOWN) {
+        return [];
+    }
+
     return getVaultTokenBreakdownAave({ client, vaultAddress, underlyingTokenAddress, blockNumber });
 };

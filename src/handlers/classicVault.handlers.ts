@@ -2,10 +2,16 @@ import type { ClassicVault, EvmBlock, EvmChainId, EvmOnEventContext } from 'envi
 import { indexer } from 'envio';
 import type { Hex } from 'viem';
 import './clock.handlers';
+import { usesClassicStratHarvest1Abi } from '../config/classic/stratHarvest1';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { getClassicVaultTokens } from '../effects/classicVault.effects';
-import { getClassic } from '../entities/classic.entity';
-import { createClassicVault, getClassicVault } from '../entities/classicVault.entity';
+import { getClassic, linkClassicVaultStrategy } from '../entities/classic.entity';
+import {
+    createClassicVault,
+    createClassicVaultStrategy,
+    getClassicVault,
+    getClassicVaultStrategy,
+} from '../entities/classicVault.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { toChainId } from '../lib/chain';
@@ -42,6 +48,63 @@ indexer.onEvent({ contract: 'ClassicVault', event: 'Initialized' }, async ({ eve
     }
 
     context.log.info('ClassicVault initialized successfully', { vaultAddress });
+});
+
+indexer.contractRegister({ contract: 'ClassicVault', event: 'UpgradeStrat' }, async ({ event, context }) => {
+    const chainId = toChainId(context.chain.id);
+    const newStrategyAddress = normalizeHex(event.params.implementation);
+    context.chain.ClassicStrategy.add(newStrategyAddress);
+    if (usesClassicStratHarvest1Abi(chainId, newStrategyAddress)) {
+        context.chain.ClassicStrategyStratHarvest1.add(newStrategyAddress);
+    } else {
+        context.chain.ClassicStrategyStratHarvest0.add(newStrategyAddress);
+    }
+});
+
+indexer.onEvent({ contract: 'ClassicVault', event: 'UpgradeStrat' }, async ({ event, context }) => {
+    const chainId = toChainId(context.chain.id);
+    const vaultAddress = normalizeHex(event.srcAddress);
+    const newStrategyAddress = normalizeHex(event.params.implementation);
+
+    const vault = await getClassicVault(context, chainId, vaultAddress);
+    if (!vault) {
+        context.log.warn('ClassicVault not found for UpgradeStrat', { vaultAddress, chainId });
+        return;
+    }
+
+    const classic = await getClassic(context, chainId, vaultAddress);
+    if (!classic) {
+        context.log.warn('Classic aggregate not found for UpgradeStrat', { vaultAddress, chainId });
+        return;
+    }
+
+    const oldStrategyId = classic.classicVaultStrategy_id;
+
+    let newStrategy = await getClassicVaultStrategy(context, chainId, newStrategyAddress);
+    if (!newStrategy) {
+        newStrategy = await createClassicVaultStrategy({
+            context,
+            chainId,
+            strategyAddress: newStrategyAddress,
+            classicVault: vault,
+            initializedBlock: event.block,
+        });
+    }
+
+    await linkClassicVaultStrategy({ context, classic, strategy: newStrategy });
+
+    if (oldStrategyId && oldStrategyId !== newStrategy.id) {
+        const oldStrategy = await context.ClassicVaultStrategy.get(oldStrategyId);
+        if (oldStrategy) {
+            context.ClassicVaultStrategy.set({
+                ...oldStrategy,
+                initializableStatus: 'INITIALIZING',
+                pausableStatus: 'PAUSED',
+            });
+        }
+    }
+
+    context.log.info('ClassicVault strategy upgraded', { vaultAddress, newStrategyAddress, chainId });
 });
 
 indexer.onEvent({ contract: 'ClassicVault', event: 'Transfer' }, async ({ event, context }) => {
