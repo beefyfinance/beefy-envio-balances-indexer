@@ -289,7 +289,7 @@ type ClassicErc4626Adapter {
 """
 API-facing aggregate for a Beefy Classic vault product.
 """
-type Classic {
+type Classic @index(fields: ["chainId", "initializableStatus", "vaultTokenTotalSupply"]) {
   "chain - vault address"
   id: ID!
 
@@ -636,7 +636,7 @@ type ClmStrategy {
 """
 API-facing aggregate for a Beefy CLM product.
 """
-type Clm {
+type Clm @index(fields: ["chainId", "initializableStatus", "managerTotalSupply"]) {
   "chain - manager address"
   id: ID!
 

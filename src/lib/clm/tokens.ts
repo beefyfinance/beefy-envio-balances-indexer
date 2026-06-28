@@ -23,8 +23,8 @@ export const loadClmTokens = async ({
         getTokenOrThrow({ context, id: clm.underlyingToken0_id }),
         getTokenOrThrow({ context, id: clm.underlyingToken1_id }),
         ...clm.rewardPoolToken_ids.map((id) => getTokenOrThrow({ context, id })),
-        ...clm.outputToken_ids.map((id) => getTokenOrThrow({ context, id: id })),
-        ...clm.rewardToken_ids.map((id) => getTokenOrThrow({ context, id: id })),
+        ...clm.outputToken_ids.map((id) => getTokenOrThrow({ context, id })),
+        ...clm.rewardToken_ids.map((id) => getTokenOrThrow({ context, id })),
     ]);
 
     const rewardPoolCount = clm.rewardPoolToken_ids.length;

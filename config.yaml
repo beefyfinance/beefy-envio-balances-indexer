@@ -5,6 +5,14 @@ address_format: lowercase
 raw_events: false
 save_full_history: false
 
+storage:
+  postgres:
+    default: true
+    column_name_format: snake_case
+  clickhouse:
+    default: false # TODO: enable when clickhouse is ready
+    column_name_format: snake_case
+
 contracts:
   # factories
   - name: ClassicVaultFactory
