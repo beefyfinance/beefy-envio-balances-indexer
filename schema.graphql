@@ -304,7 +304,7 @@ type Classic @index(fields: ["chainId", "initializableStatus", "vaultTokenTotalS
   classicVaultStrategy: ClassicVaultStrategy
 
   "Initialized status"
-  initializableStatus: InitializableStatus!
+  initializableStatus: InitializableStatus! @index
   "Pause status"
   pausableStatus: PausableStatus!
   "The first block the classic was active on"
@@ -315,7 +315,7 @@ type Classic @index(fields: ["chainId", "initializableStatus", "vaultTokenTotalS
   "The vault share token"
   vaultToken: Token!
   "Total supply of vault share token"
-  vaultTokenTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
+  vaultTokenTotalSupply: BigDecimal! @index @config(precision: 100, scale: 24)
   "The underlying token"
   underlyingToken: Token!
   "Underlying platform identifier"
@@ -651,7 +651,7 @@ type Clm @index(fields: ["chainId", "initializableStatus", "managerTotalSupply"]
   clmStrategy: ClmStrategy
 
   "Initialized status"
-  initializableStatus: InitializableStatus!
+  initializableStatus: InitializableStatus! @index
   "Pause status"
   pausableStatus: PausableStatus!
   "The first block the CLM was active on"
@@ -665,7 +665,7 @@ type Clm @index(fields: ["chainId", "initializableStatus", "managerTotalSupply"]
   "The manager share token"
   managerToken: Token!
   "Total supply of manager share token"
-  managerTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
+  managerTotalSupply: BigDecimal! @index @config(precision: 100, scale: 24)
   "The underlying tokens"
   underlyingToken0: Token!
   underlyingToken1: Token!
