@@ -2,7 +2,7 @@ import type { ClockTick, EvmChainId, EvmOnEventContext } from 'envio';
 import { getIntervalFromTimestamp } from '../time/interval';
 import { clockTickId } from './clm';
 
-export const TICK_VAULT_CHUNK_SIZE = 10;
+export const TICK_VAULT_CHUNK_SIZE = 5;
 
 export const getOrCreateClockTick = async ({
     context,

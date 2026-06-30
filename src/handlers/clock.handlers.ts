@@ -1,8 +1,7 @@
 import { indexer } from 'envio';
-import * as R from 'remeda';
 import { getBlockTimestamp } from '../effects/block.effects';
-import { fetchClassicStates, parseFetchedClassicState } from '../effects/classic.effects';
-import { fetchClmStates, parseFetchedClmState } from '../effects/clm.effects';
+import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
+import { fetchClmState, parseFetchedClmState } from '../effects/clm.effects';
 import { isClassicInitialized } from '../entities/classic.entity';
 import { isClmInitialized } from '../entities/clm.entity';
 import { toChainId } from '../lib/chain';
@@ -11,7 +10,7 @@ import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens
 import { refreshClmSnapshot } from '../lib/clm/refresh';
 import { buildClmFetchInput, loadClmTokens } from '../lib/clm/tokens';
 import { BIG_ZERO } from '../lib/decimal';
-import { getOrCreateClockTick, TICK_VAULT_CHUNK_SIZE } from '../lib/snapshot/tick';
+import { getOrCreateClockTick } from '../lib/snapshot/tick';
 import { getApproxBlocksPerHour, HOUR } from '../lib/time/interval';
 
 // Envio's test indexer replays onBlock handlers from chain start to each simulated
@@ -71,34 +70,15 @@ const refreshClmSnapshotsOnTick = async ({
         managerTotalSupply: { _gt: BIG_ZERO },
     });
 
-    for (const clmChunk of R.chunk(clms, TICK_VAULT_CHUNK_SIZE)) {
-        const resolved = await Promise.all(
-            clmChunk.map(async (clm) => {
-                const tokens = await loadClmTokens({ context, clm });
-                return { clm, tokens, fetchInput: buildClmFetchInput({ clm, tokens, blockNumber }) };
-            })
-        );
+    for (const clm of clms) {
+        if (!isClmInitialized(clm)) continue;
 
-        const { states } = await context.effect(fetchClmStates, {
-            requests: resolved.map((entry) => entry.fetchInput),
-        });
+        const tokens = await loadClmTokens({ context, clm });
+        const fetchInput = buildClmFetchInput({ clm, tokens, blockNumber });
+        const rawState = await context.effect(fetchClmState, fetchInput);
+        const state = parseFetchedClmState(rawState, tokens);
 
-        for (let i = 0; i < resolved.length; i++) {
-            const entry = resolved[i];
-            const rawState = states[i];
-            if (!entry || !rawState || !isClmInitialized(entry.clm)) {
-                continue;
-            }
-
-            const state = parseFetchedClmState(rawState, entry.tokens);
-
-            await refreshClmSnapshot({
-                context,
-                clm: entry.clm,
-                state,
-                timestamp,
-            });
-        }
+        await refreshClmSnapshot({ context, clm, state, timestamp });
     }
 };
 
@@ -119,37 +99,14 @@ const refreshClassicSnapshotsOnTick = async ({
         vaultTokenTotalSupply: { _gt: BIG_ZERO },
     });
 
-    for (const classicChunk of R.chunk(classics, TICK_VAULT_CHUNK_SIZE)) {
-        const resolved = await Promise.all(
-            classicChunk.map(async (classic) => {
-                const tokens = await loadClassicTokens({ context, classic });
-                return {
-                    classic,
-                    tokens,
-                    fetchInput: await buildClassicFetchInput({ context, chainId, classic, tokens, blockNumber }),
-                };
-            })
-        );
+    for (const classic of classics) {
+        if (!isClassicInitialized(classic)) continue;
 
-        const { states } = await context.effect(fetchClassicStates, {
-            requests: resolved.map((entry) => entry.fetchInput),
-        });
+        const tokens = await loadClassicTokens({ context, classic });
+        const fetchInput = await buildClassicFetchInput({ context, chainId, classic, tokens, blockNumber });
+        const rawState = await context.effect(fetchClassicState, fetchInput);
+        const state = parseFetchedClassicState(rawState, tokens);
 
-        for (let i = 0; i < resolved.length; i++) {
-            const entry = resolved[i];
-            const rawState = states[i];
-            if (!entry || !rawState || !isClassicInitialized(entry.classic)) {
-                continue;
-            }
-
-            const state = parseFetchedClassicState(rawState, entry.tokens);
-
-            await refreshClassicSnapshot({
-                context,
-                classic: entry.classic,
-                state,
-                timestamp,
-            });
-        }
+        await refreshClassicSnapshot({ context, classic, state, timestamp });
     }
 };

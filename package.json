@@ -7,7 +7,7 @@
     "build": "tsc --build",
     "watch": "tsc --watch",
     "codegen": "envio codegen",
-    "dev": "envio dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=12288' envio dev",
     "start": "envio start",
     "stop": "envio stop",
     "deploy": "git checkout prod && git merge origin/main --ff-only && git push && git checkout -",
