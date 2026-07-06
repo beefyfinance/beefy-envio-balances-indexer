@@ -1,4 +1,4 @@
-import { indexer } from 'envio';
+import { type EvmOnEventContext, indexer } from 'envio';
 import { getBlockTimestamp } from '../effects/block.effects';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { fetchClmState, parseFetchedClmState } from '../effects/clm.effects';
@@ -47,29 +47,40 @@ if (process.env.VITEST !== 'true') {
                 return;
             }
 
-            await refreshClmSnapshotsOnTick({ context, chainId, timestamp, blockNumber: block.number });
-            await refreshClassicSnapshotsOnTick({ context, chainId, timestamp, blockNumber: block.number });
+            const clms = await context.Clm.getWhere({
+                chainId: { _eq: chainId },
+                initializableStatus: { _eq: 'INITIALIZED' },
+                managerTotalSupply: { _gt: BIG_ZERO },
+            });
+            const classics = await context.Classic.getWhere({
+                chainId: { _eq: chainId },
+                initializableStatus: { _eq: 'INITIALIZED' },
+                vaultTokenTotalSupply: { _gt: BIG_ZERO },
+            });
+
+            await refreshClmSnapshotsOnTick({ context, timestamp, blockNumber: block.number, clms });
+            await refreshClassicSnapshotsOnTick({
+                context,
+                chainId,
+                timestamp,
+                blockNumber: block.number,
+                classics,
+            });
         }
     );
 }
 
 const refreshClmSnapshotsOnTick = async ({
     context,
-    chainId,
     timestamp,
     blockNumber,
+    clms,
 }: {
     context: Parameters<typeof refreshClmSnapshot>[0]['context'];
-    chainId: ReturnType<typeof toChainId>;
     timestamp: number;
     blockNumber: number;
+    clms: Awaited<ReturnType<EvmOnEventContext['Clm']['getWhere']>>;
 }) => {
-    const clms = await context.Clm.getWhere({
-        chainId: { _eq: chainId },
-        initializableStatus: { _eq: 'INITIALIZED' },
-        managerTotalSupply: { _gt: BIG_ZERO },
-    });
-
     for (const clm of clms) {
         if (!isClmInitialized(clm)) continue;
 
@@ -87,18 +98,14 @@ const refreshClassicSnapshotsOnTick = async ({
     chainId,
     timestamp,
     blockNumber,
+    classics,
 }: {
     context: Parameters<typeof refreshClassicSnapshot>[0]['context'];
     chainId: ReturnType<typeof toChainId>;
     timestamp: number;
     blockNumber: number;
+    classics: Awaited<ReturnType<EvmOnEventContext['Classic']['getWhere']>>;
 }) => {
-    const classics = await context.Classic.getWhere({
-        chainId: { _eq: chainId },
-        initializableStatus: { _eq: 'INITIALIZED' },
-        vaultTokenTotalSupply: { _gt: BIG_ZERO },
-    });
-
     for (const classic of classics) {
         if (!isClassicInitialized(classic)) continue;
 
