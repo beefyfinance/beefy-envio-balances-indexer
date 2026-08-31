@@ -24,7 +24,6 @@ export const getOrCreateClockTick = async ({
 
     const tick: ClockTick = {
         id,
-        chainId,
         period: BigInt(period),
         roundedTimestamp: new Date(roundedTimestamp * 1000),
         blockTimestamp: new Date(timestamp * 1000),

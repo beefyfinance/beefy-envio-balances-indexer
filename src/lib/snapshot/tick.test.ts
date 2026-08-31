@@ -39,7 +39,6 @@ describe('snapshot tick', () => {
 
             expect(isNew).toBe(true);
             expect(tick.id).toBe(id);
-            expect(tick.chainId).toBe(8453);
             expect(tick.period).toBe(BigInt(HOUR));
             expect(tick.roundedTimestamp).toEqual(new Date(rounded * 1000));
             expect(tick.blockTimestamp).toEqual(new Date(timestamp * 1000));
@@ -49,7 +48,6 @@ describe('snapshot tick', () => {
         it('Should return existing tick without overwriting', async () => {
             const existing = {
                 id,
-                chainId: 8453,
                 period: BigInt(HOUR),
                 roundedTimestamp: new Date(rounded * 1000),
                 blockTimestamp: new Date(timestamp * 1000),

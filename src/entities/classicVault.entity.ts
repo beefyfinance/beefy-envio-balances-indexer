@@ -32,7 +32,6 @@ export const createClassicVault = async ({
 
     const vault: ClassicVault = {
         id,
-        chainId,
         address: vaultAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
@@ -85,7 +84,6 @@ export const createClassicVaultStrategy = async ({
 
     const strategy: ClassicVaultStrategy = {
         id,
-        chainId,
         address: strategyAddress,
         classicVault_id: classicVault.id,
         initializableStatus: 'INITIALIZED',

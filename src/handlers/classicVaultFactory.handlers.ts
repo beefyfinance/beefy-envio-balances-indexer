@@ -3,7 +3,7 @@ import { detectClassicVaultOrStrategy } from '../effects/classicVaultFactory.eff
 import { isVaultBlacklisted } from '../lib/blacklist';
 
 indexer.contractRegister(
-    { contract: 'ClassicVaultFactory', event: 'VaultOrStrategyCreated' },
+    { contract: 'ClassicVaultFactory', event: 'VaultOrStrategyCreated', fields: { transaction: ['hash', 'input'] } },
     async ({ event, context }) => {
         const proxyAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
         if (isVaultBlacklisted(event.chainId, proxyAddress)) return;

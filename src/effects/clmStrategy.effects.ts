@@ -18,6 +18,7 @@ export const getClmStrategyManager = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { strategyAddress, chainId, blockNumber } = input;

@@ -1,5 +1,6 @@
 import type { EvmBlock } from 'envio';
 import type { Hex } from 'viem';
+import { FACTORIES, registerClassicStrategy } from './register';
 
 /** BSC chain id */
 export const CHAIN_BSC = 56 as const;
@@ -24,6 +25,12 @@ export const eventMeta = ({
 }) => ({
     block,
     transaction: { hash: trxHash, transactionIndex: trxIndex },
+    logIndex,
+});
+
+/** Block + log metadata without transaction fields (for events that don't select them). */
+export const eventBlockMeta = ({ logIndex, block }: { logIndex: number; block: EvmBlock }) => ({
+    block,
     logIndex,
 });
 
@@ -65,11 +72,17 @@ export const initBscClassicSim = ({
             srcAddress: VAULT_BSC,
             params: { version: 1n },
         },
+        registerClassicStrategy({
+            factory: FACTORIES[56].ClassicStrategyFactory,
+            proxy: STRATEGY_BSC,
+            block,
+            logIndex: 1,
+        }),
         {
             contract: 'ClassicStrategy' as const,
             event: 'Initialized' as const,
             block,
-            logIndex: 1,
+            logIndex: 2,
             srcAddress: STRATEGY_BSC,
             params: { version: 1n },
         },

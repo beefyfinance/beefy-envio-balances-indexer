@@ -38,73 +38,101 @@ indexer.onEvent({ contract: 'ClmStrategy', event: 'Initialized' }, async ({ even
     context.log.info('ClmStrategy initialized successfully', { strategyAddress });
 });
 
-indexer.onEvent({ contract: 'ClmStrategy', event: 'Harvest' }, async ({ event, context }) => {
-    await handleClmHarvest({
-        context,
-        event,
-        compoundedAmount0: event.params.fee0,
-        compoundedAmount1: event.params.fee1,
-        collectedOutputAmounts: [],
-    });
-});
+indexer.onEvent(
+    {
+        contract: 'ClmStrategy',
+        event: 'Harvest',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        await handleClmHarvest({
+            context,
+            event,
+            compoundedAmount0: event.params.fee0,
+            compoundedAmount1: event.params.fee1,
+            collectedOutputAmounts: [],
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'ClmStrategy', event: 'HarvestRewards' }, async ({ event, context }) => {
-    const chainId = toChainId(context.chain.id);
-    const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
-    if (!strategy) return;
+indexer.onEvent(
+    {
+        contract: 'ClmStrategy',
+        event: 'HarvestRewards',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        const chainId = toChainId(context.chain.id);
+        const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+        if (!strategy) return;
 
-    const clm = await getClmForStrategy({ context, strategy });
-    const initData = await context.effect(getClmStrategyInitData, {
-        strategyAddress: normalizeHex(strategy.address),
-        chainId,
-        blockNumber: event.block.number,
-    });
-    const collectedOutputAmounts = clm.outputTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(initData.outputTokenAddress) ? event.params.fees : 0n
-    );
+        const clm = await getClmForStrategy({ context, strategy });
+        const initData = await context.effect(getClmStrategyInitData, {
+            strategyAddress: normalizeHex(strategy.address),
+            chainId,
+            blockNumber: event.block.number,
+        });
+        const collectedOutputAmounts = clm.outputTokensOrder.map((address) =>
+            normalizeHex(address) === normalizeHex(initData.outputTokenAddress) ? event.params.fees : 0n
+        );
 
-    await handleClmHarvest({
-        context,
-        event,
-        compoundedAmount0: 0n,
-        compoundedAmount1: 0n,
-        collectedOutputAmounts,
-    });
-});
+        await handleClmHarvest({
+            context,
+            event,
+            compoundedAmount0: 0n,
+            compoundedAmount1: 0n,
+            collectedOutputAmounts,
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'ClmStrategy', event: 'ClaimedFees' }, async ({ event, context }) => {
-    await handleClmCollection({
-        context,
-        event,
-        collectedAmount0: event.params.feeAlt0 + event.params.feeMain0,
-        collectedAmount1: event.params.feeAlt1 + event.params.feeMain1,
-        collectedOutputAmounts: [],
-    });
-});
+indexer.onEvent(
+    {
+        contract: 'ClmStrategy',
+        event: 'ClaimedFees',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        await handleClmCollection({
+            context,
+            event,
+            collectedAmount0: event.params.feeAlt0 + event.params.feeMain0,
+            collectedAmount1: event.params.feeAlt1 + event.params.feeMain1,
+            collectedOutputAmounts: [],
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'ClmStrategy', event: 'ClaimedRewards' }, async ({ event, context }) => {
-    const chainId = toChainId(context.chain.id);
-    const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
-    if (!strategy) return;
+indexer.onEvent(
+    {
+        contract: 'ClmStrategy',
+        event: 'ClaimedRewards',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        const chainId = toChainId(context.chain.id);
+        const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+        if (!strategy) return;
 
-    const clm = await getClmForStrategy({ context, strategy });
-    const initData = await context.effect(getClmStrategyInitData, {
-        strategyAddress: normalizeHex(strategy.address),
-        chainId,
-        blockNumber: event.block.number,
-    });
-    const collectedOutputAmounts = clm.outputTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(initData.outputTokenAddress) ? event.params.fees : 0n
-    );
+        const clm = await getClmForStrategy({ context, strategy });
+        const initData = await context.effect(getClmStrategyInitData, {
+            strategyAddress: normalizeHex(strategy.address),
+            chainId,
+            blockNumber: event.block.number,
+        });
+        const collectedOutputAmounts = clm.outputTokensOrder.map((address) =>
+            normalizeHex(address) === normalizeHex(initData.outputTokenAddress) ? event.params.fees : 0n
+        );
 
-    await handleClmCollection({
-        context,
-        event,
-        collectedAmount0: 0n,
-        collectedAmount1: 0n,
-        collectedOutputAmounts,
-    });
-});
+        await handleClmCollection({
+            context,
+            event,
+            collectedAmount0: 0n,
+            collectedAmount1: 0n,
+            collectedOutputAmounts,
+        });
+    }
+);
 
 indexer.onEvent({ contract: 'ClmStrategy', event: 'ChargedFeesV2' }, async ({ event, context }) => {
     await handleClmChargedFees({
@@ -130,32 +158,39 @@ indexer.onEvent({ contract: 'ClmStrategy', event: 'ChargedFees' }, async ({ even
     });
 });
 
-indexer.onEvent({ contract: 'ClmStrategy', event: 'TVL' }, async ({ event, context }) => {
-    const chainId = toChainId(context.chain.id);
-    const strategyAddress = normalizeHex(event.srcAddress);
-    const strategy = await getClmStrategy(context, chainId, strategyAddress);
-    if (!strategy) return;
+indexer.onEvent(
+    {
+        contract: 'ClmStrategy',
+        event: 'TVL',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        const chainId = toChainId(context.chain.id);
+        const strategyAddress = normalizeHex(event.srcAddress);
+        const strategy = await getClmStrategy(context, chainId, strategyAddress);
+        if (!strategy) return;
 
-    const clm = await getClmOrThrow(context, strategy.clmManager_id);
-    if (!clm) return;
+        const clm = await getClmOrThrow(context, strategy.clmManager_id);
+        if (!clm) return;
 
-    const tokenContext = await loadClmTokens({ context, clm });
+        const tokenContext = await loadClmTokens({ context, clm });
 
-    await createClmStrategyTvlEvent({
-        context,
-        chainId,
-        clm,
-        strategy,
-        underlyingAmount0: interpretAsDecimal(event.params.bal0, tokenContext.underlyingToken0.decimals),
-        underlyingAmount1: interpretAsDecimal(event.params.bal1, tokenContext.underlyingToken1.decimals),
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await createClmStrategyTvlEvent({
+            context,
+            chainId,
+            clm,
+            strategy,
+            underlyingAmount0: interpretAsDecimal(event.params.bal0, tokenContext.underlyingToken0.decimals),
+            underlyingAmount1: interpretAsDecimal(event.params.bal1, tokenContext.underlyingToken1.decimals),
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
 indexer.onEvent({ contract: 'ClmStrategy', event: 'Paused' }, async ({ event, context }) => {
     await updateClmPauseStatus({ context, event, pausableStatus: 'PAUSED' });
@@ -248,7 +283,7 @@ const handleClmHarvest = async ({
     const tokenContext = await loadClmTokens({ context, clm });
     const rawState = await context.effect(
         fetchClmState,
-        buildClmFetchInput({ clm, tokens: tokenContext, blockNumber: event.block.number })
+        buildClmFetchInput({ clm, tokens: tokenContext, chainId, blockNumber: event.block.number })
     );
     const state = parseFetchedClmState(rawState, tokenContext);
 
@@ -307,7 +342,7 @@ const handleClmCollection = async ({
     const tokenContext = await loadClmTokens({ context, clm });
     const rawState = await context.effect(
         fetchClmState,
-        buildClmFetchInput({ clm, tokens: tokenContext, blockNumber: event.block.number })
+        buildClmFetchInput({ clm, tokens: tokenContext, chainId, blockNumber: event.block.number })
     );
     const state = parseFetchedClmState(rawState, tokenContext);
 

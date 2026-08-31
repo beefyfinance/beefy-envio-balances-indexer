@@ -21,6 +21,7 @@ export const getClmManagerTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { managerAddress, chainId } = input;

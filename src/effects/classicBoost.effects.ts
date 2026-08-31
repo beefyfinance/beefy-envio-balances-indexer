@@ -21,6 +21,7 @@ export const getClassicBoostTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { boostAddress, chainId } = input;

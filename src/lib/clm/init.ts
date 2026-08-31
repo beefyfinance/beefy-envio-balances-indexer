@@ -121,7 +121,7 @@ export const maybeFinalizeClm = async ({
     const tokenContext = await loadClmTokens({ context, clm: finalizedClm });
     const rawState = await context.effect(
         fetchClmState,
-        buildClmFetchInput({ clm: finalizedClm, tokens: tokenContext, blockNumber })
+        buildClmFetchInput({ clm: finalizedClm, tokens: tokenContext, chainId, blockNumber })
     );
     const state = parseFetchedClmState(rawState, tokenContext);
 

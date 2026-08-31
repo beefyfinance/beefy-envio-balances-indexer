@@ -50,13 +50,27 @@ indexer.onEvent({ contract: 'ClassicStrategy', event: 'Initialized' }, async ({ 
     context.log.info('ClassicStrategy initialized successfully', { strategyAddress });
 });
 
-indexer.onEvent({ contract: 'ClassicStrategyStratHarvest0', event: 'StratHarvest' }, async ({ event, context }) => {
-    await handleClassicStrategyHarvest({ event, context, compoundedAmount: event.params.wantHarvested });
-});
+indexer.onEvent(
+    {
+        contract: 'ClassicStrategyStratHarvest0',
+        event: 'StratHarvest',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        await handleClassicStrategyHarvest({ event, context, compoundedAmount: event.params.wantHarvested });
+    }
+);
 
-indexer.onEvent({ contract: 'ClassicStrategyStratHarvest1', event: 'StratHarvest' }, async ({ event, context }) => {
-    await handleClassicStrategyHarvest({ event, context, compoundedAmount: event.params.wantHarvested });
-});
+indexer.onEvent(
+    {
+        contract: 'ClassicStrategyStratHarvest1',
+        event: 'StratHarvest',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        await handleClassicStrategyHarvest({ event, context, compoundedAmount: event.params.wantHarvested });
+    }
+);
 
 indexer.onEvent({ contract: 'ClassicStrategy', event: 'ChargedFees' }, async ({ event, context }) => {
     await handleClassicStrategyChargedFees({

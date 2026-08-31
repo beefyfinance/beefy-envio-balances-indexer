@@ -30,7 +30,6 @@ export const createErc4626Adapter = async ({
 
     const adapter: ClassicErc4626Adapter = {
         id,
-        chainId,
         address: adapterAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,

@@ -1,5 +1,6 @@
 import type { EvmBlock } from 'envio';
 import type { Hex } from 'viem';
+import { FACTORIES, registerClmManager, registerClmStrategy } from './register';
 
 /** Base chain id */
 export const CHAIN_BASE = 8453 as const;
@@ -36,12 +37,25 @@ export const initBaseClmSim = ({
     timestampSec?: number;
 } = {}) => {
     const block = { number: blockNum, timestamp: timestampSec };
+    // Register dynamic contracts before Initialized — required since Envio 3.3.
     return [
+        registerClmManager({
+            factory: FACTORIES[8453].ClmManagerFactory,
+            proxy: MANAGER_BASE,
+            block,
+            logIndex: 0,
+        }),
+        registerClmStrategy({
+            factory: FACTORIES[8453].ClmStrategyFactory,
+            proxy: STRATEGY_BASE,
+            block,
+            logIndex: 1,
+        }),
         {
             contract: 'ClmManager' as const,
             event: 'Initialized' as const,
             block,
-            logIndex: 0,
+            logIndex: 2,
             srcAddress: MANAGER_BASE,
             params: { version: 1n },
         },
@@ -49,7 +63,7 @@ export const initBaseClmSim = ({
             contract: 'ClmStrategy' as const,
             event: 'Initialized' as const,
             block,
-            logIndex: 1,
+            logIndex: 3,
             srcAddress: STRATEGY_BASE,
             params: { version: 1n },
         },

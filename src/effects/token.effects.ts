@@ -25,6 +25,7 @@ export const getTokenMetadata = createEffect(
         }),
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { tokenAddress, chainId } = input;

@@ -20,6 +20,7 @@ export const getLstVaultTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { lstAddress, chainId } = input;

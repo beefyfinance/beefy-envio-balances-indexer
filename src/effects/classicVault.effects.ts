@@ -22,6 +22,7 @@ export const getClassicVaultTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { vaultAddress, chainId } = input;

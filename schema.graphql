@@ -3,9 +3,9 @@
 ################################
 
 """
-An holder account. Can be a user or a contract
+A holder account shared across all chains. Can be a user or a contract.
 """
-type Account {
+type Account @crossChain {
   "Account address"
   id: ID!
 
@@ -26,9 +26,6 @@ as specified by the ERC20 standard.
 type Token {
   "chain - token address"
   id: ID!
-
-  "chain id"
-  chainId: Int! @index
 
   # metadata
 
@@ -69,8 +66,6 @@ type TokenBalance {
   "chain - account address - token address"
   id: ID!
 
-  "The chain id"
-  chainId: Int! @index
   "The account that holds the token balance"
   account: Account! @index
   "The token that the account holds"
@@ -90,12 +85,12 @@ A balance change entity to track account balance change at specific points in ti
 This enables time-travel queries since HyperIndex doesn't support them natively.
 One entry is created per transfer event per account.
 """
-type TokenBalanceChange {
+type TokenBalanceChange
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "Unique ID: chainId-token-account-blockNumber-trxIndex-logIndex"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "Token balance reference"
   tokenBalance: TokenBalance! @index
   "Account ID reference"
@@ -148,12 +143,10 @@ enum PausableStatus {
 ##### Infrastructure ###########
 ################################
 
-type ClockTick {
+type ClockTick @internal @storage(postgres: true) {
   "chainId-period-roundedTimestamp"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "Duration of the snapshot period in seconds"
   period: BigInt!
   "Timestamp rounded to period"
@@ -176,8 +169,6 @@ type ClassicVault {
   "chain - vault address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The vault address"
   address: Bytes! @index
 
@@ -206,8 +197,6 @@ type ClassicVaultStrategy {
   "chain - strategy address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The strategy address"
   address: Bytes! @index
 
@@ -232,8 +221,6 @@ type ClassicBoost {
   "chain - boost address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The boost address"
   address: Bytes! @index
 
@@ -263,8 +250,6 @@ type ClassicErc4626Adapter {
   "chain - adapter address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The adapter address"
   address: Bytes! @index
 
@@ -289,12 +274,10 @@ type ClassicErc4626Adapter {
 """
 API-facing aggregate for a Beefy Classic vault product.
 """
-type Classic @index(fields: ["chainId", "initializableStatus", "vaultTokenTotalSupply"]) {
+type Classic @index(fields: ["initializableStatus", "vaultTokenTotalSupply"]) {
   "chain - vault address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The vault address"
   address: Bytes! @index
 
@@ -375,12 +358,12 @@ type Classic @index(fields: ["chainId", "initializableStatus", "vaultTokenTotalS
   totalStrategistFees: BigDecimal! @config(precision: 100, scale: 24)
 }
 
-type ClassicSnapshot {
+type ClassicSnapshot
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] })
+{
   "classicId-period-roundedTimestamp"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The classic aggregate"
   classic: Classic!
 
@@ -432,8 +415,6 @@ type ClassicPosition {
   "classicId-accountAddress"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The classic aggregate"
   classic: Classic!
   "The account holding the position"
@@ -469,12 +450,12 @@ enum ClassicPositionInteractionType {
   CLASSIC_ERC4626_ADAPTER_UNSTAKE
 }
 
-type ClassicPositionInteraction {
+type ClassicPositionInteraction
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex-suffix"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The classic aggregate"
   classic: Classic!
   "The account"
@@ -530,12 +511,12 @@ type ClassicPositionInteraction {
 
 # --- Events ---
 
-type ClassicHarvestEvent {
+type ClassicHarvestEvent
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The classic aggregate"
   classic: Classic!
   "The strategy that harvested"
@@ -582,8 +563,6 @@ type ClmManager {
   "chain - manager address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The manager address"
   address: Bytes! @index
 
@@ -613,8 +592,6 @@ type ClmStrategy {
   "chain - strategy address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The strategy address"
   address: Bytes! @index
 
@@ -636,12 +613,10 @@ type ClmStrategy {
 """
 API-facing aggregate for a Beefy CLM product.
 """
-type Clm @index(fields: ["chainId", "initializableStatus", "managerTotalSupply"]) {
+type Clm @index(fields: ["initializableStatus", "managerTotalSupply"]) {
   "chain - manager address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The manager address"
   address: Bytes! @index
 
@@ -725,12 +700,12 @@ type Clm @index(fields: ["chainId", "initializableStatus", "managerTotalSupply"]
   totalStrategistFees: BigDecimal! @config(precision: 100, scale: 24)
 }
 
-type ClmSnapshot {
+type ClmSnapshot
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] })
+{
   "clmId-period-roundedTimestamp"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
 
@@ -789,8 +764,6 @@ type ClmPosition {
   "clmId-accountAddress"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
   "The account holding the position"
@@ -815,12 +788,12 @@ enum ClmPositionInteractionType {
   CLM_REWARD_POOL_CLAIM
 }
 
-type ClmPositionInteraction {
+type ClmPositionInteraction
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex-suffix"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
   "The account"
@@ -869,12 +842,12 @@ type ClmPositionInteraction {
 
 # --- Events ---
 
-type ClmHarvestEvent {
+type ClmHarvestEvent
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
   "The strategy that harvested"
@@ -913,12 +886,12 @@ type ClmHarvestEvent {
   nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
 }
 
-type ClmManagerCollectionEvent {
+type ClmManagerCollectionEvent
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
   "The strategy that collected"
@@ -956,12 +929,12 @@ type ClmManagerCollectionEvent {
   nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
 }
 
-type ClmDepositEvent {
+type ClmDepositEvent
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
   "The account that deposited"
@@ -988,12 +961,12 @@ type ClmDepositEvent {
   fee1: BigDecimal! @config(precision: 100, scale: 24)
 }
 
-type ClmWithdrawEvent {
+type ClmWithdrawEvent
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
   "The account that withdrew"
@@ -1017,12 +990,12 @@ type ClmWithdrawEvent {
   amount1: BigDecimal! @config(precision: 100, scale: 24)
 }
 
-type ClmStrategyTvlEvent {
+type ClmStrategyTvlEvent
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain-trxHash-trxIndex-logIndex"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The CLM aggregate"
   clm: Clm!
   "The strategy"
@@ -1057,8 +1030,6 @@ type RewardPool {
   "chain - reward pool address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The reward pool address"
   address: Bytes! @index
 
@@ -1080,12 +1051,12 @@ type RewardPool {
   initializedTimestamp: Timestamp!
 }
 
-type RewardPoolRewardedEvent {
+type RewardPoolRewardedEvent
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+{
   "chain - trx hash - trx index - log index"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The trx hash"
   trxHash: Bytes! @index
   "The transaction index"
@@ -1120,8 +1091,6 @@ type LstVault {
   "chain - lst address"
   id: ID!
 
-  "chain id"
-  chainId: Int! @index
   "The lst address"
   address: Bytes! @index
 

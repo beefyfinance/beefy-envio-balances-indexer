@@ -1,7 +1,7 @@
 import { createTestIndexer } from 'envio';
 import { parseUnits } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { ADDRESS_ZERO } from '../lib/decimal';
+import { FACTORIES, registerClassicBoost } from './testFixtures/register';
 
 describe('ClassicBoost Handlers', () => {
     const boostAddr = '0x01e8881ed2fb41e0b3df29f382faf707a0b26969' as const;
@@ -9,7 +9,6 @@ describe('ClassicBoost Handlers', () => {
     const trxIndex = 7;
     const blockNum = 2578061;
     const timestampSec = Math.floor(Date.parse('2023-08-13T16:51:09.000Z') / 1000);
-    const transferWei = parseUnits('0.038501162192583033', 18);
     const userAddr = '0xc29d2531651fcd304c60fbfb8073a518d8fe0a21';
 
     describe('Initialized event', () => {
@@ -29,19 +28,6 @@ describe('ClassicBoost Handlers', () => {
                                 srcAddress: boostAddr,
                                 params: { version: 1n },
                             },
-                            {
-                                contract: 'Token',
-                                event: 'Transfer',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 5,
-                                srcAddress: boostAddr,
-                                transaction: { hash: trxHash, transactionIndex: trxIndex },
-                                params: {
-                                    from: ADDRESS_ZERO,
-                                    to: userAddr,
-                                    value: transferWei,
-                                },
-                            },
                         ],
                     },
                 },
@@ -54,24 +40,15 @@ describe('ClassicBoost Handlers', () => {
               {
                 "changes": [
                   {
-                    "Account": {
-                      "sets": [
-                        {
-                          "address": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
-                          "id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
-                        },
-                      ],
-                    },
                     "ClassicBoost": {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -82,18 +59,16 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
-                          "holderCount": 1,
+                          "holderCount": 0,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "isVirtual": true,
                           "name": "Moo BaseSwap cbETH-WETH Boost",
                           "symbol": "mooBaseSwapcbETH-WETH Boost",
-                          "totalSupply": "0.038501162192583033",
+                          "totalSupply": "0",
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -104,7 +79,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -115,38 +89,9 @@ describe('ClassicBoost Handlers', () => {
                         },
                       ],
                     },
-                    "TokenBalance": {
-                      "sets": [
-                        {
-                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
-                          "amount": "0.038501162192583033",
-                          "chainId": 8453,
-                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                        },
-                      ],
-                    },
-                    "TokenBalanceChange": {
-                      "sets": [
-                        {
-                          "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
-                          "balanceAfter": "0.038501162192583033",
-                          "balanceBefore": "0",
-                          "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
-                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-5",
-                          "logIndex": 5,
-                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "trxHash": "0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2",
-                          "trxIndex": 7,
-                        },
-                      ],
-                    },
                     "block": 2578061,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 1,
                   },
                 ],
               }
@@ -194,12 +139,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2855526n,
-                          "initializedTimestamp": "2024-06-01T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-01T12:00:00.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -210,7 +154,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -221,7 +164,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -232,7 +174,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -260,13 +201,19 @@ describe('ClassicBoost Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    8453: {
+                    1: {
                         simulate: [
+                            registerClassicBoost({
+                                factory: FACTORIES[1].ClassicBoostFactory,
+                                proxy: badBoost,
+                                block: { number: blk, timestamp: ts },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'ClassicBoost',
                                 event: 'Initialized',
                                 block: { number: blk, timestamp: ts },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: badBoost,
                                 params: { version: 1n },
                             },
@@ -281,9 +228,17 @@ describe('ClassicBoost Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x0000000000000000000000000000000000000001",
+                          "contract": "ClassicBoost",
+                        },
+                      ],
+                    },
                     "block": 17539954,
-                    "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "chainId": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -373,12 +328,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -389,7 +343,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 1,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -400,7 +353,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -411,7 +363,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -427,7 +378,6 @@ describe('ClassicBoost Handlers', () => {
                         {
                           "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
                           "amount": "1",
-                          "chainId": 8453,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                         },
@@ -440,8 +390,7 @@ describe('ClassicBoost Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2023-08-13T16:51:09.000Z,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-20",
                           "logIndex": 20,
                           "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -497,12 +446,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -513,7 +461,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -524,7 +471,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -535,7 +481,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -609,12 +554,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -625,7 +569,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 1,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -636,7 +579,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -647,7 +589,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -663,7 +604,6 @@ describe('ClassicBoost Handlers', () => {
                         {
                           "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
                           "amount": "2",
-                          "chainId": 8453,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                         },
@@ -676,8 +616,7 @@ describe('ClassicBoost Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2023-08-13T16:51:09.000Z,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-22",
                           "logIndex": 22,
                           "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -690,8 +629,7 @@ describe('ClassicBoost Handlers', () => {
                           "balanceAfter": "2",
                           "balanceBefore": "1",
                           "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2023-08-13T16:51:09.000Z,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-23",
                           "logIndex": 23,
                           "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -771,12 +709,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -787,7 +724,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -798,7 +734,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -809,7 +744,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -825,7 +759,6 @@ describe('ClassicBoost Handlers', () => {
                         {
                           "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
                           "amount": "0",
-                          "chainId": 8453,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "token_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                         },
@@ -838,8 +771,7 @@ describe('ClassicBoost Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2023-08-13T16:51:09.000Z,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-30",
                           "logIndex": 30,
                           "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -852,8 +784,7 @@ describe('ClassicBoost Handlers', () => {
                           "balanceAfter": "0",
                           "balanceBefore": "1",
                           "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2023-08-13T16:51:09.000Z,
                           "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969-2578061-7-31",
                           "logIndex": 31,
                           "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -909,12 +840,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -925,7 +855,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -936,7 +865,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -947,7 +875,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -1011,12 +938,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -1027,8 +953,7 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2023-08-13T16:51:09.000Z,
                           "id": "8453-0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2-7-40",
                           "logIndex": 40,
                           "poolShareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -1044,7 +969,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -1055,7 +979,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -1066,7 +989,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -1123,12 +1045,11 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "classic_id": undefined,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 2578061n,
-                          "initializedTimestamp": "2023-08-13T16:51:09.000Z",
+                          "initializedTimestamp": 2023-08-13T16:51:09.000Z,
                           "rewardToken_id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "shareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
                           "underlyingToken_id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -1139,8 +1060,7 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "blockNumber": 2578061n,
-                          "blockTimestamp": "2023-08-13T16:51:09.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2023-08-13T16:51:09.000Z,
                           "id": "8453-0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2-7-41",
                           "logIndex": 41,
                           "poolShareToken_id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -1156,7 +1076,6 @@ describe('ClassicBoost Handlers', () => {
                       "sets": [
                         {
                           "address": "0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x01e8881ed2fb41e0b3df29f382faf707a0b26969",
@@ -1167,7 +1086,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -1178,7 +1096,6 @@ describe('ClassicBoost Handlers', () => {
                         },
                         {
                           "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",

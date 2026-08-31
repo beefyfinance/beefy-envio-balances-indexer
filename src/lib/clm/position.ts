@@ -135,7 +135,6 @@ const createClmPositionInteraction = async ({
 
     const interaction: ClmPositionInteraction = {
         id,
-        chainId,
         clm_id: clm.id,
         account_id: account.id,
         clmPosition_id: position.id,

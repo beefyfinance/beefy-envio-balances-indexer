@@ -39,8 +39,6 @@ export const getOrCreateTokenBalanceEntity = async ({
     return await context.TokenBalance.getOrCreate({
         id: tokenBalanceId({ chainId, account, token }),
 
-        chainId: chainId,
-
         account_id: accountId({ accountAddress: account.address as Hex }),
         token_id: tokenId({ chainId, tokenAddress: token.address as Hex }),
 
@@ -79,8 +77,6 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
             trxIndex: event.trxIndex,
             logIndex: event.logIndex,
         }),
-
-        chainId: chainId,
 
         tokenBalance_id: tokenBalanceId({ chainId, account, token }),
         account_id: accountId({ accountAddress: account.address as Hex }),

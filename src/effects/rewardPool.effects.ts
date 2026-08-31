@@ -20,6 +20,7 @@ export const getRewardPoolTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { rewardPoolAddress, chainId } = input;

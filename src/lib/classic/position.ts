@@ -153,7 +153,6 @@ const createClassicPositionInteraction = async ({
 
     const interaction: ClassicPositionInteraction = {
         id,
-        chainId,
         classic_id: classic.id,
         account_id: account.id,
         classicPosition_id: position.id,

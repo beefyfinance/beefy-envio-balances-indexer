@@ -29,7 +29,6 @@ export const getEventFields = ({ chainId, event }: { chainId: ChainId; event: Ev
         trxIndex: event.trxIndex,
         logIndex: event.logIndex,
     }),
-    chainId,
     trxHash: event.trxHash,
     trxIndex: event.trxIndex,
     logIndex: event.logIndex,

@@ -96,6 +96,7 @@ export const fetchClmState = createEffect(
         output: clmStateSchema,
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => fetchClmStateRaw({ input, context })
 );
@@ -111,6 +112,7 @@ export const fetchClmStates = createEffect(
         }),
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const states = await Promise.all(
@@ -384,6 +386,7 @@ export const getClmManagerStrategy = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const client = getViemClient(input.chainId, context.log);
@@ -422,6 +425,7 @@ export const getClmStrategyInitData = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const client = getViemClient(input.chainId, context.log);

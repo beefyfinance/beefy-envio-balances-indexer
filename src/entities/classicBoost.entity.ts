@@ -34,7 +34,6 @@ export const createClassicBoost = async ({
 
     const boost: ClassicBoost = {
         id,
-        chainId,
         address: boostAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,

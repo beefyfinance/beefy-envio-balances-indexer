@@ -20,6 +20,7 @@ export const getErc4626AdapterTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const { adapterAddress, chainId } = input;

@@ -70,7 +70,6 @@ export const getOrCreateClassic = async ({
 
     const classic: Classic = {
         id,
-        chainId,
         address: vaultAddress,
         classicVault_id: classicVault.id,
         classicVaultStrategy_id: undefined,

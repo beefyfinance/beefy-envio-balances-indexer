@@ -67,7 +67,6 @@ export const getOrCreateToken = async ({
 
     return await context.Token.getOrCreate({
         id,
-        chainId,
         address: tokenAddress,
         isVirtual,
 

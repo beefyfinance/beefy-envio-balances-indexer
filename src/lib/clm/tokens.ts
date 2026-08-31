@@ -1,7 +1,6 @@
-import type { Clm, EvmOnEventContext, Token } from 'envio';
+import type { Clm, EvmChainId, EvmOnEventContext, Token } from 'envio';
 import type { Hex } from 'viem';
 import { getTokenOrThrow } from '../../entities/token.entity';
-import { toChainId } from '../chain';
 import { normalizeHex } from '../hex';
 
 export const loadClmTokens = async ({
@@ -49,21 +48,22 @@ export type ClmTokens = Awaited<ReturnType<typeof loadClmTokens>>;
 export const buildClmFetchInput = ({
     clm,
     tokens,
+    chainId,
     blockNumber,
 }: {
     clm: Clm;
     tokens: ClmTokens;
+    chainId: EvmChainId;
     blockNumber: number;
 }) => {
     if (!clm.clmStrategy_id) {
         throw new Error(`CLM ${clm.id} has no linked strategy`);
     }
 
-    const resolvedChainId = toChainId(clm.chainId);
-    const strategyAddress = normalizeHex(clm.clmStrategy_id.slice(`${String(resolvedChainId)}-`.length));
+    const strategyAddress = normalizeHex(clm.clmStrategy_id.slice(`${String(chainId)}-`.length));
 
     return {
-        chainId: resolvedChainId,
+        chainId,
         blockNumber,
         managerAddress: clm.address as Hex,
         strategyAddress: strategyAddress as Hex,

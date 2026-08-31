@@ -48,181 +48,209 @@ indexer.onEvent({ contract: 'ClassicBoost', event: 'Initialized' }, async ({ eve
     context.log.info('ClassicBoost initialized successfully', { boostAddress });
 });
 
-indexer.onEvent({ contract: 'ClassicBoost', event: 'Staked' }, async ({ event, context }) => {
-    context.log.debug('ClassicBoost.Staked', { event });
+indexer.onEvent(
+    {
+        contract: 'ClassicBoost',
+        event: 'Staked',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClassicBoost.Staked', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const boostAddress = normalizeHex(event.srcAddress);
-    const initializedBlock = event.block;
+        const chainId = toChainId(context.chain.id);
+        const boostAddress = normalizeHex(event.srcAddress);
+        const initializedBlock = event.block;
 
-    // Ensure that the boost virtual token is created first
-    // otherwise, handleTokenTransfer will try and create it and fail because
-    // it's not aware it is being virtual
-    let boost = await initializeBoost({ context, chainId, boostAddress, initializedBlock });
-    if (!boost) return;
-    boost = await tryLinkClassicBoost({ context, chainId, boost });
+        // Ensure that the boost virtual token is created first
+        // otherwise, handleTokenTransfer will try and create it and fail because
+        // it's not aware it is being virtual
+        let boost = await initializeBoost({ context, chainId, boostAddress, initializedBlock });
+        if (!boost) return;
+        boost = await tryLinkClassicBoost({ context, chainId, boost });
 
-    const shareToken = await getTokenOrThrow({ context, id: boost.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: boost.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: config.MINT_ADDRESS,
-        receiverAddress: normalizeHex(event.params.user),
-        rawTransferAmount: event.params.amount,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: config.MINT_ADDRESS,
+            receiverAddress: normalizeHex(event.params.user),
+            rawTransferAmount: event.params.amount,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
 
-    await maybeHandleClassicBoostStake({
-        context,
-        chainId,
-        boost,
-        accountAddress: normalizeHex(event.params.user),
-        rawAmount: event.params.amount,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await maybeHandleClassicBoostStake({
+            context,
+            chainId,
+            boost,
+            accountAddress: normalizeHex(event.params.user),
+            rawAmount: event.params.amount,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'ClassicBoost', event: 'Withdrawn' }, async ({ event, context }) => {
-    context.log.debug('ClassicBoost.Withdrawn', { event });
+indexer.onEvent(
+    {
+        contract: 'ClassicBoost',
+        event: 'Withdrawn',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClassicBoost.Withdrawn', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const boostAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const boostAddress = normalizeHex(event.srcAddress);
 
-    let boost = await initializeBoost({
-        context,
-        chainId,
-        boostAddress,
-        initializedBlock: event.block,
-    });
-    if (!boost) return;
-    boost = await tryLinkClassicBoost({ context, chainId, boost });
+        let boost = await initializeBoost({
+            context,
+            chainId,
+            boostAddress,
+            initializedBlock: event.block,
+        });
+        if (!boost) return;
+        boost = await tryLinkClassicBoost({ context, chainId, boost });
 
-    const shareToken = await getTokenOrThrow({ context, id: boost.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: boost.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: normalizeHex(event.params.user),
-        receiverAddress: config.BURN_ADDRESS,
-        rawTransferAmount: event.params.amount,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: normalizeHex(event.params.user),
+            receiverAddress: config.BURN_ADDRESS,
+            rawTransferAmount: event.params.amount,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
 
-    await maybeHandleClassicBoostUnstake({
-        context,
-        chainId,
-        boost,
-        accountAddress: normalizeHex(event.params.user),
-        rawAmount: event.params.amount,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await maybeHandleClassicBoostUnstake({
+            context,
+            chainId,
+            boost,
+            accountAddress: normalizeHex(event.params.user),
+            rawAmount: event.params.amount,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'ClassicBoost', event: 'RewardAdded' }, async ({ event, context }) => {
-    context.log.debug('ClassicBoost.RewardAdded', { event });
+indexer.onEvent(
+    {
+        contract: 'ClassicBoost',
+        event: 'RewardAdded',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClassicBoost.RewardAdded', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const boostAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const boostAddress = normalizeHex(event.srcAddress);
 
-    const boost = await initializeBoost({
-        context,
-        chainId,
-        boostAddress,
-        initializedBlock: event.block,
-    });
-    if (!boost) return;
+        const boost = await initializeBoost({
+            context,
+            chainId,
+            boostAddress,
+            initializedBlock: event.block,
+        });
+        if (!boost) return;
 
-    const [shareToken, rewardToken] = await Promise.all([
-        getTokenOrThrow({ context, id: boost.shareToken_id }),
-        getTokenOrThrow({ context, id: boost.rewardToken_id }),
-    ]);
+        const [shareToken, rewardToken] = await Promise.all([
+            getTokenOrThrow({ context, id: boost.shareToken_id }),
+            getTokenOrThrow({ context, id: boost.rewardToken_id }),
+        ]);
 
-    await createRewardPoolRewardedEvent({
-        context,
-        chainId,
-        poolShareToken: shareToken,
-        rewardToken: rewardToken,
-        rewardVestingSeconds: 0n,
-        rewardAmount: interpretAsDecimal(event.params.reward, rewardToken.decimals),
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await createRewardPoolRewardedEvent({
+            context,
+            chainId,
+            poolShareToken: shareToken,
+            rewardToken: rewardToken,
+            rewardVestingSeconds: 0n,
+            rewardAmount: interpretAsDecimal(event.params.reward, rewardToken.decimals),
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'ClassicBoost', event: 'RewardPaid' }, async ({ event, context }) => {
-    context.log.debug('ClassicBoost.RewardPaid', { event });
+indexer.onEvent(
+    {
+        contract: 'ClassicBoost',
+        event: 'RewardPaid',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClassicBoost.RewardPaid', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const boostAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const boostAddress = normalizeHex(event.srcAddress);
 
-    let boost = await initializeBoost({
-        context,
-        chainId,
-        boostAddress,
-        initializedBlock: event.block,
-    });
-    if (!boost) return;
-    boost = await tryLinkClassicBoost({ context, chainId, boost });
-    if (!boost.classic_id) return;
+        let boost = await initializeBoost({
+            context,
+            chainId,
+            boostAddress,
+            initializedBlock: event.block,
+        });
+        if (!boost) return;
+        boost = await tryLinkClassicBoost({ context, chainId, boost });
+        if (!boost.classic_id) return;
 
-    const classic = await context.Classic.get(boost.classic_id);
-    if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
+        const classic = await context.Classic.get(boost.classic_id);
+        if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
 
-    const rewardToken = await getTokenOrThrow({ context, id: boost.rewardToken_id });
-    const tokenContext = await loadClassicTokens({ context, classic });
-    const fetchInput = await buildClassicFetchInput({
-        context,
-        chainId,
-        classic,
-        tokens: tokenContext,
-        blockNumber: event.block.number,
-    });
-    const rawState = await context.effect(fetchClassicState, fetchInput);
-    const state = parseFetchedClassicState(rawState, tokenContext);
+        const rewardToken = await getTokenOrThrow({ context, id: boost.rewardToken_id });
+        const tokenContext = await loadClassicTokens({ context, classic });
+        const fetchInput = await buildClassicFetchInput({
+            context,
+            chainId,
+            classic,
+            tokens: tokenContext,
+            blockNumber: event.block.number,
+        });
+        const rawState = await context.effect(fetchClassicState, fetchInput);
+        const state = parseFetchedClassicState(rawState, tokenContext);
 
-    await handleClassicBoostRewardPaid({
-        context,
-        chainId,
-        classic,
-        accountAddress: normalizeHex(event.params.user),
-        rewardTokenAddress: normalizeHex(rewardToken.address),
-        amount: interpretAsDecimal(event.params.reward, rewardToken.decimals),
-        state,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await handleClassicBoostRewardPaid({
+            context,
+            chainId,
+            classic,
+            accountAddress: normalizeHex(event.params.user),
+            rewardTokenAddress: normalizeHex(rewardToken.address),
+            amount: interpretAsDecimal(event.params.reward, rewardToken.decimals),
+            state,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
 const maybeHandleClassicBoostStake = async ({
     context,

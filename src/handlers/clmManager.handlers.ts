@@ -47,127 +47,148 @@ indexer.onEvent({ contract: 'ClmManager', event: 'Initialized' }, async ({ event
     context.log.info('ClmManager initialized successfully', { managerAddress });
 });
 
-indexer.onEvent({ contract: 'ClmManager', event: 'Transfer' }, async ({ event, context }) => {
-    context.log.debug('ClmManager.Transfer', { event });
+indexer.onEvent(
+    {
+        contract: 'ClmManager',
+        event: 'Transfer',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClmManager.Transfer', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const managerAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const managerAddress = normalizeHex(event.srcAddress);
 
-    const manager = await initializeClmManager({
-        context,
-        chainId,
-        managerAddress,
-        initializedBlock: event.block,
-    });
-    if (!manager) return;
+        const manager = await initializeClmManager({
+            context,
+            chainId,
+            managerAddress,
+            initializedBlock: event.block,
+        });
+        if (!manager) return;
 
-    const shareToken = await getTokenOrThrow({ context, id: manager.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: manager.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: normalizeHex(event.params.from),
-        receiverAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: normalizeHex(event.params.from),
+            receiverAddress: normalizeHex(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
 
-    const clm = await getClm(context, chainId, managerAddress);
-    if (!clm || clm.initializableStatus !== 'INITIALIZED' || !clm.clmStrategy_id) {
-        return;
+        const clm = await getClm(context, chainId, managerAddress);
+        if (!clm || clm.initializableStatus !== 'INITIALIZED' || !clm.clmStrategy_id) {
+            return;
+        }
+
+        const tokenContext = await loadClmTokens({ context, clm });
+        const rawState = await context.effect(
+            fetchClmState,
+            buildClmFetchInput({ clm, tokens: tokenContext, chainId, blockNumber: event.block.number })
+        );
+        const state = parseFetchedClmState(rawState, tokenContext);
+
+        await handleClmManagerTransfer({
+            context,
+            chainId,
+            clm,
+            fromAddress: normalizeHex(event.params.from),
+            toAddress: normalizeHex(event.params.to),
+            transferAmount: interpretAsDecimal(event.params.value, tokenContext.managerToken.decimals),
+            state,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
     }
+);
 
-    const tokenContext = await loadClmTokens({ context, clm });
-    const rawState = await context.effect(
-        fetchClmState,
-        buildClmFetchInput({ clm, tokens: tokenContext, blockNumber: event.block.number })
-    );
-    const state = parseFetchedClmState(rawState, tokenContext);
+indexer.onEvent(
+    {
+        contract: 'ClmManager',
+        event: 'Deposit',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClmManager.Deposit', { event });
 
-    await handleClmManagerTransfer({
-        context,
-        chainId,
-        clm,
-        fromAddress: normalizeHex(event.params.from),
-        toAddress: normalizeHex(event.params.to),
-        transferAmount: interpretAsDecimal(event.params.value, tokenContext.managerToken.decimals),
-        state,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        const chainId = toChainId(context.chain.id);
+        const managerAddress = normalizeHex(event.srcAddress);
+        const clm = await getClm(context, chainId, managerAddress);
+        if (!clm) return;
 
-indexer.onEvent({ contract: 'ClmManager', event: 'Deposit' }, async ({ event, context }) => {
-    context.log.debug('ClmManager.Deposit', { event });
+        const account = await getOrCreateAccount({ context, chainId, accountAddress: normalizeHex(event.params.user) });
+        if (!account) return;
 
-    const chainId = toChainId(context.chain.id);
-    const managerAddress = normalizeHex(event.srcAddress);
-    const clm = await getClm(context, chainId, managerAddress);
-    if (!clm) return;
+        const tokenContext = await loadClmTokens({ context, clm });
 
-    const account = await getOrCreateAccount({ context, chainId, accountAddress: normalizeHex(event.params.user) });
-    if (!account) return;
+        await createClmDepositEvent({
+            context,
+            chainId,
+            clm,
+            account,
+            shares: interpretAsDecimal(event.params.shares, tokenContext.managerToken.decimals),
+            amount0: interpretAsDecimal(event.params.amount0, tokenContext.underlyingToken0.decimals),
+            amount1: interpretAsDecimal(event.params.amount1, tokenContext.underlyingToken1.decimals),
+            fee0: interpretAsDecimal(event.params.fee0, tokenContext.underlyingToken0.decimals),
+            fee1: interpretAsDecimal(event.params.fee1, tokenContext.underlyingToken1.decimals),
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
-    const tokenContext = await loadClmTokens({ context, clm });
+indexer.onEvent(
+    {
+        contract: 'ClmManager',
+        event: 'Withdraw',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClmManager.Withdraw', { event });
 
-    await createClmDepositEvent({
-        context,
-        chainId,
-        clm,
-        account,
-        shares: interpretAsDecimal(event.params.shares, tokenContext.managerToken.decimals),
-        amount0: interpretAsDecimal(event.params.amount0, tokenContext.underlyingToken0.decimals),
-        amount1: interpretAsDecimal(event.params.amount1, tokenContext.underlyingToken1.decimals),
-        fee0: interpretAsDecimal(event.params.fee0, tokenContext.underlyingToken0.decimals),
-        fee1: interpretAsDecimal(event.params.fee1, tokenContext.underlyingToken1.decimals),
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        const chainId = toChainId(context.chain.id);
+        const managerAddress = normalizeHex(event.srcAddress);
+        const clm = await getClm(context, chainId, managerAddress);
+        if (!clm) return;
 
-indexer.onEvent({ contract: 'ClmManager', event: 'Withdraw' }, async ({ event, context }) => {
-    context.log.debug('ClmManager.Withdraw', { event });
+        const account = await getOrCreateAccount({ context, chainId, accountAddress: normalizeHex(event.params.user) });
+        if (!account) return;
 
-    const chainId = toChainId(context.chain.id);
-    const managerAddress = normalizeHex(event.srcAddress);
-    const clm = await getClm(context, chainId, managerAddress);
-    if (!clm) return;
+        const tokenContext = await loadClmTokens({ context, clm });
 
-    const account = await getOrCreateAccount({ context, chainId, accountAddress: normalizeHex(event.params.user) });
-    if (!account) return;
-
-    const tokenContext = await loadClmTokens({ context, clm });
-
-    await createClmWithdrawEvent({
-        context,
-        chainId,
-        clm,
-        account,
-        shares: interpretAsDecimal(event.params.shares, tokenContext.managerToken.decimals),
-        amount0: interpretAsDecimal(event.params.amount0, tokenContext.underlyingToken0.decimals),
-        amount1: interpretAsDecimal(event.params.amount1, tokenContext.underlyingToken1.decimals),
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await createClmWithdrawEvent({
+            context,
+            chainId,
+            clm,
+            account,
+            shares: interpretAsDecimal(event.params.shares, tokenContext.managerToken.decimals),
+            amount0: interpretAsDecimal(event.params.amount0, tokenContext.underlyingToken0.decimals),
+            amount1: interpretAsDecimal(event.params.amount1, tokenContext.underlyingToken1.decimals),
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
 const initializeClmManager = async ({
     context,

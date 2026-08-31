@@ -18,6 +18,7 @@ export const getBlockTimestamp = createEffect(
         }),
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const client = getViemClient(input.chainId, context.log);

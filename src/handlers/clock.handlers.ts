@@ -48,17 +48,15 @@ if (process.env.VITEST !== 'true') {
             }
 
             const clms = await context.Clm.getWhere({
-                chainId: { _eq: chainId },
                 initializableStatus: { _eq: 'INITIALIZED' },
                 managerTotalSupply: { _gt: BIG_ZERO },
             });
             const classics = await context.Classic.getWhere({
-                chainId: { _eq: chainId },
                 initializableStatus: { _eq: 'INITIALIZED' },
                 vaultTokenTotalSupply: { _gt: BIG_ZERO },
             });
 
-            await refreshClmSnapshotsOnTick({ context, timestamp, blockNumber: block.number, clms });
+            await refreshClmSnapshotsOnTick({ context, chainId, timestamp, blockNumber: block.number, clms });
             await refreshClassicSnapshotsOnTick({
                 context,
                 chainId,
@@ -72,11 +70,13 @@ if (process.env.VITEST !== 'true') {
 
 const refreshClmSnapshotsOnTick = async ({
     context,
+    chainId,
     timestamp,
     blockNumber,
     clms,
 }: {
     context: Parameters<typeof refreshClmSnapshot>[0]['context'];
+    chainId: ReturnType<typeof toChainId>;
     timestamp: number;
     blockNumber: number;
     clms: Awaited<ReturnType<EvmOnEventContext['Clm']['getWhere']>>;
@@ -85,7 +85,7 @@ const refreshClmSnapshotsOnTick = async ({
         if (!isClmInitialized(clm)) continue;
 
         const tokens = await loadClmTokens({ context, clm });
-        const fetchInput = buildClmFetchInput({ clm, tokens, blockNumber });
+        const fetchInput = buildClmFetchInput({ clm, tokens, chainId, blockNumber });
         const rawState = await context.effect(fetchClmState, fetchInput);
         const state = parseFetchedClmState(rawState, tokens);
 

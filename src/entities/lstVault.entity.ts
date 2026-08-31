@@ -30,7 +30,6 @@ export const createLstVault = async ({
 
     const lst: LstVault = {
         id,
-        chainId,
         address: lstAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,

@@ -107,71 +107,78 @@ indexer.onEvent({ contract: 'ClassicVault', event: 'UpgradeStrat' }, async ({ ev
     context.log.info('ClassicVault strategy upgraded', { vaultAddress, newStrategyAddress, chainId });
 });
 
-indexer.onEvent({ contract: 'ClassicVault', event: 'Transfer' }, async ({ event, context }) => {
-    context.log.debug('ClassicVault.Transfer', { event });
+indexer.onEvent(
+    {
+        contract: 'ClassicVault',
+        event: 'Transfer',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('ClassicVault.Transfer', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const vaultAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const vaultAddress = normalizeHex(event.srcAddress);
 
-    // Ensure that the vault is initialized first
-    const vault = await initializeClassicVault({
-        context,
-        chainId,
-        vaultAddress,
-        initializedBlock: event.block,
-    });
-    if (!vault) return;
+        // Ensure that the vault is initialized first
+        const vault = await initializeClassicVault({
+            context,
+            chainId,
+            vaultAddress,
+            initializedBlock: event.block,
+        });
+        if (!vault) return;
 
-    const shareToken = await getTokenOrThrow({ context, id: vault.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: vault.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: normalizeHex(event.params.from),
-        receiverAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: normalizeHex(event.params.from),
+            receiverAddress: normalizeHex(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
 
-    const classic = await getClassic(context, chainId, vaultAddress);
-    if (!classic || classic.initializableStatus !== 'INITIALIZED' || !classic.classicVaultStrategy_id) {
-        context.log.warn('ClassicVault not initialized or has no strategy', { vaultAddress, chainId });
-        return;
+        const classic = await getClassic(context, chainId, vaultAddress);
+        if (!classic || classic.initializableStatus !== 'INITIALIZED' || !classic.classicVaultStrategy_id) {
+            context.log.warn('ClassicVault not initialized or has no strategy', { vaultAddress, chainId });
+            return;
+        }
+
+        const tokenContext = await loadClassicTokens({ context, classic });
+        const fetchInput = await buildClassicFetchInput({
+            context,
+            chainId,
+            classic,
+            tokens: tokenContext,
+            blockNumber: event.block.number,
+        });
+        const rawState = await context.effect(fetchClassicState, fetchInput);
+        const state = parseFetchedClassicState(rawState, tokenContext);
+
+        await handleClassicVaultTransfer({
+            context,
+            chainId,
+            classic,
+            fromAddress: normalizeHex(event.params.from),
+            toAddress: normalizeHex(event.params.to),
+            transferAmount: interpretAsDecimal(event.params.value, tokenContext.vaultToken.decimals),
+            state,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
     }
-
-    const tokenContext = await loadClassicTokens({ context, classic });
-    const fetchInput = await buildClassicFetchInput({
-        context,
-        chainId,
-        classic,
-        tokens: tokenContext,
-        blockNumber: event.block.number,
-    });
-    const rawState = await context.effect(fetchClassicState, fetchInput);
-    const state = parseFetchedClassicState(rawState, tokenContext);
-
-    await handleClassicVaultTransfer({
-        context,
-        chainId,
-        classic,
-        fromAddress: normalizeHex(event.params.from),
-        toAddress: normalizeHex(event.params.to),
-        transferAmount: interpretAsDecimal(event.params.value, tokenContext.vaultToken.decimals),
-        state,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+);
 
 const initializeClassicVault = async ({
     context,

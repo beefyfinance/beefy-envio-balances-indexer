@@ -27,7 +27,6 @@ describe('event', () => {
             event: { block, trxHash, trxIndex, logIndex },
         });
         expect(fields.id).toBe('8453-0x5a4fbda772ea9a1754da8fff90de60da9fb2acb06432ea0c9a7cd8719c05443d-6-22');
-        expect(fields.chainId).toBe(8453);
         expect(fields.trxHash).toBe(trxHash);
         expect(fields.trxIndex).toBe(6);
         expect(fields.logIndex).toBe(22);

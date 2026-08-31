@@ -43,71 +43,78 @@ indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Initialized' }, async ({ e
     context.log.info('Erc4626Adapter initialized successfully', { adapterAddress });
 });
 
-indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Transfer' }, async ({ event, context }) => {
-    context.log.debug('Erc4626Adapter.Transfer', { event });
+indexer.onEvent(
+    {
+        contract: 'Erc4626Adapter',
+        event: 'Transfer',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('Erc4626Adapter.Transfer', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const adapterAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const adapterAddress = normalizeHex(event.srcAddress);
 
-    let adapter = await initializeErc4626Adapter({
-        context,
-        chainId,
-        adapterAddress,
-        initializedBlock: event.block,
-    });
-    if (!adapter) return;
-    adapter = await tryLinkClassicErc4626Adapter({ context, chainId, adapter });
+        let adapter = await initializeErc4626Adapter({
+            context,
+            chainId,
+            adapterAddress,
+            initializedBlock: event.block,
+        });
+        if (!adapter) return;
+        adapter = await tryLinkClassicErc4626Adapter({ context, chainId, adapter });
 
-    const shareToken = await getTokenOrThrow({ context, id: adapter.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: adapter.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: normalizeHex(event.params.from),
-        receiverAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: normalizeHex(event.params.from),
+            receiverAddress: normalizeHex(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
 
-    if (!adapter.classic_id) return;
+        if (!adapter.classic_id) return;
 
-    const classic = await context.Classic.get(adapter.classic_id);
-    if (!classic || classic.initializableStatus !== 'INITIALIZED' || !classic.classicVaultStrategy_id) return;
+        const classic = await context.Classic.get(adapter.classic_id);
+        if (!classic || classic.initializableStatus !== 'INITIALIZED' || !classic.classicVaultStrategy_id) return;
 
-    const tokenContext = await loadClassicTokens({ context, classic });
-    const fetchInput = await buildClassicFetchInput({
-        context,
-        chainId,
-        classic,
-        tokens: tokenContext,
-        blockNumber: event.block.number,
-    });
-    const rawState = await context.effect(fetchClassicState, fetchInput);
-    const state = parseFetchedClassicState(rawState, tokenContext);
+        const tokenContext = await loadClassicTokens({ context, classic });
+        const fetchInput = await buildClassicFetchInput({
+            context,
+            chainId,
+            classic,
+            tokens: tokenContext,
+            blockNumber: event.block.number,
+        });
+        const rawState = await context.effect(fetchClassicState, fetchInput);
+        const state = parseFetchedClassicState(rawState, tokenContext);
 
-    await handleClassicErc4626AdapterTransfer({
-        context,
-        chainId,
-        classic,
-        adapter,
-        fromAddress: normalizeHex(event.params.from),
-        toAddress: normalizeHex(event.params.to),
-        transferAmount: interpretAsDecimal(event.params.value, shareToken.decimals),
-        state,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await handleClassicErc4626AdapterTransfer({
+            context,
+            chainId,
+            classic,
+            adapter,
+            fromAddress: normalizeHex(event.params.from),
+            toAddress: normalizeHex(event.params.to),
+            transferAmount: interpretAsDecimal(event.params.value, shareToken.decimals),
+            state,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
 const initializeErc4626Adapter = async ({
     context,

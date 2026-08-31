@@ -1,4 +1,5 @@
 import type { Hex } from 'viem';
+import { FACTORIES, registerClassicStrategy } from './register';
 
 /** Polygon chain id */
 export const CHAIN_POLYGON = 137 as const;
@@ -40,11 +41,17 @@ export const initClassicPlatformSim = (fixture: ClassicPlatformFixture) => {
             srcAddress: fixture.vault as Hex,
             params: { version: 1n },
         },
+        registerClassicStrategy({
+            factory: FACTORIES[137].ClassicStrategyFactory,
+            proxy: fixture.strategy,
+            block,
+            logIndex: 1,
+        }),
         {
             contract: 'ClassicStrategy' as const,
             event: 'Initialized' as const,
             block,
-            logIndex: 1,
+            logIndex: 2,
             srcAddress: fixture.strategy as Hex,
             params: { version: 1n },
         },

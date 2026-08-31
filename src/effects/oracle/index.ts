@@ -179,6 +179,7 @@ export const fetchNativeToUSDPrice = createEffect(
         output: fetchNativeToUSDPriceOutputSchema,
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => ({
         nativeToUSDPrice: await fetchNativeToUSDPriceRaw(input.chainId, context.log, input.blockNumber),

@@ -416,6 +416,7 @@ export const fetchClassicState = createEffect(
         output: classicStateSchema,
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => fetchClassicStateRaw({ input, context })
 );
@@ -431,6 +432,7 @@ export const fetchClassicStates = createEffect(
         }),
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const states = await Promise.all(
@@ -456,6 +458,7 @@ export const detectClassicPlatform = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
         const client = getViemClient(input.chainId, context.log);

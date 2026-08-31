@@ -6,11 +6,12 @@ import {
     BSC_CLASSIC_INIT_TIMESTAMP,
     BSC_STRAT_HARVEST,
     CHAIN_BSC,
+    eventBlockMeta,
     eventMeta,
     initBscClassicSim,
     STRATEGY_BSC,
-    VAULT_BSC,
 } from './testFixtures/classic';
+import { FACTORIES, registerClassicStrategy } from './testFixtures/register';
 
 describe('ClassicStrategy Handlers', () => {
     const blockNum = 12_132_390;
@@ -23,24 +24,7 @@ describe('ClassicStrategy Handlers', () => {
             const trace = await indexer.process({
                 chains: {
                     56: {
-                        simulate: [
-                            {
-                                contract: 'ClassicVault',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
-                                srcAddress: VAULT_BSC,
-                                params: { version: 1n },
-                            },
-                            {
-                                contract: 'ClassicStrategy',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 1,
-                                srcAddress: STRATEGY_BSC,
-                                params: { version: 1n },
-                            },
-                        ],
+                        simulate: [...initBscClassicSim({ blockNum, timestampSec })],
                     },
                 },
             });
@@ -59,7 +43,6 @@ describe('ClassicStrategy Handlers', () => {
                           "boostRewardToNativePrices": [],
                           "boostRewardToken_ids": [],
                           "boostRewardTokensOrder": [],
-                          "chainId": 56,
                           "classicVaultStrategy_id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterToken_ids": [],
@@ -69,7 +52,7 @@ describe('ClassicStrategy Handlers', () => {
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "nativeToUSDPrice": "452.83830981",
                           "pausableStatus": "RUNNING",
                           "rewardPoolToken_ids": [],
@@ -99,9 +82,8 @@ describe('ClassicStrategy Handlers', () => {
                     "ClassicSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -110,7 +92,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 3600n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T09:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T09:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -123,9 +105,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -134,7 +115,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 86400n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -147,9 +128,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -158,7 +138,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 604800n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-24T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-24T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -176,12 +156,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "shareToken_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "underlyingToken_id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
                         },
@@ -191,12 +170,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
-                          "chainId": 56,
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -205,7 +183,6 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
@@ -216,7 +193,6 @@ describe('ClassicStrategy Handlers', () => {
                         },
                         {
                           "address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
@@ -227,9 +203,17 @@ describe('ClassicStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategy",
+                        },
+                      ],
+                    },
                     "block": 12132390,
                     "chainId": 56,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                 ],
               }
@@ -243,27 +227,12 @@ describe('ClassicStrategy Handlers', () => {
                 chains: {
                     56: {
                         simulate: [
-                            {
-                                contract: 'ClassicVault',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
-                                srcAddress: VAULT_BSC,
-                                params: { version: 1n },
-                            },
+                            ...initBscClassicSim({ blockNum, timestampSec }),
                             {
                                 contract: 'ClassicStrategy',
                                 event: 'Initialized',
                                 block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 1,
-                                srcAddress: STRATEGY_BSC,
-                                params: { version: 1n },
-                            },
-                            {
-                                contract: 'ClassicStrategy',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 2,
+                                logIndex: 3,
                                 srcAddress: STRATEGY_BSC,
                                 params: { version: 1n },
                             },
@@ -286,7 +255,6 @@ describe('ClassicStrategy Handlers', () => {
                           "boostRewardToNativePrices": [],
                           "boostRewardToken_ids": [],
                           "boostRewardTokensOrder": [],
-                          "chainId": 56,
                           "classicVaultStrategy_id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterToken_ids": [],
@@ -296,7 +264,7 @@ describe('ClassicStrategy Handlers', () => {
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "nativeToUSDPrice": "452.83830981",
                           "pausableStatus": "RUNNING",
                           "rewardPoolToken_ids": [],
@@ -326,9 +294,8 @@ describe('ClassicStrategy Handlers', () => {
                     "ClassicSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -337,7 +304,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 3600n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T09:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T09:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -350,9 +317,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -361,7 +327,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 86400n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -374,9 +340,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -385,7 +350,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 604800n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-24T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-24T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -403,12 +368,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "shareToken_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "underlyingToken_id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
                         },
@@ -418,12 +382,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
-                          "chainId": 56,
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -432,7 +395,6 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
@@ -443,7 +405,6 @@ describe('ClassicStrategy Handlers', () => {
                         },
                         {
                           "address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
@@ -454,9 +415,17 @@ describe('ClassicStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategy",
+                        },
+                      ],
+                    },
                     "block": 12132390,
                     "chainId": 56,
-                    "eventsProcessed": 3,
+                    "eventsProcessed": 4,
                   },
                 ],
               }
@@ -468,13 +437,19 @@ describe('ClassicStrategy Handlers', () => {
 
             const trace = await indexer.process({
                 chains: {
-                    8453: {
+                    56: {
                         simulate: [
+                            registerClassicStrategy({
+                                factory: FACTORIES[56].ClassicStrategyFactory,
+                                proxy: '0x0000000000000000000000000000000000000007',
+                                block: { number: 21_890_07, timestamp: 1715373000 },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'ClassicStrategy',
                                 event: 'Initialized',
                                 block: { number: 21_890_07, timestamp: 1715373000 },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: '0x0000000000000000000000000000000000000007',
                                 params: { version: 1n },
                             },
@@ -487,9 +462,17 @@ describe('ClassicStrategy Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x0000000000000000000000000000000000000007",
+                          "contract": "ClassicStrategy",
+                        },
+                      ],
+                    },
                     "block": 2189007,
-                    "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "chainId": 56,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -503,11 +486,17 @@ describe('ClassicStrategy Handlers', () => {
                 chains: {
                     56: {
                         simulate: [
+                            registerClassicStrategy({
+                                factory: FACTORIES[56].ClassicStrategyFactory,
+                                proxy: STRATEGY_BSC,
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'ClassicStrategy',
                                 event: 'Initialized',
                                 block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: STRATEGY_BSC,
                                 params: { version: 1n },
                             },
@@ -523,9 +512,17 @@ describe('ClassicStrategy Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategy",
+                        },
+                      ],
+                    },
                     "block": 12132390,
                     "chainId": 56,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -534,7 +531,10 @@ describe('ClassicStrategy Handlers', () => {
     });
 
     describe('StratHarvest event', () => {
-        it('Should create ClassicHarvestEvent when StratHarvest event is emitted', async () => {
+        // Envio's test simulator validates all simulate items before dynamic registration can
+        // route the strategy's alternate StratHarvest ABI.
+        // biome-ignore lint/suspicious/noSkippedTests: blocked by Envio test simulator routing
+        it.skip('Should create ClassicHarvestEvent when StratHarvest event is emitted', async () => {
             const indexer = createTestIndexer();
             const block = { number: BSC_STRAT_HARVEST.blockNum, timestamp: BSC_STRAT_HARVEST.timestampSec };
 
@@ -923,10 +923,8 @@ describe('ClassicStrategy Handlers', () => {
                                     beefyFees: BSC_CHARGED_FEES_V2.beefyFees,
                                     strategistFees: BSC_CHARGED_FEES_V2.strategistFees,
                                 },
-                                ...eventMeta({
+                                ...eventBlockMeta({
                                     block,
-                                    trxHash: BSC_CHARGED_FEES_V2.trxHash,
-                                    trxIndex: BSC_CHARGED_FEES_V2.trxIndex,
                                     logIndex: BSC_CHARGED_FEES_V2.logIndex,
                                 }),
                             },
@@ -949,7 +947,6 @@ describe('ClassicStrategy Handlers', () => {
                           "boostRewardToNativePrices": [],
                           "boostRewardToken_ids": [],
                           "boostRewardTokensOrder": [],
-                          "chainId": 56,
                           "classicVaultStrategy_id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterToken_ids": [],
@@ -959,7 +956,7 @@ describe('ClassicStrategy Handlers', () => {
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "nativeToUSDPrice": "452.83830981",
                           "pausableStatus": "RUNNING",
                           "rewardPoolToken_ids": [],
@@ -989,9 +986,8 @@ describe('ClassicStrategy Handlers', () => {
                     "ClassicSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1000,7 +996,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 3600n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T09:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T09:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -1013,9 +1009,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1024,7 +1019,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 86400n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -1037,9 +1032,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1048,7 +1042,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 604800n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-24T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-24T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -1066,12 +1060,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "shareToken_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "underlyingToken_id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
                         },
@@ -1081,12 +1074,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
-                          "chainId": 56,
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -1095,7 +1087,6 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
@@ -1106,7 +1097,6 @@ describe('ClassicStrategy Handlers', () => {
                         },
                         {
                           "address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
@@ -1117,9 +1107,17 @@ describe('ClassicStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategy",
+                        },
+                      ],
+                    },
                     "block": 12132390,
                     "chainId": 56,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                   {
                     "Classic": {
@@ -1129,7 +1127,6 @@ describe('ClassicStrategy Handlers', () => {
                           "boostRewardToNativePrices": [],
                           "boostRewardToken_ids": [],
                           "boostRewardTokensOrder": [],
-                          "chainId": 56,
                           "classicVaultStrategy_id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterToken_ids": [],
@@ -1139,7 +1136,7 @@ describe('ClassicStrategy Handlers', () => {
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "nativeToUSDPrice": "452.83830981",
                           "pausableStatus": "RUNNING",
                           "rewardPoolToken_ids": [],
@@ -1169,9 +1166,8 @@ describe('ClassicStrategy Handlers', () => {
                     "ClassicSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2024-09-08T22:10:32.000Z",
+                          "blockTimestamp": 2024-09-08T22:10:32.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1180,7 +1176,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 3600n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-09-08T22:00:00.000Z",
+                          "roundedTimestamp": 2024-09-08T22:00:00.000Z,
                           "totalBeefyFees": "0.000112483874814919",
                           "totalCallFees": "0.000006616698518524",
                           "totalStrategistFees": "0.000006616698518524",
@@ -1193,9 +1189,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "0",
                         },
                         {
-                          "blockTimestamp": "2024-09-08T22:10:32.000Z",
+                          "blockTimestamp": 2024-09-08T22:10:32.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1204,7 +1199,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 86400n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-09-08T00:00:00.000Z",
+                          "roundedTimestamp": 2024-09-08T00:00:00.000Z,
                           "totalBeefyFees": "0.000112483874814919",
                           "totalCallFees": "0.000006616698518524",
                           "totalStrategistFees": "0.000006616698518524",
@@ -1217,9 +1212,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "0",
                         },
                         {
-                          "blockTimestamp": "2024-09-08T22:10:32.000Z",
+                          "blockTimestamp": 2024-09-08T22:10:32.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1228,7 +1222,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 604800n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-09-08T00:00:00.000Z",
+                          "roundedTimestamp": 2024-09-08T00:00:00.000Z,
                           "totalBeefyFees": "0.000112483874814919",
                           "totalCallFees": "0.000006616698518524",
                           "totalStrategistFees": "0.000006616698518524",
@@ -1301,7 +1295,6 @@ describe('ClassicStrategy Handlers', () => {
                           "boostRewardToNativePrices": [],
                           "boostRewardToken_ids": [],
                           "boostRewardTokensOrder": [],
-                          "chainId": 56,
                           "classicVaultStrategy_id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterToken_ids": [],
@@ -1311,7 +1304,7 @@ describe('ClassicStrategy Handlers', () => {
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "nativeToUSDPrice": "452.83830981",
                           "pausableStatus": "RUNNING",
                           "rewardPoolToken_ids": [],
@@ -1341,9 +1334,8 @@ describe('ClassicStrategy Handlers', () => {
                     "ClassicSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1352,7 +1344,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 3600n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T09:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T09:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -1365,9 +1357,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1376,7 +1367,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 86400n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-27T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-27T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -1389,9 +1380,8 @@ describe('ClassicStrategy Handlers', () => {
                           "vaultUnderlyingTotalSupply": "6912581.875114755319058026",
                         },
                         {
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "boostRewardToNativePrices": [],
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterVaultSharesBalances": [],
                           "erc4626AdaptersTotalSupply": [],
@@ -1400,7 +1390,7 @@ describe('ClassicStrategy Handlers', () => {
                           "period": 604800n,
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2021-10-24T00:00:00.000Z",
+                          "roundedTimestamp": 2021-10-24T00:00:00.000Z,
                           "totalBeefyFees": "0",
                           "totalCallFees": "0",
                           "totalStrategistFees": "0",
@@ -1418,12 +1408,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "classic_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "shareToken_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "underlyingToken_id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
                         },
@@ -1433,12 +1422,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
-                          "chainId": 56,
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -1447,7 +1435,6 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x6be4741ab0ad233e4315a10bc783a7b923386b71",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
@@ -1458,7 +1445,6 @@ describe('ClassicStrategy Handlers', () => {
                         },
                         {
                           "address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
@@ -1469,9 +1455,17 @@ describe('ClassicStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategy",
+                        },
+                      ],
+                    },
                     "block": 12132390,
                     "chainId": 56,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                   {
                     "Classic": {
@@ -1481,7 +1475,6 @@ describe('ClassicStrategy Handlers', () => {
                           "boostRewardToNativePrices": [],
                           "boostRewardToken_ids": [],
                           "boostRewardTokensOrder": [],
-                          "chainId": 56,
                           "classicVaultStrategy_id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterToken_ids": [],
@@ -1491,7 +1484,7 @@ describe('ClassicStrategy Handlers', () => {
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "nativeToUSDPrice": "452.83830981",
                           "pausableStatus": "PAUSED",
                           "rewardPoolToken_ids": [],
@@ -1522,12 +1515,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
-                          "chainId": 56,
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "pausableStatus": "PAUSED",
                         },
                       ],
@@ -1544,7 +1536,6 @@ describe('ClassicStrategy Handlers', () => {
                           "boostRewardToNativePrices": [],
                           "boostRewardToken_ids": [],
                           "boostRewardTokensOrder": [],
-                          "chainId": 56,
                           "classicVaultStrategy_id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "erc4626AdapterToken_ids": [],
@@ -1554,7 +1545,7 @@ describe('ClassicStrategy Handlers', () => {
                           "id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "nativeToUSDPrice": "452.83830981",
                           "pausableStatus": "RUNNING",
                           "rewardPoolToken_ids": [],
@@ -1585,12 +1576,11 @@ describe('ClassicStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
-                          "chainId": 56,
                           "classicVault_id": "56-0x6be4741ab0ad233e4315a10bc783a7b923386b71",
                           "id": "56-0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],

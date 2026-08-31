@@ -38,7 +38,6 @@ export const getOrCreateClassicPosition = async ({
 
     const position: ClassicPosition = {
         id,
-        chainId: classic.chainId,
         classic_id: classic.id,
         account_id: account.id,
         createdWithTrxHash:

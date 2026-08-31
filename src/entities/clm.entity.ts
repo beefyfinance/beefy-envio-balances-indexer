@@ -65,7 +65,6 @@ export const getOrCreateClm = async ({
 
     const clm: Clm = {
         id,
-        chainId,
         address: managerAddress,
         clmManager_id: clmManager.id,
         clmStrategy_id: undefined,

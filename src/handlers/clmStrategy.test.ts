@@ -7,9 +7,9 @@ import {
     BASE_TVL,
     eventMeta,
     initBaseClmSim,
-    MANAGER_BASE,
     STRATEGY_BASE,
 } from './testFixtures/clm';
+import { FACTORIES, registerClmStrategy } from './testFixtures/register';
 
 describe('ClmStrategy Handlers', () => {
     const blockNum = 15_683_455;
@@ -22,24 +22,7 @@ describe('ClmStrategy Handlers', () => {
             const trace = await indexer.process({
                 chains: {
                     8453: {
-                        simulate: [
-                            {
-                                contract: 'ClmManager',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
-                                srcAddress: MANAGER_BASE,
-                                params: { version: 1n },
-                            },
-                            {
-                                contract: 'ClmStrategy',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 1,
-                                srcAddress: STRATEGY_BASE,
-                                params: { version: 1n },
-                            },
-                        ],
+                        simulate: [...initBaseClmSim({ blockNum, timestampSec })],
                     },
                 },
             });
@@ -53,13 +36,12 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZING",
                           "initializedBlock": 15683455n,
-                          "initializedTimestamp": "2024-07-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-07-15T12:00:00.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "managerTotalSupply": "0",
                           "nativeToUSDPrice": "0",
@@ -97,12 +79,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clm_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 15683455n,
-                          "initializedTimestamp": "2024-07-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-07-15T12:00:00.000Z,
                           "shareToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "underlyingToken0_id": "8453-0x4200000000000000000000000000000000000006",
                           "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -113,7 +94,6 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
@@ -124,7 +104,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x4200000000000000000000000000000000000006",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x4200000000000000000000000000000000000006",
@@ -135,7 +114,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -146,9 +124,21 @@ describe('ClmStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
+                        },
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 15683455,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 4,
                   },
                 ],
               }
@@ -162,27 +152,12 @@ describe('ClmStrategy Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
-                            {
-                                contract: 'ClmManager',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
-                                srcAddress: MANAGER_BASE,
-                                params: { version: 1n },
-                            },
+                            ...initBaseClmSim({ blockNum, timestampSec }),
                             {
                                 contract: 'ClmStrategy',
                                 event: 'Initialized',
                                 block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 1,
-                                srcAddress: STRATEGY_BASE,
-                                params: { version: 1n },
-                            },
-                            {
-                                contract: 'ClmStrategy',
-                                event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 2,
+                                logIndex: 4,
                                 srcAddress: STRATEGY_BASE,
                                 params: { version: 1n },
                             },
@@ -203,13 +178,12 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZING",
                           "initializedBlock": 15683455n,
-                          "initializedTimestamp": "2024-07-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-07-15T12:00:00.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "managerTotalSupply": "0",
                           "nativeToUSDPrice": "0",
@@ -247,12 +221,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clm_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 15683455n,
-                          "initializedTimestamp": "2024-07-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-07-15T12:00:00.000Z,
                           "shareToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "underlyingToken0_id": "8453-0x4200000000000000000000000000000000000006",
                           "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -263,7 +236,6 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
@@ -274,7 +246,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x4200000000000000000000000000000000000006",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x4200000000000000000000000000000000000006",
@@ -285,7 +256,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -296,9 +266,21 @@ describe('ClmStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
+                        },
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 15683455,
                     "chainId": 8453,
-                    "eventsProcessed": 3,
+                    "eventsProcessed": 5,
                   },
                 ],
               }
@@ -312,11 +294,17 @@ describe('ClmStrategy Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerClmStrategy({
+                                factory: FACTORIES[8453].ClmStrategyFactory,
+                                proxy: '0x0000000000000000000000000000000000000001',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'ClmStrategy',
                                 event: 'Initialized',
                                 block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: '0x0000000000000000000000000000000000000001',
                                 params: { version: 1n },
                             },
@@ -329,9 +317,17 @@ describe('ClmStrategy Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x0000000000000000000000000000000000000001",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 15683455,
                     "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -345,11 +341,17 @@ describe('ClmStrategy Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerClmStrategy({
+                                factory: FACTORIES[8453].ClmStrategyFactory,
+                                proxy: STRATEGY_BASE,
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'ClmStrategy',
                                 event: 'Initialized',
                                 block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: STRATEGY_BASE,
                                 params: { version: 1n },
                             },
@@ -365,9 +367,17 @@ describe('ClmStrategy Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 15683455,
                     "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -413,15 +423,14 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "outputToken_ids": [],
@@ -457,8 +466,7 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "blockNumber": 17487152n,
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "collectedOutputAmounts": [],
@@ -466,7 +474,7 @@ describe('ClmStrategy Handlers', () => {
                           "compoundedAmount1": "0.27319",
                           "id": "8453-0x7e29db7de6b8d447c99f929ab6d2fdb8acf913f66d011e4885293bb0977663d2-51-4205",
                           "logIndex": 4205,
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "rewardPoolsTotalSupply": [],
@@ -484,12 +492,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clm_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "shareToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "underlyingToken0_id": "8453-0x4200000000000000000000000000000000000006",
                           "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -499,11 +506,10 @@ describe('ClmStrategy Handlers', () => {
                     "ClmSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-3600-1721761200",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 3600n,
@@ -512,7 +518,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T19:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T19:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -526,11 +532,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "1197.90377",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-86400-1721692800",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 86400n,
@@ -539,7 +544,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -553,11 +558,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "1197.90377",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-604800-1721520000",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 604800n,
@@ -566,7 +570,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-21T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-21T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -585,12 +589,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x51582dcef28aea484dd87933324a55482882ce17",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -599,7 +602,6 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
@@ -610,7 +612,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x4200000000000000000000000000000000000006",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x4200000000000000000000000000000000000006",
@@ -621,7 +622,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -632,9 +632,21 @@ describe('ClmStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
+                        },
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 17487152,
                     "chainId": 8453,
-                    "eventsProcessed": 3,
+                    "eventsProcessed": 5,
                   },
                 ],
               }
@@ -649,6 +661,12 @@ describe('ClmStrategy Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerClmStrategy({
+                                factory: FACTORIES[8453].ClmStrategyFactory,
+                                proxy: STRATEGY_BASE,
+                                block,
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'ClmStrategy',
                                 event: 'Harvest',
@@ -673,9 +691,17 @@ describe('ClmStrategy Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 17487152,
                     "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -726,15 +752,14 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "outputToken_ids": [],
@@ -770,12 +795,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clm_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "shareToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "underlyingToken0_id": "8453-0x4200000000000000000000000000000000000006",
                           "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -786,8 +810,7 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "blockNumber": 17487152n,
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "collectedAmount0": "0.00003575483041733",
@@ -814,11 +837,10 @@ describe('ClmStrategy Handlers', () => {
                     "ClmSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-3600-1721761200",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 3600n,
@@ -827,7 +849,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T19:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T19:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -841,11 +863,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "1197.90377",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-86400-1721692800",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 86400n,
@@ -854,7 +875,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -868,11 +889,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "1197.90377",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-604800-1721520000",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 604800n,
@@ -881,7 +901,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-21T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-21T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -900,12 +920,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x51582dcef28aea484dd87933324a55482882ce17",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -914,7 +933,6 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
@@ -925,7 +943,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x4200000000000000000000000000000000000006",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x4200000000000000000000000000000000000006",
@@ -936,7 +953,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -947,9 +963,21 @@ describe('ClmStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
+                        },
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 17487152,
                     "chainId": 8453,
-                    "eventsProcessed": 3,
+                    "eventsProcessed": 5,
                   },
                 ],
               }
@@ -995,15 +1023,14 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "outputToken_ids": [],
@@ -1039,12 +1066,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clm_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "shareToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "underlyingToken0_id": "8453-0x4200000000000000000000000000000000000006",
                           "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -1054,11 +1080,10 @@ describe('ClmStrategy Handlers', () => {
                     "ClmSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-3600-1721761200",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 3600n,
@@ -1067,7 +1092,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T19:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T19:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -1081,11 +1106,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "1197.90377",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-86400-1721692800",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 86400n,
@@ -1094,7 +1118,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -1108,11 +1132,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "1197.90377",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-604800-1721520000",
-                          "managerTotalSupply": "1.995477855e-9",
+                          "managerTotalSupply": "0.000000001995477855",
                           "nativeToUSDPrice": "3476.64991803",
                           "outputToNativePrices": [],
                           "period": 604800n,
@@ -1121,7 +1144,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3184.336896",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-21T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-21T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000287621245617",
                           "totalBeefyFees": "0",
@@ -1140,12 +1163,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x51582dcef28aea484dd87933324a55482882ce17",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17487152n,
-                          "initializedTimestamp": "2024-07-23T19:40:51.000Z",
+                          "initializedTimestamp": 2024-07-23T19:40:51.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -1154,15 +1176,14 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "blockNumber": 17487152n,
-                          "blockTimestamp": "2024-07-23T19:40:51.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T19:40:51.000Z,
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x7e29db7de6b8d447c99f929ab6d2fdb8acf913f66d011e4885293bb0977663d2-51-4201",
                           "logIndex": 4201,
                           "trxHash": "0x7e29db7de6b8d447c99f929ab6d2fdb8acf913f66d011e4885293bb0977663d2",
                           "trxIndex": 51,
-                          "underlyingAmount0": "1.4480795954e-8",
+                          "underlyingAmount0": "0.000000014480795954",
                           "underlyingAmount1": "3178.280166",
                         },
                       ],
@@ -1171,7 +1192,6 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
@@ -1182,7 +1202,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x4200000000000000000000000000000000000006",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x4200000000000000000000000000000000000006",
@@ -1193,7 +1212,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -1204,9 +1222,21 @@ describe('ClmStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
+                        },
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 17487152,
                     "chainId": 8453,
-                    "eventsProcessed": 3,
+                    "eventsProcessed": 5,
                   },
                 ],
               }
@@ -1221,6 +1251,12 @@ describe('ClmStrategy Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerClmStrategy({
+                                factory: FACTORIES[8453].ClmStrategyFactory,
+                                proxy: STRATEGY_BASE,
+                                block,
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'ClmStrategy',
                                 event: 'TVL',
@@ -1245,9 +1281,17 @@ describe('ClmStrategy Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 17487152,
                     "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -1304,15 +1348,14 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452460n,
-                          "initializedTimestamp": "2024-07-23T00:24:27.000Z",
+                          "initializedTimestamp": 2024-07-23T00:24:27.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "managerTotalSupply": "1.0342879e-11",
+                          "managerTotalSupply": "0.000000000010342879",
                           "nativeToUSDPrice": "3446.16476685",
                           "outputToNativePrices": [],
                           "outputToken_ids": [],
@@ -1348,12 +1391,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clm_id": undefined,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452460n,
-                          "initializedTimestamp": "2024-07-23T00:24:27.000Z",
+                          "initializedTimestamp": 2024-07-23T00:24:27.000Z,
                           "shareToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "underlyingToken0_id": "8453-0x4200000000000000000000000000000000000006",
                           "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -1363,11 +1405,10 @@ describe('ClmStrategy Handlers', () => {
                     "ClmSnapshot": {
                       "sets": [
                         {
-                          "blockTimestamp": "2024-07-23T00:24:27.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T00:24:27.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-3600-1721692800",
-                          "managerTotalSupply": "1.0342879e-11",
+                          "managerTotalSupply": "0.000000000010342879",
                           "nativeToUSDPrice": "3446.16476685",
                           "outputToNativePrices": [],
                           "period": 3600n,
@@ -1376,7 +1417,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3213.123836",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000290180547842",
                           "totalBeefyFees": "0",
@@ -1390,11 +1431,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "5.171662",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T00:24:27.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T00:24:27.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-86400-1721692800",
-                          "managerTotalSupply": "1.0342879e-11",
+                          "managerTotalSupply": "0.000000000010342879",
                           "nativeToUSDPrice": "3446.16476685",
                           "outputToNativePrices": [],
                           "period": 86400n,
@@ -1403,7 +1443,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3213.123836",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-23T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-23T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000290180547842",
                           "totalBeefyFees": "0",
@@ -1417,11 +1457,10 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingMainAmount1": "5.171662",
                         },
                         {
-                          "blockTimestamp": "2024-07-23T00:24:27.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-07-23T00:24:27.000Z,
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-604800-1721520000",
-                          "managerTotalSupply": "1.0342879e-11",
+                          "managerTotalSupply": "0.000000000010342879",
                           "nativeToUSDPrice": "3446.16476685",
                           "outputToNativePrices": [],
                           "period": 604800n,
@@ -1430,7 +1469,7 @@ describe('ClmStrategy Handlers', () => {
                           "priceRangeMin1": "3213.123836",
                           "rewardPoolsTotalSupply": [],
                           "rewardToNativePrices": [],
-                          "roundedTimestamp": "2024-07-21T00:00:00.000Z",
+                          "roundedTimestamp": 2024-07-21T00:00:00.000Z,
                           "token0ToNativePrice": "1",
                           "token1ToNativePrice": "0.000290180547842",
                           "totalBeefyFees": "0",
@@ -1449,12 +1488,11 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x51582dcef28aea484dd87933324a55482882ce17",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452460n,
-                          "initializedTimestamp": "2024-07-23T00:24:27.000Z",
+                          "initializedTimestamp": 2024-07-23T00:24:27.000Z,
                           "pausableStatus": "RUNNING",
                         },
                       ],
@@ -1463,7 +1501,6 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
@@ -1474,7 +1511,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x4200000000000000000000000000000000000006",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x4200000000000000000000000000000000000006",
@@ -1485,7 +1521,6 @@ describe('ClmStrategy Handlers', () => {
                         },
                         {
                           "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -1496,24 +1531,35 @@ describe('ClmStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "contract": "ClmManager",
+                        },
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "contract": "ClmStrategy",
+                        },
+                      ],
+                    },
                     "block": 17452460,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 4,
                   },
                   {
                     "Clm": {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452460n,
-                          "initializedTimestamp": "2024-07-23T00:24:27.000Z",
+                          "initializedTimestamp": 2024-07-23T00:24:27.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "managerTotalSupply": "1.0342879e-11",
+                          "managerTotalSupply": "0.000000000010342879",
                           "nativeToUSDPrice": "3446.16476685",
                           "outputToNativePrices": [],
                           "outputToken_ids": [],
@@ -1554,15 +1600,14 @@ describe('ClmStrategy Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
                           "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "clmStrategy_id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452460n,
-                          "initializedTimestamp": "2024-07-23T00:24:27.000Z",
+                          "initializedTimestamp": 2024-07-23T00:24:27.000Z,
                           "managerToken_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "managerTotalSupply": "1.0342879e-11",
+                          "managerTotalSupply": "0.000000000010342879",
                           "nativeToUSDPrice": "3446.16476685",
                           "outputToNativePrices": [],
                           "outputToken_ids": [],

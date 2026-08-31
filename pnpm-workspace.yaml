@@ -2,13 +2,7 @@ packages:
   - "."
 
 minimumReleaseAge: 10080 # 1 week
-minimumReleaseAgeExclude:
-  - envio-darwin-arm64@3.1.2
-  - envio-darwin-x64@3.1.2
-  - envio-linux-arm64@3.1.2
-  - envio-linux-x64-musl@3.1.2
-  - envio-linux-x64@3.1.2
-  - envio@3.1.2
+minimumReleaseAgeExclude: []
 
 allowBuilds:
   "@biomejs/biome": true

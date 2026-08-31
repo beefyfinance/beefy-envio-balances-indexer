@@ -22,38 +22,45 @@ indexer.onEvent({ contract: 'LstVault', event: 'Initialized' }, async ({ event, 
     context.log.info('LstVault initialized successfully', { lstAddress });
 });
 
-indexer.onEvent({ contract: 'LstVault', event: 'Transfer' }, async ({ event, context }) => {
-    context.log.debug('LstVault.Transfer', { event });
+indexer.onEvent(
+    {
+        contract: 'LstVault',
+        event: 'Transfer',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('LstVault.Transfer', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const lstAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const lstAddress = normalizeHex(event.srcAddress);
 
-    // Ensure that the LST vault is initialized first
-    const lst = await initializeLstVault({
-        context,
-        chainId,
-        lstAddress,
-        initializedBlock: event.block,
-    });
-    if (!lst) return;
+        // Ensure that the LST vault is initialized first
+        const lst = await initializeLstVault({
+            context,
+            chainId,
+            lstAddress,
+            initializedBlock: event.block,
+        });
+        if (!lst) return;
 
-    const shareToken = await getTokenOrThrow({ context, id: lst.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: lst.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: normalizeHex(event.params.from),
-        receiverAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: normalizeHex(event.params.from),
+            receiverAddress: normalizeHex(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
 const initializeLstVault = async ({
     context,

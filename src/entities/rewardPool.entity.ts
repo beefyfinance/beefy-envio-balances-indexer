@@ -30,7 +30,6 @@ export const createRewardPool = async ({
 
     const rewardPool: RewardPool = {
         id,
-        chainId,
         address: rewardPoolAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,

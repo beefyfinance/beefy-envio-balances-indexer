@@ -4,7 +4,8 @@ description: Beefy Finance Balance Indexer - Tracks ERC20 balances across multip
 address_format: lowercase
 raw_events: false
 save_full_history: false
-
+# Per-chain entity/effect isolation (recommended; default in HyperIndex v4)
+disable_default_cross_chain: true
 storage:
   postgres:
     default: true
@@ -22,7 +23,7 @@ contracts:
       - event: "ProxyCreated(address proxy)"
         name: VaultOrStrategyCreated
         field_selection:
-          transaction_fields: [hash, transactionIndex, input]
+          transaction_fields: [hash, input]
 
   - name: ClassicStrategyFactory
     abi_file_path: abis/beefy/classic/ClassicVaultFactory.json
@@ -92,12 +93,8 @@ contracts:
     events:
       - event: "Initialized(uint8 version)"
       - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
-        field_selection:
-          transaction_fields: [hash, transactionIndex]
       - event: "ChargedFees(uint256 callFees, uint256 beefyFees, uint256 strategistFees)"
         name: ChargedFeesV2
-        field_selection:
-          transaction_fields: [hash, transactionIndex]
       - event: "Paused(address account)"
       - event: "Unpaused(address account)"
 
@@ -186,12 +183,8 @@ contracts:
         field_selection:
           transaction_fields: [hash, transactionIndex]
       - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
-        field_selection:
-          transaction_fields: [hash, transactionIndex]
       - event: "ChargedFees(uint256 callFeeAmount, uint256 beefyFeeAmount, uint256 strategistFeeAmount)"
         name: ChargedFeesV2
-        field_selection:
-          transaction_fields: [hash, transactionIndex]
       - event: "TVL(uint256 bal0, uint256 bal1)"
         field_selection:
           transaction_fields: [hash, transactionIndex]

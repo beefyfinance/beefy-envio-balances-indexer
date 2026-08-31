@@ -30,7 +30,6 @@ export const getOrCreateClassicSnapshot = async ({
 
     const snapshot: ClassicSnapshot = {
         id,
-        chainId: classic.chainId,
         classic_id: classic.id,
         period: BigInt(period),
         roundedTimestamp: new Date(roundedTimestamp * 1000),

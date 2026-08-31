@@ -36,7 +36,6 @@ export const getOrCreateClmPosition = async ({
 
     const position: ClmPosition = {
         id,
-        chainId: clm.chainId,
         clm_id: clm.id,
         account_id: account.id,
         createdWithTrxHash: normalizeHex('0x0000000000000000000000000000000000000000000000000000000000000000'),

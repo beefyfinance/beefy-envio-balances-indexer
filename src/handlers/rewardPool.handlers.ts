@@ -37,134 +37,198 @@ indexer.onEvent({ contract: 'RewardPool', event: 'Initialized' }, async ({ event
     context.log.info('RewardPool initialized successfully', { rewardPoolAddress });
 });
 
-indexer.onEvent({ contract: 'RewardPool', event: 'Transfer' }, async ({ event, context }) => {
-    context.log.debug('RewardPool.Transfer', { event });
+indexer.onEvent(
+    {
+        contract: 'RewardPool',
+        event: 'Transfer',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('RewardPool.Transfer', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const rewardPoolAddress = normalizeHex(event.srcAddress);
 
-    // Ensure that the reward pool is initialized first
-    let rewardPool = await initializeRewardPool({
-        context,
-        chainId,
-        rewardPoolAddress,
-        initializedBlock: event.block,
-    });
-    if (!rewardPool) return;
+        // Ensure that the reward pool is initialized first
+        let rewardPool = await initializeRewardPool({
+            context,
+            chainId,
+            rewardPoolAddress,
+            initializedBlock: event.block,
+        });
+        if (!rewardPool) return;
 
-    rewardPool = await maybeLinkRewardPoolProducts({ context, chainId, rewardPool });
+        rewardPool = await maybeLinkRewardPoolProducts({ context, chainId, rewardPool });
 
-    const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: normalizeHex(event.params.from),
-        receiverAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: normalizeHex(event.params.from),
+            receiverAddress: normalizeHex(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
 
-    await maybeHandleClmRewardPoolTransfer({
-        context,
-        chainId,
-        rewardPool,
-        fromAddress: normalizeHex(event.params.from),
-        toAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
+        await maybeHandleClmRewardPoolTransfer({
+            context,
+            chainId,
+            rewardPool,
+            fromAddress: normalizeHex(event.params.from),
+            toAddress: normalizeHex(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
 
-    await maybeHandleClassicRewardPoolTransfer({
-        context,
-        chainId,
-        rewardPool,
-        fromAddress: normalizeHex(event.params.from),
-        toAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await maybeHandleClassicRewardPoolTransfer({
+            context,
+            chainId,
+            rewardPool,
+            fromAddress: normalizeHex(event.params.from),
+            toAddress: normalizeHex(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'RewardPool', event: 'NotifyReward' }, async ({ event, context }) => {
-    context.log.debug('RewardPool.NotifyReward', { event });
+indexer.onEvent(
+    {
+        contract: 'RewardPool',
+        event: 'NotifyReward',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('RewardPool.NotifyReward', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const rewardPoolAddress = normalizeHex(event.srcAddress);
 
-    const rewardPool = await initializeRewardPool({
-        context,
-        chainId,
-        rewardPoolAddress,
-        initializedBlock: event.block,
-    });
-    if (!rewardPool) return;
+        const rewardPool = await initializeRewardPool({
+            context,
+            chainId,
+            rewardPoolAddress,
+            initializedBlock: event.block,
+        });
+        if (!rewardPool) return;
 
-    const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
-    const rewardToken = await getOrCreateToken({
-        context,
-        chainId,
-        tokenAddress: normalizeHex(event.params.reward),
-        virtual: false,
-    });
-    if (!rewardToken) return;
+        const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
+        const rewardToken = await getOrCreateToken({
+            context,
+            chainId,
+            tokenAddress: normalizeHex(event.params.reward),
+            virtual: false,
+        });
+        if (!rewardToken) return;
 
-    await createRewardPoolRewardedEvent({
-        context,
-        chainId,
-        poolShareToken: shareToken,
-        rewardToken: rewardToken,
-        rewardVestingSeconds: event.params.duration,
-        rewardAmount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await createRewardPoolRewardedEvent({
+            context,
+            chainId,
+            poolShareToken: shareToken,
+            rewardToken: rewardToken,
+            rewardVestingSeconds: event.params.duration,
+            rewardAmount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: normalizeHex(event.transaction.hash),
+            },
+        });
+    }
+);
 
-indexer.onEvent({ contract: 'RewardPool', event: 'RewardPaid' }, async ({ event, context }) => {
-    context.log.debug('RewardPool.RewardPaid', { event });
+indexer.onEvent(
+    {
+        contract: 'RewardPool',
+        event: 'RewardPaid',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('RewardPool.RewardPaid', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const rewardPoolAddress = normalizeHex(event.srcAddress);
 
-    const rewardPool = await initializeRewardPool({
-        context,
-        chainId,
-        rewardPoolAddress,
-        initializedBlock: event.block,
-    });
-    if (!rewardPool) return;
+        const rewardPool = await initializeRewardPool({
+            context,
+            chainId,
+            rewardPoolAddress,
+            initializedBlock: event.block,
+        });
+        if (!rewardPool) return;
 
-    const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
-    const isClmPool = await isClmManagerRewardPool({
-        context,
-        chainId,
-        stakedTokenAddress: normalizeHex(underlyingToken.address),
-    });
+        const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
+        const isClmPool = await isClmManagerRewardPool({
+            context,
+            chainId,
+            stakedTokenAddress: normalizeHex(underlyingToken.address),
+        });
 
-    if (isClmPool) {
-        const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
-        if (!clm || clm.initializableStatus !== 'INITIALIZED') return;
+        if (isClmPool) {
+            const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
+            if (!clm || clm.initializableStatus !== 'INITIALIZED') return;
+
+            const rewardToken = await getOrCreateToken({
+                context,
+                chainId,
+                tokenAddress: normalizeHex(event.params.reward),
+                virtual: false,
+            });
+            if (!rewardToken) return;
+
+            const tokenContext = await loadClmTokens({ context, clm });
+            const rawState = await context.effect(
+                fetchClmState,
+                buildClmFetchInput({ clm, tokens: tokenContext, chainId, blockNumber: event.block.number })
+            );
+            const state = parseFetchedClmState(rawState, tokenContext);
+
+            await handleClmRewardPoolRewardPaid({
+                context,
+                chainId,
+                clm,
+                rewardPool,
+                userAddress: normalizeHex(event.params.user),
+                rewardToken,
+                rewardAmount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
+                state,
+                event: {
+                    block: event.block,
+                    trxIndex: event.transaction.transactionIndex,
+                    logIndex: event.logIndex,
+                    trxHash: normalizeHex(event.transaction.hash),
+                },
+            });
+            return;
+        }
+
+        const isClassicPool = await isClassicVaultStakedToken({
+            context,
+            chainId,
+            stakedTokenAddress: normalizeHex(underlyingToken.address),
+        });
+        if (!isClassicPool) return;
+
+        const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
+        if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
 
         const rewardToken = await getOrCreateToken({
             context,
@@ -174,21 +238,24 @@ indexer.onEvent({ contract: 'RewardPool', event: 'RewardPaid' }, async ({ event,
         });
         if (!rewardToken) return;
 
-        const tokenContext = await loadClmTokens({ context, clm });
-        const rawState = await context.effect(
-            fetchClmState,
-            buildClmFetchInput({ clm, tokens: tokenContext, blockNumber: event.block.number })
-        );
-        const state = parseFetchedClmState(rawState, tokenContext);
-
-        await handleClmRewardPoolRewardPaid({
+        const tokenContext = await loadClassicTokens({ context, classic });
+        const fetchInput = await buildClassicFetchInput({
             context,
             chainId,
-            clm,
-            rewardPool,
-            userAddress: normalizeHex(event.params.user),
-            rewardToken,
-            rewardAmount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
+            classic,
+            tokens: tokenContext,
+            blockNumber: event.block.number,
+        });
+        const rawState = await context.effect(fetchClassicState, fetchInput);
+        const state = parseFetchedClassicState(rawState, tokenContext);
+
+        await handleClassicRewardPoolRewardPaid({
+            context,
+            chainId,
+            classic,
+            accountAddress: normalizeHex(event.params.user),
+            rewardTokenAddress: normalizeHex(rewardToken.address),
+            amount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
             state,
             event: {
                 block: event.block,
@@ -197,78 +264,60 @@ indexer.onEvent({ contract: 'RewardPool', event: 'RewardPaid' }, async ({ event,
                 trxHash: normalizeHex(event.transaction.hash),
             },
         });
-        return;
     }
+);
 
-    const isClassicPool = await isClassicVaultStakedToken({
-        context,
-        chainId,
-        stakedTokenAddress: normalizeHex(underlyingToken.address),
-    });
-    if (!isClassicPool) return;
+indexer.onEvent(
+    {
+        contract: 'RewardPool',
+        event: 'AddReward',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('RewardPool.AddReward', { event });
 
-    const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
-    if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
+        const chainId = toChainId(context.chain.id);
+        const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const rewardPool = await initializeRewardPool({
+            context,
+            chainId,
+            rewardPoolAddress,
+            initializedBlock: event.block,
+        });
+        if (!rewardPool) return;
 
-    const rewardToken = await getOrCreateToken({
-        context,
-        chainId,
-        tokenAddress: normalizeHex(event.params.reward),
-        virtual: false,
-    });
-    if (!rewardToken) return;
+        const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
+        const isClmPool = await isClmManagerRewardPool({
+            context,
+            chainId,
+            stakedTokenAddress: normalizeHex(underlyingToken.address),
+        });
 
-    const tokenContext = await loadClassicTokens({ context, classic });
-    const fetchInput = await buildClassicFetchInput({
-        context,
-        chainId,
-        classic,
-        tokens: tokenContext,
-        blockNumber: event.block.number,
-    });
-    const rawState = await context.effect(fetchClassicState, fetchInput);
-    const state = parseFetchedClassicState(rawState, tokenContext);
+        if (isClmPool) {
+            const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
+            if (!clm) return;
 
-    await handleClassicRewardPoolRewardPaid({
-        context,
-        chainId,
-        classic,
-        accountAddress: normalizeHex(event.params.user),
-        rewardTokenAddress: normalizeHex(rewardToken.address),
-        amount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
-        state,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+            const rewardToken = await getOrCreateToken({
+                context,
+                chainId,
+                tokenAddress: normalizeHex(event.params.reward),
+                virtual: false,
+            });
+            if (!rewardToken) return;
 
-indexer.onEvent({ contract: 'RewardPool', event: 'AddReward' }, async ({ event, context }) => {
-    context.log.debug('RewardPool.AddReward', { event });
+            await addClmRewardToken({ context, clm, rewardToken });
+            return;
+        }
 
-    const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = normalizeHex(event.srcAddress);
-    const rewardPool = await initializeRewardPool({
-        context,
-        chainId,
-        rewardPoolAddress,
-        initializedBlock: event.block,
-    });
-    if (!rewardPool) return;
+        const isClassicPool = await isClassicVaultStakedToken({
+            context,
+            chainId,
+            stakedTokenAddress: normalizeHex(underlyingToken.address),
+        });
+        if (!isClassicPool) return;
 
-    const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
-    const isClmPool = await isClmManagerRewardPool({
-        context,
-        chainId,
-        stakedTokenAddress: normalizeHex(underlyingToken.address),
-    });
-
-    if (isClmPool) {
-        const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
-        if (!clm) return;
+        const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
+        if (!classic) return;
 
         const rewardToken = await getOrCreateToken({
             context,
@@ -278,30 +327,9 @@ indexer.onEvent({ contract: 'RewardPool', event: 'AddReward' }, async ({ event, 
         });
         if (!rewardToken) return;
 
-        await addClmRewardToken({ context, clm, rewardToken });
-        return;
+        await addClassicRewardToken({ context, classic, rewardToken });
     }
-
-    const isClassicPool = await isClassicVaultStakedToken({
-        context,
-        chainId,
-        stakedTokenAddress: normalizeHex(underlyingToken.address),
-    });
-    if (!isClassicPool) return;
-
-    const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
-    if (!classic) return;
-
-    const rewardToken = await getOrCreateToken({
-        context,
-        chainId,
-        tokenAddress: normalizeHex(event.params.reward),
-        virtual: false,
-    });
-    if (!rewardToken) return;
-
-    await addClassicRewardToken({ context, classic, rewardToken });
-});
+);
 
 const maybeHandleClmRewardPoolTransfer = async ({
     context,
@@ -339,7 +367,7 @@ const maybeHandleClmRewardPoolTransfer = async ({
     const tokenContext = await loadClmTokens({ context, clm });
     const rawState = await context.effect(
         fetchClmState,
-        buildClmFetchInput({ clm, tokens: tokenContext, blockNumber: event.block.number })
+        buildClmFetchInput({ clm, tokens: tokenContext, chainId, blockNumber: event.block.number })
     );
     const state = parseFetchedClmState(rawState, tokenContext);
     const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });

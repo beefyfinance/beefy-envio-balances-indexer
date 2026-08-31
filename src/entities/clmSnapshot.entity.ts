@@ -30,7 +30,6 @@ export const getOrCreateClmSnapshot = async ({
 
     const snapshot: ClmSnapshot = {
         id,
-        chainId: clm.chainId,
         clm_id: clm.id,
         period: BigInt(period),
         roundedTimestamp: new Date(roundedTimestamp * 1000),

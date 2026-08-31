@@ -32,7 +32,6 @@ export const createClmManager = async ({
 
     const manager: ClmManager = {
         id,
-        chainId,
         address: managerAddress,
         clm_id: undefined,
         shareToken_id: shareToken.id,
@@ -73,7 +72,6 @@ export const createClmStrategy = async ({
 
     const strategy: ClmStrategy = {
         id,
-        chainId,
         address: strategyAddress,
         clmManager_id: clmManager.id,
         initializableStatus: 'INITIALIZED',
