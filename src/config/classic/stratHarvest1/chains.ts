@@ -1,5 +1,5 @@
 import type { EvmChainId } from 'envio';
-import type { Hex } from 'viem';
+import type { Bytes } from '../../../lib/hex';
 
 /**
  * Strategy addresses that emit `StratHarvest` with all fields indexed (Harvest1 ABI).
@@ -7,7 +7,7 @@ import type { Hex } from 'viem';
  *
  * Subgraph source files are noted per chain. All subgraph deployments use empty lists today.
  */
-export const CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN: Partial<Record<EvmChainId, readonly Hex[]>> = {
+export const CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN: Partial<Record<EvmChainId, readonly Bytes[]>> = {
     1: [], // ethereum.json
     10: [], // optimism.json
     25: [], // cronos — no subgraph deployment

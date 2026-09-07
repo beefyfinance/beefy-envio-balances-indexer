@@ -8,7 +8,6 @@ import type {
     EvmOnEventContext,
     RewardPool,
 } from 'envio';
-import type { Hex } from 'viem';
 import type { ClassicState } from '../../effects/classic.effects';
 import { getOrCreateAccount } from '../../entities/account.entity';
 import { isClassicInitialized } from '../../entities/classic.entity';
@@ -17,24 +16,20 @@ import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
 import { type EventMetadata, eventId } from '../event';
-import { normalizeHex } from '../hex';
+import { type Bytes, bytesEqual, toHex } from '../hex';
 
-const isRewardPoolAddress = (classic: Classic, address: Hex): boolean =>
-    classic.rewardPoolTokensOrder.includes(normalizeHex(address));
+const isRewardPoolAddress = (classic: Classic, address: Bytes): boolean =>
+    classic.rewardPoolTokensOrder.includes(toHex(address));
 
-const isErc4626AdapterAddress = (classic: Classic, address: Hex): boolean =>
-    classic.erc4626AdapterTokensOrder.includes(normalizeHex(address));
+const isErc4626AdapterAddress = (classic: Classic, address: Bytes): boolean =>
+    classic.erc4626AdapterTokensOrder.includes(toHex(address));
 
-const shouldSkipTransferAddress = (classic: Classic, address: Hex): boolean => {
-    const normalized = normalizeHex(address);
-    return (
-        normalized === config.MINT_ADDRESS ||
-        normalized === config.BURN_ADDRESS ||
-        normalized === normalizeHex(classic.address) ||
-        isRewardPoolAddress(classic, normalized) ||
-        isErc4626AdapterAddress(classic, normalized)
-    );
-};
+const shouldSkipTransferAddress = (classic: Classic, address: Bytes): boolean =>
+    bytesEqual(address, config.MINT_ADDRESS) ||
+    bytesEqual(address, config.BURN_ADDRESS) ||
+    bytesEqual(address, classic.address) ||
+    isRewardPoolAddress(classic, address) ||
+    isErc4626AdapterAddress(classic, address);
 
 const buildRewardPoolBalancesDelta = ({
     classic,
@@ -42,12 +37,12 @@ const buildRewardPoolBalancesDelta = ({
     amount,
 }: {
     classic: Classic;
-    rewardPoolAddress: Hex;
+    rewardPoolAddress: Bytes;
     amount: BigDecimal;
-}): BigDecimal[] =>
-    classic.rewardPoolTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(rewardPoolAddress) ? amount : BIG_ZERO
-    );
+}): BigDecimal[] => {
+    const rewardPoolAddressStr = toHex(rewardPoolAddress);
+    return classic.rewardPoolTokensOrder.map((addressStr) => (addressStr === rewardPoolAddressStr ? amount : BIG_ZERO));
+};
 
 const buildErc4626AdapterBalancesDelta = ({
     classic,
@@ -55,12 +50,14 @@ const buildErc4626AdapterBalancesDelta = ({
     amount,
 }: {
     classic: Classic;
-    adapterAddress: Hex;
+    adapterAddress: Bytes;
     amount: BigDecimal;
-}): BigDecimal[] =>
-    classic.erc4626AdapterTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(adapterAddress) ? amount : BIG_ZERO
+}): BigDecimal[] => {
+    const adapterAddressStr = toHex(adapterAddress);
+    return classic.erc4626AdapterTokensOrder.map((addressStr) =>
+        addressStr === adapterAddressStr ? amount : BIG_ZERO
     );
+};
 
 const applyBalanceDeltas = ({
     position,
@@ -207,7 +204,7 @@ const updateClassicPositionFromDeltas = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     classic: Classic;
-    accountAddress: Hex;
+    accountAddress: Bytes;
     vaultBalanceDelta: BigDecimal;
     boostBalanceDelta: BigDecimal;
     boostRewardBalancesDelta: BigDecimal[];
@@ -322,13 +319,13 @@ export const handleClassicVaultTransfer = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     classic: Classic;
-    fromAddress: Hex;
-    toAddress: Hex;
+    fromAddress: Bytes;
+    toAddress: Bytes;
     transferAmount: BigDecimal;
     state: ClassicState;
     event: EventMetadata;
 }) => {
-    if (normalizeHex(fromAddress) === normalizeHex(toAddress) || transferAmount.eq(BIG_ZERO)) {
+    if (fromAddress === toAddress || transferAmount.eq(BIG_ZERO)) {
         return;
     }
 
@@ -379,7 +376,7 @@ export const handleClassicBoostStake = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     classic: Classic;
-    accountAddress: Hex;
+    accountAddress: Bytes;
     amount: BigDecimal;
     state: ClassicState;
     event: EventMetadata;
@@ -412,7 +409,7 @@ export const handleClassicBoostUnstake = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     classic: Classic;
-    accountAddress: Hex;
+    accountAddress: Bytes;
     amount: BigDecimal;
     state: ClassicState;
     event: EventMetadata;
@@ -446,14 +443,15 @@ export const handleClassicBoostRewardPaid = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     classic: Classic;
-    accountAddress: Hex;
-    rewardTokenAddress: Hex;
+    accountAddress: Bytes;
+    rewardTokenAddress: Bytes;
     amount: BigDecimal;
     state: ClassicState;
     event: EventMetadata;
 }) => {
-    const boostRewardBalancesDelta = classic.boostRewardTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(rewardTokenAddress) ? amount : BIG_ZERO
+    const rewardTokenAddressStr = toHex(rewardTokenAddress);
+    const boostRewardBalancesDelta = classic.boostRewardTokensOrder.map((addressStr) =>
+        addressStr === rewardTokenAddressStr ? amount : BIG_ZERO
     );
 
     await updateClassicPositionFromDeltas({
@@ -487,19 +485,19 @@ export const handleClassicRewardPoolTransfer = async ({
     chainId: EvmChainId;
     classic: Classic;
     rewardPool: RewardPool;
-    fromAddress: Hex;
-    toAddress: Hex;
+    fromAddress: Bytes;
+    toAddress: Bytes;
     transferAmount: BigDecimal;
     state: ClassicState;
     event: EventMetadata;
 }) => {
-    if (normalizeHex(fromAddress) === normalizeHex(toAddress) || transferAmount.eq(BIG_ZERO)) {
+    if (fromAddress === toAddress || transferAmount.eq(BIG_ZERO)) {
         return;
     }
 
     const rewardPoolBalancesDelta = buildRewardPoolBalancesDelta({
         classic,
-        rewardPoolAddress: normalizeHex(rewardPool.address),
+        rewardPoolAddress: rewardPool.address,
         amount: transferAmount,
     });
 
@@ -551,14 +549,15 @@ export const handleClassicRewardPoolRewardPaid = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     classic: Classic;
-    accountAddress: Hex;
-    rewardTokenAddress: Hex;
+    accountAddress: Bytes;
+    rewardTokenAddress: Bytes;
     amount: BigDecimal;
     state: ClassicState;
     event: EventMetadata;
 }) => {
-    const rewardBalancesDelta = classic.rewardTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(rewardTokenAddress) ? amount : BIG_ZERO
+    const rewardTokenAddressStr = toHex(rewardTokenAddress);
+    const rewardBalancesDelta = classic.rewardTokensOrder.map((addressStr) =>
+        addressStr === rewardTokenAddressStr ? amount : BIG_ZERO
     );
 
     await updateClassicPositionFromDeltas({
@@ -592,19 +591,19 @@ export const handleClassicErc4626AdapterTransfer = async ({
     chainId: EvmChainId;
     classic: Classic;
     adapter: ClassicErc4626Adapter;
-    fromAddress: Hex;
-    toAddress: Hex;
+    fromAddress: Bytes;
+    toAddress: Bytes;
     transferAmount: BigDecimal;
     state: ClassicState;
     event: EventMetadata;
 }) => {
-    if (normalizeHex(fromAddress) === normalizeHex(toAddress) || transferAmount.eq(BIG_ZERO)) {
+    if (fromAddress === toAddress || transferAmount.eq(BIG_ZERO)) {
         return;
     }
 
     const erc4626AdapterBalancesDelta = buildErc4626AdapterBalancesDelta({
         classic,
-        adapterAddress: normalizeHex(adapter.address),
+        adapterAddress: adapter.address,
         amount: transferAmount,
     });
 

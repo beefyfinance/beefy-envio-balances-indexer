@@ -1,4 +1,4 @@
-import type { Hex } from 'viem';
+import type { Hex } from '../../lib/hex';
 import { FACTORIES, registerClassicStrategy } from './register';
 
 /** Polygon chain id */

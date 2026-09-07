@@ -1,12 +1,11 @@
-import type { Hex } from 'viem';
 import type { ChainOracleWithBeefyPricing } from '../../config/oracle';
 import { BEEFY_SWAPPER_VALUE_SCALER } from '../../lib/decimal';
-import type { FetchToken } from '../../lib/schema';
+import { type Bytes, type Hex, toHex } from '../../lib/hex';
 import { beefySwapperAbi } from '../abis/beefy/common/BeefySwapper';
 import { beefyOracleAbi } from '../abis/beefy/oracle/BeefyOracle';
 
 export type OracleMulticallContract = {
-    address: `0x${string}`;
+    address: Hex;
     abi: readonly unknown[];
     functionName: string;
     args?: readonly unknown[];
@@ -66,28 +65,33 @@ const parseSwapperToNativePrice = (
 
 export const buildBeefyOracleFreshPriceCalls = (
     oracleConfig: ChainOracleWithBeefyPricing,
-    tokenAddresses: readonly Hex[]
-): OracleMulticallContract[] =>
-    tokenAddresses.map((tokenAddress) => ({
-        address: oracleConfig.beefyOracleAddress,
+    tokenAddresses: readonly Bytes[]
+): OracleMulticallContract[] => {
+    const beefyOracleAddressStr = toHex(oracleConfig.beefyOracleAddress);
+    return tokenAddresses.map((tokenAddress) => ({
+        address: beefyOracleAddressStr,
         abi: beefyOracleAbi,
         functionName: 'getFreshPrice',
-        args: [tokenAddress],
+        args: [toHex(tokenAddress)],
     }));
+};
 
 export const buildBeefySwapperToNativeCalls = (
     oracleConfig: ChainOracleWithBeefyPricing,
-    tokens: readonly FetchToken[]
-): OracleMulticallContract[] =>
-    tokens.map((token) => {
+    tokens: readonly { address: Bytes; decimals: number }[]
+): OracleMulticallContract[] => {
+    const beefySwapperAddressStr = toHex(oracleConfig.beefySwapperAddress);
+    const wrappedNativeAddressStr = toHex(oracleConfig.wrappedNativeAddress);
+    return tokens.map((token) => {
         const amountIn = getBeefySwapperAmountIn(token.decimals);
         return {
-            address: oracleConfig.beefySwapperAddress,
+            address: beefySwapperAddressStr,
             abi: beefySwapperAbi,
             functionName: 'getAmountOut',
-            args: [token.address, oracleConfig.wrappedNativeAddress, amountIn],
+            args: [toHex(token.address), wrappedNativeAddressStr, amountIn],
         };
     });
+};
 
 export const parseBeefyOracleFreshPriceResults = (
     results: readonly MulticallResult<FreshPriceResult>[]

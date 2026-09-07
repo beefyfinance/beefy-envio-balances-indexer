@@ -1,10 +1,8 @@
 import type { Account, Classic, ClassicPosition, EvmOnEventContext } from 'envio';
-import type { Hex } from 'viem';
 import { BIG_ZERO, type BigDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
-
-export const classicPositionId = ({ classicId, accountAddress }: { classicId: string; accountAddress: Hex }) =>
-    `${classicId}-${normalizeHex(accountAddress)}`;
+import { type Bytes, toHex, ZERO_HASH } from '../lib/hex';
+export const classicPositionId = ({ classicId, accountAddress }: { classicId: string; accountAddress: Bytes }) =>
+    `${classicId}-${toHex(accountAddress)}`;
 
 export const getClassicPosition = async ({
     context,
@@ -13,7 +11,7 @@ export const getClassicPosition = async ({
 }: {
     context: EvmOnEventContext;
     classicId: string;
-    accountAddress: Hex;
+    accountAddress: Bytes;
 }) => {
     const id = classicPositionId({ classicId, accountAddress });
     return await context.ClassicPosition.get(id);
@@ -28,9 +26,9 @@ export const getOrCreateClassicPosition = async ({
     context: EvmOnEventContext;
     classic: Classic;
     account: Account;
-    createdWithTrxHash?: Hex;
+    createdWithTrxHash?: Bytes;
 }): Promise<ClassicPosition> => {
-    const id = classicPositionId({ classicId: classic.id, accountAddress: normalizeHex(account.address) });
+    const id = classicPositionId({ classicId: classic.id, accountAddress: account.address });
     const existing = await context.ClassicPosition.get(id);
     if (existing) {
         return existing;
@@ -40,8 +38,7 @@ export const getOrCreateClassicPosition = async ({
         id,
         classic_id: classic.id,
         account_id: account.id,
-        createdWithTrxHash:
-            createdWithTrxHash ?? normalizeHex('0x0000000000000000000000000000000000000000000000000000000000000000'),
+        createdWithTrxHash: createdWithTrxHash ?? ZERO_HASH,
         vaultBalance: BIG_ZERO,
         boostBalance: BIG_ZERO,
         rewardPoolBalances: [],

@@ -1,6 +1,5 @@
 import type { ClassicBoost, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import { indexer } from 'envio';
-import type { Hex } from 'viem';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { getClassicBoostTokens } from '../effects/classicBoost.effects';
 import { getClassic } from '../entities/classic.entity';
@@ -18,14 +17,14 @@ import {
 import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens';
 import { config } from '../lib/config';
 import { interpretAsDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toBytes, toHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
 indexer.onEvent({ contract: 'ClassicBoost', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClassicBoost.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const boostAddress = normalizeHex(event.srcAddress);
+    const boostAddress = toBytes(event.srcAddress);
     const initializedBlock = event.block;
 
     const boost = await initializeBoost({ context, chainId, boostAddress, initializedBlock });
@@ -35,7 +34,7 @@ indexer.onEvent({ contract: 'ClassicBoost', event: 'Initialized' }, async ({ eve
     const isClassicBoost = await isClassicVaultStakedToken({
         context,
         chainId,
-        stakedTokenAddress: normalizeHex(stakedToken.address),
+        stakedTokenAddress: stakedToken.address,
     });
     if (!isClassicBoost) return;
 
@@ -58,7 +57,7 @@ indexer.onEvent(
         context.log.debug('ClassicBoost.Staked', { event });
 
         const chainId = toChainId(context.chain.id);
-        const boostAddress = normalizeHex(event.srcAddress);
+        const boostAddress = toBytes(event.srcAddress);
         const initializedBlock = event.block;
 
         // Ensure that the boost virtual token is created first
@@ -75,13 +74,13 @@ indexer.onEvent(
             chainId,
             token: shareToken,
             senderAddress: config.MINT_ADDRESS,
-            receiverAddress: normalizeHex(event.params.user),
+            receiverAddress: toBytes(event.params.user),
             rawTransferAmount: event.params.amount,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
 
@@ -89,13 +88,13 @@ indexer.onEvent(
             context,
             chainId,
             boost,
-            accountAddress: normalizeHex(event.params.user),
+            accountAddress: toBytes(event.params.user),
             rawAmount: event.params.amount,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -111,7 +110,7 @@ indexer.onEvent(
         context.log.debug('ClassicBoost.Withdrawn', { event });
 
         const chainId = toChainId(context.chain.id);
-        const boostAddress = normalizeHex(event.srcAddress);
+        const boostAddress = toBytes(event.srcAddress);
 
         let boost = await initializeBoost({
             context,
@@ -128,14 +127,14 @@ indexer.onEvent(
             context,
             chainId,
             token: shareToken,
-            senderAddress: normalizeHex(event.params.user),
+            senderAddress: toBytes(event.params.user),
             receiverAddress: config.BURN_ADDRESS,
             rawTransferAmount: event.params.amount,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
 
@@ -143,13 +142,13 @@ indexer.onEvent(
             context,
             chainId,
             boost,
-            accountAddress: normalizeHex(event.params.user),
+            accountAddress: toBytes(event.params.user),
             rawAmount: event.params.amount,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -165,7 +164,7 @@ indexer.onEvent(
         context.log.debug('ClassicBoost.RewardAdded', { event });
 
         const chainId = toChainId(context.chain.id);
-        const boostAddress = normalizeHex(event.srcAddress);
+        const boostAddress = toBytes(event.srcAddress);
 
         const boost = await initializeBoost({
             context,
@@ -191,7 +190,7 @@ indexer.onEvent(
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -207,7 +206,7 @@ indexer.onEvent(
         context.log.debug('ClassicBoost.RewardPaid', { event });
 
         const chainId = toChainId(context.chain.id);
-        const boostAddress = normalizeHex(event.srcAddress);
+        const boostAddress = toBytes(event.srcAddress);
 
         let boost = await initializeBoost({
             context,
@@ -238,15 +237,15 @@ indexer.onEvent(
             context,
             chainId,
             classic,
-            accountAddress: normalizeHex(event.params.user),
-            rewardTokenAddress: normalizeHex(rewardToken.address),
+            accountAddress: toBytes(event.params.user),
+            rewardTokenAddress: rewardToken.address,
             amount: interpretAsDecimal(event.params.reward, rewardToken.decimals),
             state,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -263,13 +262,13 @@ const maybeHandleClassicBoostStake = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     boost: ClassicBoost;
-    accountAddress: Hex;
+    accountAddress: Bytes;
     rawAmount: bigint;
     event: {
         block: EvmBlock;
         trxIndex: number;
         logIndex: number;
-        trxHash: Hex;
+        trxHash: Bytes;
     };
 }) => {
     if (!boost.classic_id) return;
@@ -310,13 +309,13 @@ const maybeHandleClassicBoostUnstake = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     boost: ClassicBoost;
-    accountAddress: Hex;
+    accountAddress: Bytes;
     rawAmount: bigint;
     event: {
         block: EvmBlock;
         trxIndex: number;
         logIndex: number;
-        trxHash: Hex;
+        trxHash: Bytes;
     };
 }) => {
     if (!boost.classic_id) return;
@@ -354,7 +353,7 @@ const initializeBoost = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    boostAddress: Hex;
+    boostAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<ClassicBoost | null> => {
     const existingBoost = await getClassicBoost(context, chainId, boostAddress);
@@ -364,13 +363,18 @@ const initializeBoost = async ({
 
     context.log.info('Initializing ClassicBoost', { boostAddress, chainId });
 
-    const { shareTokenAddress, stakedTokenAddress, rewardTokenAddress, blacklistStatus } = await context.effect(
-        getClassicBoostTokens,
-        {
-            boostAddress,
-            chainId,
-        }
-    );
+    const {
+        shareTokenAddress: shareTokenAddressStr,
+        stakedTokenAddress: stakedTokenAddressStr,
+        rewardTokenAddress: rewardTokenAddressStr,
+        blacklistStatus,
+    } = await context.effect(getClassicBoostTokens, {
+        boostAddress: toHex(boostAddress),
+        chainId,
+    });
+    const shareTokenAddress = toBytes(shareTokenAddressStr);
+    const stakedTokenAddress = toBytes(stakedTokenAddressStr);
+    const rewardTokenAddress = toBytes(rewardTokenAddressStr);
 
     if (blacklistStatus !== 'ok') {
         logBlacklistStatus(context.log, blacklistStatus, 'ClassicBoost', {

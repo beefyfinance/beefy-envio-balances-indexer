@@ -1,5 +1,4 @@
 import type { Classic, Clm, EvmChainId, EvmOnEventContext, RewardPool } from 'envio';
-import type { Hex } from 'viem';
 import { getClassic, linkClassicRewardPool } from '../../entities/classic.entity';
 import { getClm, linkClmRewardPool } from '../../entities/clm.entity';
 import { getTokenOrThrow } from '../../entities/token.entity';
@@ -7,7 +6,7 @@ import { isClassicVaultStakedToken } from '../classic/init';
 import { PLATFORM_BEEFY_CLM, PLATFORM_BEEFY_CLM_VAULT } from '../classic/platform/index';
 import { loadClassicTokens } from '../classic/tokens';
 import { isClmManagerRewardPool } from '../clm/init';
-import { normalizeHex } from '../hex';
+import type { Bytes } from '../hex';
 
 export const resolveClmForClassic = async ({
     context,
@@ -23,10 +22,10 @@ export const resolveClmForClassic = async ({
     }
 
     const tokens = await loadClassicTokens({ context, classic });
-    const candidateAddresses: Hex[] = [normalizeHex(tokens.underlyingToken.address)];
+    const candidateAddresses: Bytes[] = [tokens.underlyingToken.address];
 
     for (const rewardPoolToken of tokens.rewardPoolTokens) {
-        candidateAddresses.push(normalizeHex(rewardPoolToken.address));
+        candidateAddresses.push(rewardPoolToken.address);
     }
 
     for (const address of candidateAddresses) {
@@ -49,7 +48,7 @@ export const maybeLinkRewardPoolProducts = async ({
     rewardPool: RewardPool;
 }): Promise<RewardPool> => {
     const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
-    const stakedTokenAddress = normalizeHex(underlyingToken.address);
+    const stakedTokenAddress = underlyingToken.address;
     const shareToken = await getTokenOrThrow({ context, id: rewardPool.shareToken_id });
 
     let classic_id = rewardPool.classic_id;

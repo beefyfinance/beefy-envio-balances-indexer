@@ -1,12 +1,12 @@
 import { createEffect, type Logger, S } from 'envio';
 import * as R from 'remeda';
-import type { Hex } from 'viem';
 import { getChainOracleConfig, hasBeefyTokenPricing } from '../config/oracle';
 import { splitBatchResults, zipSameLength } from '../lib/array';
 import { chainIdSchema } from '../lib/chain';
 import type { ClmTokens } from '../lib/clm/tokens';
 import { changeValueEncoding, interpretAsDecimal, PRICE_STORE_DECIMALS_TOKEN_TO_NATIVE } from '../lib/decimal';
-import { hexSchema, normalizeHex } from '../lib/hex';
+import { decodeEffectInput, type ToDomain } from '../lib/effect';
+import { asHex, type Bytes, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { fetchTokenSchema, type ToBigDecimal } from '../lib/schema';
 import { getViemClient } from '../lib/viem';
 import { clmManagerAbi } from './abis/beefy/clm/ClmManager';
@@ -64,6 +64,8 @@ const fetchClmStateInputSchema = S.schema({
     rewardTokens: S.array(fetchTokenSchema),
 });
 
+type ClmFetchInput = ToDomain<S.Infer<typeof fetchClmStateInputSchema>>;
+
 export const parseFetchedClmState = (raw: ClmRawState, tokens: ClmTokens): ClmState => ({
     managerTotalSupply: interpretAsDecimal(raw.managerTotalSupply, tokens.managerToken.decimals),
     rewardPoolsTotalSupply: zipSameLength(raw.rewardPoolsTotalSupply, tokens.rewardPoolTokens).map(([supply, token]) =>
@@ -98,7 +100,7 @@ export const fetchClmState = createEffect(
         cache: true,
         crossChain: false,
     },
-    async ({ input, context }) => fetchClmStateRaw({ input, context })
+    async ({ input, context }) => fetchClmStateRaw({ input: decodeEffectInput(input), context })
 );
 
 export const fetchClmStates = createEffect(
@@ -116,7 +118,7 @@ export const fetchClmStates = createEffect(
     },
     async ({ input, context }) => {
         const states = await Promise.all(
-            input.requests.map((request) => fetchClmStateRaw({ input: request, context }))
+            decodeEffectInput(input).requests.map((request) => fetchClmStateRaw({ input: request, context }))
         );
         return { states };
     }
@@ -126,7 +128,7 @@ const fetchClmStateRaw = async ({
     input,
     context,
 }: {
-    input: S.Infer<typeof fetchClmStateInputSchema>;
+    input: ClmFetchInput;
     context: { log: Logger };
 }): Promise<ClmRawState> => {
     const {
@@ -146,50 +148,53 @@ const fetchClmStateRaw = async ({
     const oracleConfig = getChainOracleConfig(chainId);
     const client = getViemClient(chainId, context.log);
 
+    const managerAddressStr = toHex(managerAddress);
+    const strategyAddressStr = toHex(strategyAddress);
+
     const coreCalls = [
         {
-            address: managerAddress as `0x${string}`,
+            address: managerAddressStr,
             abi: clmManagerAbi,
             functionName: 'totalSupply' as const,
         },
         {
-            address: managerAddress as `0x${string}`,
+            address: managerAddressStr,
             abi: clmManagerAbi,
             functionName: 'balances' as const,
         },
         {
-            address: strategyAddress as `0x${string}`,
+            address: strategyAddressStr,
             abi: clmStrategyAbi,
             functionName: 'balancesOfPool' as const,
         },
         {
-            address: strategyAddress as `0x${string}`,
+            address: strategyAddressStr,
             abi: clmStrategyAbi,
             functionName: 'price' as const,
         },
         {
-            address: strategyAddress as `0x${string}`,
+            address: strategyAddressStr,
             abi: clmStrategyAbi,
             functionName: 'range' as const,
         },
     ];
 
     const rewardPoolCalls = R.map(rewardPoolTokenAddresses, (address) => ({
-        address: address as `0x${string}`,
+        address: toHex(address),
         abi: ierc20Abi,
         functionName: 'totalSupply' as const,
     }));
 
-    const tokensToRefresh: Hex[] = [];
+    const tokensToRefresh: Bytes[] = [];
     if (hasBeefyTokenPricing(oracleConfig)) {
-        tokensToRefresh.push(normalizeHex(oracleConfig.wrappedNativeAddress));
-        tokensToRefresh.push(normalizeHex(underlyingToken0Address));
-        tokensToRefresh.push(normalizeHex(underlyingToken1Address));
+        tokensToRefresh.push(oracleConfig.wrappedNativeAddress);
+        tokensToRefresh.push(underlyingToken0Address);
+        tokensToRefresh.push(underlyingToken1Address);
         for (const outputTokenAddress of outputTokenAddresses) {
-            tokensToRefresh.push(normalizeHex(outputTokenAddress));
+            tokensToRefresh.push(outputTokenAddress);
         }
         for (const rewardToken of rewardTokens) {
-            tokensToRefresh.push(normalizeHex(rewardToken.address));
+            tokensToRefresh.push(rewardToken.address);
         }
     }
 
@@ -267,7 +272,7 @@ const fetchClmStateRaw = async ({
     if (totalSupplyRes?.status === 'success') {
         managerTotalSupply = totalSupplyRes.result as bigint;
     } else {
-        context.log.error('Failed to fetch totalSupply for CLM', { managerAddress, chainId });
+        context.log.error('Failed to fetch totalSupply for CLM', { managerAddress: managerAddressStr, chainId });
     }
 
     let totalUnderlyingAmount0 = 0n;
@@ -275,7 +280,7 @@ const fetchClmStateRaw = async ({
     if (balanceRes?.status === 'success') {
         [totalUnderlyingAmount0, totalUnderlyingAmount1] = balanceRes.result as [bigint, bigint];
     } else {
-        context.log.error('Failed to fetch balances for CLM', { managerAddress, chainId });
+        context.log.error('Failed to fetch balances for CLM', { managerAddress: managerAddressStr, chainId });
     }
 
     let underlyingMainAmount0 = 0n;
@@ -286,14 +291,14 @@ const fetchClmStateRaw = async ({
         [, , underlyingMainAmount0, underlyingMainAmount1, underlyingAltAmount0, underlyingAltAmount1] =
             balanceOfPoolRes.result as [bigint, bigint, bigint, bigint, bigint, bigint];
     } else {
-        context.log.error('Failed to fetch balancesOfPool for CLM', { managerAddress, chainId });
+        context.log.error('Failed to fetch balancesOfPool for CLM', { managerAddress: managerAddressStr, chainId });
     }
 
     let priceOfToken0InToken1 = 0n;
     if (priceRes?.status === 'success') {
         priceOfToken0InToken1 = changeValueEncoding(priceRes.result as bigint, priceDecimals, underlyingToken1Decimals);
     } else {
-        context.log.warn('Failed to fetch price for CLM', { managerAddress, chainId });
+        context.log.warn('Failed to fetch price for CLM', { managerAddress: managerAddressStr, chainId });
     }
 
     let priceRangeMin1 = 0n;
@@ -303,7 +308,7 @@ const fetchClmStateRaw = async ({
         priceRangeMin1 = changeValueEncoding(range[0], priceDecimals, underlyingToken1Decimals);
         priceRangeMax1 = changeValueEncoding(range[1], priceDecimals, underlyingToken1Decimals);
     } else {
-        context.log.warn('Failed to fetch price range for CLM', { managerAddress, chainId });
+        context.log.warn('Failed to fetch price range for CLM', { managerAddress: managerAddressStr, chainId });
     }
 
     const nativeToUSDPriceBigInt = await fetchNativeToUSDPriceRaw(chainId, context.log, blockNumber);
@@ -314,7 +319,7 @@ const fetchClmStateRaw = async ({
     let outputToNativePrices: bigint[] = [];
 
     if (hasBeefyTokenPricing(oracleConfig)) {
-        const clmLogContext = { managerAddress, chainId };
+        const clmLogContext = { managerAddress: managerAddressStr, chainId };
         const underlyingToNativePrices = parseBeefySwapperToNativePrices(swapperUnderlyingResults, [
             {
                 decimals: underlyingToken0Decimals,
@@ -349,7 +354,10 @@ const fetchClmStateRaw = async ({
         if (totalSupplyResult?.status === 'success') {
             return totalSupplyResult.result as bigint;
         }
-        context.log.error('Failed to fetch rewardPoolsTotalSupply for CLM', { managerAddress, chainId });
+        context.log.error('Failed to fetch rewardPoolsTotalSupply for CLM', {
+            managerAddress: managerAddressStr,
+            chainId,
+        });
         return 0n;
     });
 
@@ -389,13 +397,15 @@ export const getClmManagerStrategy = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const client = getViemClient(input.chainId, context.log);
+        const { managerAddress, chainId, blockNumber } = decodeEffectInput(input);
+        const client = getViemClient(chainId, context.log);
+        const managerAddressStr = toHex(managerAddress);
         const [result] = await client.multicall({
             allowFailure: true,
-            blockNumber: BigInt(input.blockNumber),
+            blockNumber: BigInt(blockNumber),
             contracts: [
                 {
-                    address: input.managerAddress as `0x${string}`,
+                    address: managerAddressStr,
                     abi: clmManagerAbi,
                     functionName: 'strategy',
                 },
@@ -403,11 +413,15 @@ export const getClmManagerStrategy = createEffect(
         });
 
         if (result.status === 'failure') {
-            context.log.error('ClmManager strategy call failed', input);
-            return { strategyAddress: normalizeHex('0x0000000000000000000000000000000000000000') };
+            context.log.error('ClmManager strategy call failed', {
+                managerAddress: managerAddressStr,
+                chainId,
+                blockNumber,
+            });
+            return { strategyAddress: ZERO_ADDRESS_HEX };
         }
 
-        return { strategyAddress: normalizeHex(result.result) };
+        return { strategyAddress: asHex(result.result) };
     }
 );
 
@@ -428,33 +442,29 @@ export const getClmStrategyInitData = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const client = getViemClient(input.chainId, context.log);
+        const { strategyAddress, chainId, blockNumber } = decodeEffectInput(input);
+        const client = getViemClient(chainId, context.log);
+        const strategyAddressStr = toHex(strategyAddress);
         const [poolResult, outputResult] = await client.multicall({
             allowFailure: true,
-            blockNumber: BigInt(input.blockNumber),
+            blockNumber: BigInt(blockNumber),
             contracts: [
                 {
-                    address: input.strategyAddress as `0x${string}`,
+                    address: strategyAddressStr,
                     abi: clmStrategyAbi,
                     functionName: 'pool',
                 },
                 {
-                    address: input.strategyAddress as `0x${string}`,
+                    address: strategyAddressStr,
                     abi: clmStrategyAbi,
                     functionName: 'output',
                 },
             ],
         });
 
-        const underlyingProtocolPool =
-            poolResult.status === 'success'
-                ? normalizeHex(poolResult.result)
-                : normalizeHex('0x0000000000000000000000000000000000000000');
-        const outputTokenAddress =
-            outputResult.status === 'success'
-                ? normalizeHex(outputResult.result)
-                : normalizeHex('0x0000000000000000000000000000000000000000');
-
-        return { underlyingProtocolPool, outputTokenAddress };
+        return {
+            underlyingProtocolPool: poolResult.status === 'success' ? asHex(poolResult.result) : ZERO_ADDRESS_HEX,
+            outputTokenAddress: outputResult.status === 'success' ? asHex(outputResult.result) : ZERO_ADDRESS_HEX,
+        };
     }
 );

@@ -1,5 +1,6 @@
 import type { EvmChainId, EvmOnEventContext } from 'envio';
 import { decodeFunctionData } from 'viem';
+import { type Bytes, toHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 import { classicVaultFactoryAbi, classicVaultFactoryDetectionAbi } from './abis/beefy/classic/ClassicVaultFactory';
 
@@ -10,7 +11,7 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     transactionHash,
     log,
 }: {
-    contractAddress: `0x${string}`;
+    contractAddress: Bytes;
     chainId: EvmChainId;
     blockNumber?: number;
     transactionHash: `0x${string}`;
@@ -21,25 +22,26 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     isBoost: boolean;
 }> => {
     const client = getViemClient(chainId, log);
+    const contractAddressStr = toHex(contractAddress);
 
     // Try standard Erc20 interface first (most common)
     const [vault, strategy, rewardToken] = await client.multicall({
         allowFailure: true,
         contracts: [
             {
-                address: contractAddress as `0x${string}`,
+                address: contractAddressStr,
                 abi: classicVaultFactoryDetectionAbi,
                 functionName: 'vault',
                 args: [],
             },
             {
-                address: contractAddress as `0x${string}`,
+                address: contractAddressStr,
                 abi: classicVaultFactoryDetectionAbi,
                 functionName: 'strategy',
                 args: [],
             },
             {
-                address: contractAddress as `0x${string}`,
+                address: contractAddressStr,
                 abi: classicVaultFactoryDetectionAbi,
                 functionName: 'rewardToken',
                 args: [],
@@ -66,7 +68,7 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
             blockNumber,
         });
         throw new Error(
-            `.vault() and .strategy() and .rewardToken() calls FAILED for contract ${chainId}:${contractAddress} with transaction hash ${transactionHash}`
+            `.vault() and .strategy() and .rewardToken() calls FAILED for contract ${chainId}:${contractAddressStr} with transaction hash ${transactionHash}`
         );
     }
 
@@ -85,7 +87,7 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
             rewardTokenResult: rewardToken.status,
         });
         throw new Error(
-            `More than one function succeeded on contract ${chainId}:${contractAddress} with transaction hash ${transactionHash}. vault: ${vault.status}, strategy: ${strategy.status}, rewardToken: ${rewardToken.status}.`
+            `More than one function succeeded on contract ${chainId}:${contractAddressStr} with transaction hash ${transactionHash}. vault: ${vault.status}, strategy: ${strategy.status}, rewardToken: ${rewardToken.status}.`
         );
     }
 
@@ -145,7 +147,7 @@ export async function detectClassicVaultOrStrategy({
     blockNumber,
     log,
 }: {
-    contractAddress: `0x${string}`;
+    contractAddress: Bytes;
     chainId: EvmChainId;
     transactionInput: `0x${string}`;
     transactionHash: `0x${string}`;

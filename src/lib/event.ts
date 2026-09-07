@@ -1,8 +1,6 @@
 import type { ChainId } from '@beefyfinance/blockchain-addressbook';
 import type { EvmBlock } from 'envio';
-import type { Hex } from 'viem';
-import { normalizeHex } from './hex';
-
+import { type Bytes, toHex } from './hex';
 export const eventId = ({
     chainId,
     trxHash,
@@ -10,16 +8,16 @@ export const eventId = ({
     logIndex,
 }: {
     chainId: ChainId;
-    trxHash: Hex;
+    trxHash: Bytes;
     trxIndex: number;
     logIndex: number;
-}) => `${chainId}-${normalizeHex(trxHash)}-${trxIndex.toString()}-${logIndex.toString()}`;
+}) => `${chainId}-${toHex(trxHash)}-${trxIndex.toString()}-${logIndex.toString()}`;
 
 export type EventMetadata = {
     block: EvmBlock;
     trxIndex: number;
     logIndex: number;
-    trxHash: Hex;
+    trxHash: Bytes;
 };
 
 export const getEventFields = ({ chainId, event }: { chainId: ChainId; event: EventMetadata }) => ({

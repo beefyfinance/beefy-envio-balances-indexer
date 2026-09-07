@@ -1,10 +1,9 @@
 import type { Account, EvmBlock, EvmChainId, EvmOnEventContext, Token, TokenBalance } from 'envio';
-import type { Hex } from 'viem';
 import { getOrCreateAccount } from '../entities/account.entity';
 import { getOrCreateTokenBalanceChangeEntity, getOrCreateTokenBalanceEntity } from '../entities/balance.entity';
 import { config } from './config';
 import { BIG_ZERO, type BigDecimal, interpretAsDecimal } from './decimal';
-
+import { type Bytes, bytesEqual } from './hex';
 export const handleTokenTransfer = async ({
     context,
     chainId,
@@ -17,14 +16,14 @@ export const handleTokenTransfer = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     token: Token;
-    senderAddress: Hex;
-    receiverAddress: Hex;
+    senderAddress: Bytes;
+    receiverAddress: Bytes;
     rawTransferAmount: bigint;
     event: {
         block: EvmBlock;
         trxIndex: number;
         logIndex: number;
-        trxHash: Hex;
+        trxHash: Bytes;
     };
 }) => {
     if (rawTransferAmount === 0n) {
@@ -69,7 +68,7 @@ export const handleTokenTransfer = async ({
     let holderCountChange = 0;
     let totalSupplyChange = BIG_ZERO;
 
-    const isSelfTransfer = senderAddress === receiverAddress;
+    const isSelfTransfer = bytesEqual(senderAddress, receiverAddress);
 
     if (isSelfTransfer && senderAccount && senderBalance) {
         // Same account: apply a single no-op balance update so we record the transfer
@@ -111,10 +110,10 @@ export const handleTokenTransfer = async ({
         }
     }
 
-    if (senderAddress === config.MINT_ADDRESS || senderAddress === config.BURN_ADDRESS) {
+    if (bytesEqual(senderAddress, config.MINT_ADDRESS) || bytesEqual(senderAddress, config.BURN_ADDRESS)) {
         totalSupplyChange = totalSupplyChange.plus(value);
     }
-    if (receiverAddress === config.BURN_ADDRESS || receiverAddress === config.MINT_ADDRESS) {
+    if (bytesEqual(receiverAddress, config.BURN_ADDRESS) || bytesEqual(receiverAddress, config.MINT_ADDRESS)) {
         totalSupplyChange = totalSupplyChange.minus(value);
     }
 
@@ -144,7 +143,7 @@ const updateAccountBalance = async ({
         block: EvmBlock;
         trxIndex: number;
         logIndex: number;
-        trxHash: Hex;
+        trxHash: Bytes;
     };
 }) => {
     const balanceBefore = balance.amount;

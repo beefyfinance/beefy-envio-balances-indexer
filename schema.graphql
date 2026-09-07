@@ -3,9 +3,9 @@
 ################################
 
 """
-A holder account shared across all chains. Can be a user or a contract.
+A holder account. Can be a user or a contract.
 """
-type Account @crossChain {
+type Account {
   "Account address"
   id: ID!
 

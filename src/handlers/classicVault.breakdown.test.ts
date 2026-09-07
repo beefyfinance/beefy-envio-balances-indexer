@@ -6,13 +6,14 @@
  */
 import { createTestIndexer } from 'envio';
 import { describe, expect, it } from 'vitest';
+import { toHex } from '../lib/hex';
 import { AAVE_FIXTURE, CURVE_FIXTURE, initClassicPlatformSim } from './testFixtures/classicPlatforms';
 
 const getClassicSet = (trace: Awaited<ReturnType<ReturnType<typeof createTestIndexer>['process']>>, vault: string) => {
     for (const change of trace.changes) {
         const sets = change.Classic?.sets;
         if (!sets) continue;
-        const match = sets.find((row) => row.address?.toLowerCase() === vault.toLowerCase());
+        const match = sets.find((row) => row.address && toHex(row.address) === vault.toLowerCase());
         if (match) return match;
     }
     throw new Error(`Classic entity not found for vault ${vault}`);

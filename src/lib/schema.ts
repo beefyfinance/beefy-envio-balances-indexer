@@ -1,7 +1,6 @@
 import { S } from 'envio';
 import type { BigDecimal } from './decimal';
 import { hexSchema } from './hex';
-
 export type ToBigDecimal<T> = {
     [K in keyof T]: T[K] extends bigint
         ? BigDecimal

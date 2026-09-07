@@ -2,6 +2,7 @@
 name: beefy-balance-indexer
 description: Beefy Finance Balance Indexer - Tracks ERC20 balances across multiple networks
 address_format: lowercase
+bytes_type: uint8array
 raw_events: false
 save_full_history: false
 # Per-chain entity/effect isolation (recommended; default in HyperIndex v4)

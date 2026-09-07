@@ -1,6 +1,5 @@
 import type { EvmBlock, EvmChainId, EvmOnEventContext, RewardPool } from 'envio';
 import { indexer } from 'envio';
-import type { Hex } from 'viem';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { fetchClmState, parseFetchedClmState } from '../effects/clm.effects';
 import { getRewardPoolTokens } from '../effects/rewardPool.effects';
@@ -18,7 +17,7 @@ import { isClmManagerRewardPool } from '../lib/clm/init';
 import { handleClmRewardPoolRewardPaid, handleClmRewardPoolTransfer } from '../lib/clm/position';
 import { buildClmFetchInput, loadClmTokens } from '../lib/clm/tokens';
 import { interpretAsDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toBytes, toHex } from '../lib/hex';
 import { maybeLinkRewardPoolProducts } from '../lib/rewardPool/link';
 import { handleTokenTransfer } from '../lib/token';
 
@@ -26,7 +25,7 @@ indexer.onEvent({ contract: 'RewardPool', event: 'Initialized' }, async ({ event
     context.log.debug('RewardPool.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const rewardPoolAddress = normalizeHex(event.srcAddress);
+    const rewardPoolAddress = toBytes(event.srcAddress);
     const initializedBlock = event.block;
 
     const rewardPool = await initializeRewardPool({ context, chainId, rewardPoolAddress, initializedBlock });
@@ -47,7 +46,7 @@ indexer.onEvent(
         context.log.debug('RewardPool.Transfer', { event });
 
         const chainId = toChainId(context.chain.id);
-        const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const rewardPoolAddress = toBytes(event.srcAddress);
 
         // Ensure that the reward pool is initialized first
         let rewardPool = await initializeRewardPool({
@@ -66,14 +65,14 @@ indexer.onEvent(
             context,
             chainId,
             token: shareToken,
-            senderAddress: normalizeHex(event.params.from),
-            receiverAddress: normalizeHex(event.params.to),
+            senderAddress: toBytes(event.params.from),
+            receiverAddress: toBytes(event.params.to),
             rawTransferAmount: event.params.value,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
 
@@ -81,14 +80,14 @@ indexer.onEvent(
             context,
             chainId,
             rewardPool,
-            fromAddress: normalizeHex(event.params.from),
-            toAddress: normalizeHex(event.params.to),
+            fromAddress: toBytes(event.params.from),
+            toAddress: toBytes(event.params.to),
             rawTransferAmount: event.params.value,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
 
@@ -96,14 +95,14 @@ indexer.onEvent(
             context,
             chainId,
             rewardPool,
-            fromAddress: normalizeHex(event.params.from),
-            toAddress: normalizeHex(event.params.to),
+            fromAddress: toBytes(event.params.from),
+            toAddress: toBytes(event.params.to),
             rawTransferAmount: event.params.value,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -119,7 +118,7 @@ indexer.onEvent(
         context.log.debug('RewardPool.NotifyReward', { event });
 
         const chainId = toChainId(context.chain.id);
-        const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const rewardPoolAddress = toBytes(event.srcAddress);
 
         const rewardPool = await initializeRewardPool({
             context,
@@ -133,7 +132,7 @@ indexer.onEvent(
         const rewardToken = await getOrCreateToken({
             context,
             chainId,
-            tokenAddress: normalizeHex(event.params.reward),
+            tokenAddress: toBytes(event.params.reward),
             virtual: false,
         });
         if (!rewardToken) return;
@@ -149,7 +148,7 @@ indexer.onEvent(
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -165,7 +164,7 @@ indexer.onEvent(
         context.log.debug('RewardPool.RewardPaid', { event });
 
         const chainId = toChainId(context.chain.id);
-        const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const rewardPoolAddress = toBytes(event.srcAddress);
 
         const rewardPool = await initializeRewardPool({
             context,
@@ -179,17 +178,17 @@ indexer.onEvent(
         const isClmPool = await isClmManagerRewardPool({
             context,
             chainId,
-            stakedTokenAddress: normalizeHex(underlyingToken.address),
+            stakedTokenAddress: underlyingToken.address,
         });
 
         if (isClmPool) {
-            const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
+            const clm = await getClm(context, chainId, underlyingToken.address);
             if (!clm || clm.initializableStatus !== 'INITIALIZED') return;
 
             const rewardToken = await getOrCreateToken({
                 context,
                 chainId,
-                tokenAddress: normalizeHex(event.params.reward),
+                tokenAddress: toBytes(event.params.reward),
                 virtual: false,
             });
             if (!rewardToken) return;
@@ -206,7 +205,7 @@ indexer.onEvent(
                 chainId,
                 clm,
                 rewardPool,
-                userAddress: normalizeHex(event.params.user),
+                userAddress: toBytes(event.params.user),
                 rewardToken,
                 rewardAmount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
                 state,
@@ -214,7 +213,7 @@ indexer.onEvent(
                     block: event.block,
                     trxIndex: event.transaction.transactionIndex,
                     logIndex: event.logIndex,
-                    trxHash: normalizeHex(event.transaction.hash),
+                    trxHash: toBytes(event.transaction.hash),
                 },
             });
             return;
@@ -223,17 +222,17 @@ indexer.onEvent(
         const isClassicPool = await isClassicVaultStakedToken({
             context,
             chainId,
-            stakedTokenAddress: normalizeHex(underlyingToken.address),
+            stakedTokenAddress: underlyingToken.address,
         });
         if (!isClassicPool) return;
 
-        const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
+        const classic = await getClassic(context, chainId, underlyingToken.address);
         if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
 
         const rewardToken = await getOrCreateToken({
             context,
             chainId,
-            tokenAddress: normalizeHex(event.params.reward),
+            tokenAddress: toBytes(event.params.reward),
             virtual: false,
         });
         if (!rewardToken) return;
@@ -253,15 +252,15 @@ indexer.onEvent(
             context,
             chainId,
             classic,
-            accountAddress: normalizeHex(event.params.user),
-            rewardTokenAddress: normalizeHex(rewardToken.address),
+            accountAddress: toBytes(event.params.user),
+            rewardTokenAddress: rewardToken.address,
             amount: interpretAsDecimal(event.params.amount, rewardToken.decimals),
             state,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -277,7 +276,7 @@ indexer.onEvent(
         context.log.debug('RewardPool.AddReward', { event });
 
         const chainId = toChainId(context.chain.id);
-        const rewardPoolAddress = normalizeHex(event.srcAddress);
+        const rewardPoolAddress = toBytes(event.srcAddress);
         const rewardPool = await initializeRewardPool({
             context,
             chainId,
@@ -290,17 +289,17 @@ indexer.onEvent(
         const isClmPool = await isClmManagerRewardPool({
             context,
             chainId,
-            stakedTokenAddress: normalizeHex(underlyingToken.address),
+            stakedTokenAddress: underlyingToken.address,
         });
 
         if (isClmPool) {
-            const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
+            const clm = await getClm(context, chainId, underlyingToken.address);
             if (!clm) return;
 
             const rewardToken = await getOrCreateToken({
                 context,
                 chainId,
-                tokenAddress: normalizeHex(event.params.reward),
+                tokenAddress: toBytes(event.params.reward),
                 virtual: false,
             });
             if (!rewardToken) return;
@@ -312,17 +311,17 @@ indexer.onEvent(
         const isClassicPool = await isClassicVaultStakedToken({
             context,
             chainId,
-            stakedTokenAddress: normalizeHex(underlyingToken.address),
+            stakedTokenAddress: underlyingToken.address,
         });
         if (!isClassicPool) return;
 
-        const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
+        const classic = await getClassic(context, chainId, underlyingToken.address);
         if (!classic) return;
 
         const rewardToken = await getOrCreateToken({
             context,
             chainId,
-            tokenAddress: normalizeHex(event.params.reward),
+            tokenAddress: toBytes(event.params.reward),
             virtual: false,
         });
         if (!rewardToken) return;
@@ -343,25 +342,25 @@ const maybeHandleClmRewardPoolTransfer = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     rewardPool: RewardPool;
-    fromAddress: Hex;
-    toAddress: Hex;
+    fromAddress: Bytes;
+    toAddress: Bytes;
     rawTransferAmount: bigint;
     event: {
         block: EvmBlock;
         trxIndex: number;
         logIndex: number;
-        trxHash: Hex;
+        trxHash: Bytes;
     };
 }) => {
     const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
     const isClmPool = await isClmManagerRewardPool({
         context,
         chainId,
-        stakedTokenAddress: normalizeHex(underlyingToken.address),
+        stakedTokenAddress: underlyingToken.address,
     });
     if (!isClmPool) return;
 
-    const clm = await getClm(context, chainId, normalizeHex(underlyingToken.address));
+    const clm = await getClm(context, chainId, underlyingToken.address);
     if (!clm || clm.initializableStatus !== 'INITIALIZED' || !clm.clmStrategy_id) return;
 
     const tokenContext = await loadClmTokens({ context, clm });
@@ -397,14 +396,14 @@ const maybeHandleClassicRewardPoolTransfer = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     rewardPool: RewardPool;
-    fromAddress: Hex;
-    toAddress: Hex;
+    fromAddress: Bytes;
+    toAddress: Bytes;
     rawTransferAmount: bigint;
     event: {
         block: EvmBlock;
         trxIndex: number;
         logIndex: number;
-        trxHash: Hex;
+        trxHash: Bytes;
     };
 }) => {
     if (!rewardPool.classic_id) return;
@@ -445,7 +444,7 @@ const initializeRewardPool = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    rewardPoolAddress: Hex;
+    rewardPoolAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<RewardPool | null> => {
     // Check if the reward pool already exists
@@ -457,10 +456,16 @@ const initializeRewardPool = async ({
     context.log.info('Initializing ClassicRewardPool', { rewardPoolAddress, chainId });
 
     // Fetch underlying tokens using effect
-    const { shareTokenAddress, underlyingTokenAddress, blacklistStatus } = await context.effect(getRewardPoolTokens, {
-        rewardPoolAddress,
+    const {
+        shareTokenAddress: shareTokenAddressStr,
+        underlyingTokenAddress: underlyingTokenAddressStr,
+        blacklistStatus,
+    } = await context.effect(getRewardPoolTokens, {
+        rewardPoolAddress: toHex(rewardPoolAddress),
         chainId,
     });
+    const shareTokenAddress = toBytes(shareTokenAddressStr);
+    const underlyingTokenAddress = toBytes(underlyingTokenAddressStr);
 
     if (blacklistStatus !== 'ok') {
         logBlacklistStatus(context.log, blacklistStatus, 'RewardPool', {

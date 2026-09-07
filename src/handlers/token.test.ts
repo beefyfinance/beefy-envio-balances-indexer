@@ -406,6 +406,61 @@ describe('Token Handlers', () => {
                         },
                       ],
                     },
+                    "ClassicPosition": {
+                      "sets": [
+                        {
+                          "account_id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "boostBalance": "0",
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "createdWithTrxHash": "0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88",
+                          "erc4626AdapterBalances": [],
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "rewardPoolBalances": [],
+                          "totalBalance": "0",
+                          "vaultBalance": "0",
+                        },
+                      ],
+                    },
+                    "ClassicPositionInteraction": {
+                      "sets": [
+                        {
+                          "account_id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "blockNumber": 12132390n,
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
+                          "boostBalance": "0",
+                          "boostBalanceDelta": "0",
+                          "boostRewardBalancesDelta": [],
+                          "boostRewardToNativePrices": [],
+                          "classicPosition_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterBalances": [],
+                          "erc4626AdapterBalancesDelta": [],
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdapterVaultSharesBalancesDelta": [],
+                          "id": "56-0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88-164-387-0",
+                          "logIndex": 387,
+                          "nativeToUSDPrice": "452.83830981",
+                          "rewardBalancesDelta": [],
+                          "rewardPoolBalances": [],
+                          "rewardPoolBalancesDelta": [],
+                          "rewardToNativePrices": [],
+                          "totalBalance": "0",
+                          "trxHash": "0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88",
+                          "trxIndex": 164,
+                          "type": "VAULT_DEPOSIT",
+                          "underlyingBreakdownToNativePrices": [],
+                          "underlyingToNativePrice": "0",
+                          "vaultBalance": "0",
+                          "vaultBalanceDelta": "26.493322047799471367",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingAmount": "1081841.858326645878430335",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                      ],
+                    },
                     "ClassicSnapshot": {
                       "sets": [
                         {
@@ -496,7 +551,7 @@ describe('Token Handlers', () => {
                     "ClassicVaultStrategy": {
                       "sets": [
                         {
-                          "address": "0xe807517273De0161D8309BC9363193f2162b9B65",
+                          "address": "0xe807517273de0161d8309bc9363193f2162b9b65",
                           "classicVault_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "id": "56-0xe807517273de0161d8309bc9363193f2162b9b65",
                           "initializableStatus": "INITIALIZED",
@@ -519,7 +574,7 @@ describe('Token Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x111111111117dC0aa78b770fA6A738034120C302",
+                          "address": "0x111111111117dc0aa78b770fa6a738034120c302",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
@@ -562,6 +617,10 @@ describe('Token Handlers', () => {
                         {
                           "address": "0xe807517273de0161d8309bc9363193f2162b9b65",
                           "contract": "ClassicStrategy",
+                        },
+                        {
+                          "address": "0xe807517273de0161d8309bc9363193f2162b9b65",
+                          "contract": "ClassicStrategyStratHarvest0",
                         },
                       ],
                     },

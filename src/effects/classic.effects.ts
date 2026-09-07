@@ -1,6 +1,5 @@
 import { createEffect, type Logger, S } from 'envio';
 import * as R from 'remeda';
-import type { Hex } from 'viem';
 import { getChainOracleConfig, hasBeefyTokenPricing } from '../config/oracle';
 import { splitBatchResults, zipSameLength } from '../lib/array';
 import { chainIdSchema } from '../lib/chain';
@@ -10,13 +9,9 @@ import {
     PLATFORM_BEEFY_LST_VAULT,
 } from '../lib/classic/platform';
 import type { ClassicTokens } from '../lib/classic/tokens';
-import {
-    ADDRESS_ZERO,
-    changeValueEncoding,
-    interpretAsDecimal,
-    PRICE_STORE_DECIMALS_TOKEN_TO_NATIVE,
-} from '../lib/decimal';
-import { hexSchema, normalizeHex } from '../lib/hex';
+import { changeValueEncoding, interpretAsDecimal, PRICE_STORE_DECIMALS_TOKEN_TO_NATIVE } from '../lib/decimal';
+import { decodeEffectInput, type ToDomain } from '../lib/effect';
+import { type Bytes, bytesEqual, hexSchema, isZeroAddress, toHex } from '../lib/hex';
 import { fetchTokenSchema, type ToBigDecimal } from '../lib/schema';
 import { getViemClient } from '../lib/viem';
 import { classicVaultAbi } from './abis/beefy/classic/ClassicVault';
@@ -75,6 +70,8 @@ const fetchClassicStateInputSchema = S.schema({
     clmUnderlyingToken1Decimals: S.number,
 });
 
+type ClassicFetchInput = ToDomain<S.Infer<typeof fetchClassicStateInputSchema>>;
+
 export const parseFetchedClassicState = (raw: ClassicRawState, tokens: ClassicTokens): ClassicState => ({
     vaultTokenTotalSupply: interpretAsDecimal(raw.vaultTokenTotalSupply, tokens.vaultToken.decimals),
     vaultUnderlyingTotalSupply: interpretAsDecimal(raw.vaultUnderlyingTotalSupply, tokens.underlyingToken.decimals),
@@ -109,7 +106,7 @@ const fetchClassicStateRaw = async ({
     input,
     context,
 }: {
-    input: S.Infer<typeof fetchClassicStateInputSchema>;
+    input: ClassicFetchInput;
     context: { log: Logger };
 }): Promise<ClassicRawState> => {
     const {
@@ -135,50 +132,65 @@ const fetchClassicStateRaw = async ({
     const oracleConfig = getChainOracleConfig(chainId);
     const client = getViemClient(chainId, context.log);
 
-    const hasClmUnderlying = clmManagerAddress !== ADDRESS_ZERO;
+    const vaultAddressStr = toHex(vaultAddress);
+    const underlyingTokenAddressStr = toHex(underlyingTokenAddress);
+    const clmManagerAddressStr = toHex(clmManagerAddress);
+    const hasClmUnderlying = !isZeroAddress(clmManagerAddress);
 
     const coreCalls = [
-        { address: vaultAddress, abi: ierc20Abi, functionName: 'totalSupply' as const },
+        { address: vaultAddressStr, abi: ierc20Abi, functionName: 'totalSupply' as const },
         underlyingPlatform === PLATFORM_BEEFY_LST_VAULT
-            ? { address: vaultAddress, abi: classicVaultAbi, functionName: 'totalAssets' as const }
-            : { address: vaultAddress, abi: classicVaultAbi, functionName: 'balance' as const },
-        { address: underlyingTokenAddress, abi: ierc20Abi, functionName: 'totalSupply' as const },
+            ? { address: vaultAddressStr, abi: classicVaultAbi, functionName: 'totalAssets' as const }
+            : { address: vaultAddressStr, abi: classicVaultAbi, functionName: 'balance' as const },
+        { address: underlyingTokenAddressStr, abi: ierc20Abi, functionName: 'totalSupply' as const },
     ];
 
     const clmCalls =
-        hasClmUnderlying && clmManagerAddress
+        hasClmUnderlying && clmManagerAddressStr
             ? [
-                  { address: clmManagerAddress, abi: clmManagerAbi, functionName: 'totalSupply' as const },
-                  { address: clmManagerAddress, abi: clmManagerAbi, functionName: 'balances' as const },
+                  { address: clmManagerAddressStr, abi: clmManagerAbi, functionName: 'totalSupply' as const },
+                  { address: clmManagerAddressStr, abi: clmManagerAbi, functionName: 'balances' as const },
               ]
             : [];
 
     const rewardPoolCalls = R.map(rewardPoolTokenAddresses, (address) => ({
-        address,
+        address: toHex(address),
         abi: ierc20Abi,
         functionName: 'totalSupply' as const,
     }));
 
-    const erc4626Calls = R.flatMap(erc4626AdapterTokenAddresses, (address) => [
-        { address, abi: ierc20Abi, functionName: 'totalSupply' as const },
-        { address: vaultAddress, abi: ierc20Abi, functionName: 'balanceOf' as const, args: [address] as const },
-    ]);
+    const erc4626Calls = R.flatMap(erc4626AdapterTokenAddresses, (address) => {
+        const addressStr = toHex(address);
+        return [
+            { address: addressStr, abi: ierc20Abi, functionName: 'totalSupply' as const },
+            {
+                address: vaultAddressStr,
+                abi: ierc20Abi,
+                functionName: 'balanceOf' as const,
+                args: [addressStr] as const,
+            },
+        ];
+    });
 
-    const tokensToRefresh: Hex[] = [];
+    const tokensToRefresh: Bytes[] = [];
     if (hasBeefyTokenPricing(oracleConfig)) {
-        tokensToRefresh.push(normalizeHex(oracleConfig.wrappedNativeAddress));
+        tokensToRefresh.push(oracleConfig.wrappedNativeAddress);
         for (const token of boostRewardTokens) {
-            tokensToRefresh.push(normalizeHex(token.address));
+            tokensToRefresh.push(token.address);
         }
         for (const token of rewardTokens) {
-            tokensToRefresh.push(normalizeHex(token.address));
+            tokensToRefresh.push(token.address);
         }
         for (const token of underlyingBreakdownTokens) {
-            tokensToRefresh.push(normalizeHex(token.address));
+            tokensToRefresh.push(token.address);
         }
-        if (hasClmUnderlying && clmUnderlyingToken0Address && clmUnderlyingToken1Address) {
-            tokensToRefresh.push(normalizeHex(clmUnderlyingToken0Address));
-            tokensToRefresh.push(normalizeHex(clmUnderlyingToken1Address));
+        if (
+            hasClmUnderlying &&
+            !isZeroAddress(clmUnderlyingToken0Address) &&
+            !isZeroAddress(clmUnderlyingToken1Address)
+        ) {
+            tokensToRefresh.push(clmUnderlyingToken0Address);
+            tokensToRefresh.push(clmUnderlyingToken1Address);
         }
     }
 
@@ -253,7 +265,10 @@ const fetchClassicStateRaw = async ({
 
     const nativeToUSDPriceBigInt = await fetchNativeToUSDPriceRaw(chainId, context.log, blockNumber);
 
-    const clmFreshTailLen = hasClmUnderlying && clmUnderlyingToken0Address && clmUnderlyingToken1Address ? 2 : 0;
+    const clmFreshTailLen =
+        hasClmUnderlying && !isZeroAddress(clmUnderlyingToken0Address) && !isZeroAddress(clmUnderlyingToken1Address)
+            ? 2
+            : 0;
     const [, boostFreshResults, rewardFreshResults, underlyingFreshResults] = splitBatchResults(oracleFreshResults, [
         1,
         boostRewardTokens.length,
@@ -362,7 +377,7 @@ const fetchClassicStateRaw = async ({
         for (const token of underlyingBreakdownTokens) {
             let rawBalance = 0n;
             for (const entry of breakdown) {
-                if (normalizeHex(entry.tokenAddress) === normalizeHex(token.address)) {
+                if (bytesEqual(entry.tokenAddress, token.address)) {
                     rawBalance = entry.rawBalance;
                     break;
                 }
@@ -370,7 +385,7 @@ const fetchClassicStateRaw = async ({
             vaultUnderlyingBreakdownBalances.push(rawBalance);
         }
 
-        if (oracleConfig && normalizeHex(underlyingTokenAddress) === normalizeHex(oracleConfig.wrappedNativeAddress)) {
+        if (oracleConfig && bytesEqual(underlyingTokenAddress, oracleConfig.wrappedNativeAddress)) {
             underlyingToNativePrice = changeValueEncoding(1n, 0, PRICE_STORE_DECIMALS_TOKEN_TO_NATIVE);
         } else if (underlyingAmount > 0n) {
             let totalNativeEquivalentAmount = 0n;
@@ -418,7 +433,7 @@ export const fetchClassicState = createEffect(
         cache: true,
         crossChain: false,
     },
-    async ({ input, context }) => fetchClassicStateRaw({ input, context })
+    async ({ input, context }) => fetchClassicStateRaw({ input: decodeEffectInput(input), context })
 );
 
 export const fetchClassicStates = createEffect(
@@ -436,7 +451,7 @@ export const fetchClassicStates = createEffect(
     },
     async ({ input, context }) => {
         const states = await Promise.all(
-            input.requests.map((request) => fetchClassicStateRaw({ input: request, context }))
+            decodeEffectInput(input).requests.map((request) => fetchClassicStateRaw({ input: request, context }))
         );
         return { states };
     }
@@ -461,24 +476,26 @@ export const detectClassicPlatform = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const client = getViemClient(input.chainId, context.log);
-        const underlyingPlatform = await detectClassicVaultUnderlyingPlatform({
+        const { chainId, vaultAddress, strategyAddress, underlyingTokenAddress, underlyingPlatform } =
+            decodeEffectInput(input);
+        const client = getViemClient(chainId, context.log);
+        const detectedPlatform = await detectClassicVaultUnderlyingPlatform({
             client,
-            vaultAddress: input.vaultAddress,
-            strategyAddress: input.strategyAddress,
-            underlyingTokenAddress: input.underlyingTokenAddress,
-            underlyingPlatform: input.underlyingPlatform,
+            vaultAddress,
+            strategyAddress,
+            underlyingTokenAddress,
+            underlyingPlatform,
         });
         const breakdown = await getVaultTokenBreakdown({
             client,
-            vaultAddress: input.vaultAddress,
-            strategyAddress: input.strategyAddress,
-            underlyingTokenAddress: input.underlyingTokenAddress,
-            underlyingPlatform,
+            vaultAddress,
+            strategyAddress,
+            underlyingTokenAddress,
+            underlyingPlatform: detectedPlatform,
         });
         return {
-            underlyingPlatform,
-            breakdownTokenAddresses: breakdown.map((entry) => normalizeHex(entry.tokenAddress)),
+            underlyingPlatform: detectedPlatform,
+            breakdownTokenAddresses: breakdown.map((entry) => toHex(entry.tokenAddress)),
         };
     }
 );

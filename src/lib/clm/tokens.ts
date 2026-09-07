@@ -1,8 +1,6 @@
 import type { Clm, EvmChainId, EvmOnEventContext, Token } from 'envio';
-import type { Hex } from 'viem';
 import { getTokenOrThrow } from '../../entities/token.entity';
-import { normalizeHex } from '../hex';
-
+import { asHex, toBytes, toHex } from '../hex';
 export const loadClmTokens = async ({
     context,
     clm,
@@ -60,21 +58,21 @@ export const buildClmFetchInput = ({
         throw new Error(`CLM ${clm.id} has no linked strategy`);
     }
 
-    const strategyAddress = normalizeHex(clm.clmStrategy_id.slice(`${String(chainId)}-`.length));
+    const strategyAddress = toBytes(clm.clmStrategy_id.slice(`${String(chainId)}-`.length));
 
     return {
         chainId,
         blockNumber,
-        managerAddress: clm.address as Hex,
-        strategyAddress: strategyAddress as Hex,
-        underlyingToken0Address: tokens.underlyingToken0.address as Hex,
-        underlyingToken1Address: tokens.underlyingToken1.address as Hex,
+        managerAddress: toHex(clm.address),
+        strategyAddress: toHex(strategyAddress),
+        underlyingToken0Address: toHex(tokens.underlyingToken0.address),
+        underlyingToken1Address: toHex(tokens.underlyingToken1.address),
         underlyingToken0Decimals: tokens.underlyingToken0.decimals,
         underlyingToken1Decimals: tokens.underlyingToken1.decimals,
-        rewardPoolTokenAddresses: clm.rewardPoolTokensOrder.map((a) => normalizeHex(a)),
-        outputTokenAddresses: clm.outputTokensOrder.map((a) => normalizeHex(a)),
+        rewardPoolTokenAddresses: clm.rewardPoolTokensOrder.map(asHex),
+        outputTokenAddresses: clm.outputTokensOrder.map(asHex),
         rewardTokens: tokens.rewardTokens.map((token) => ({
-            address: normalizeHex(token.address),
+            address: toHex(token.address),
             decimals: token.decimals,
         })),
     };

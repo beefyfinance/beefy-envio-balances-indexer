@@ -1,11 +1,9 @@
 import type { ClassicErc4626Adapter, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
-import type { Hex } from 'viem';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toHex } from '../lib/hex';
+export const erc4626AdapterId = ({ chainId, adapterAddress }: { chainId: EvmChainId; adapterAddress: Bytes }) =>
+    `${chainId}-${toHex(adapterAddress)}`;
 
-export const erc4626AdapterId = ({ chainId, adapterAddress }: { chainId: EvmChainId; adapterAddress: Hex }) =>
-    `${chainId}-${normalizeHex(adapterAddress)}`;
-
-export const getErc4626Adapter = async (context: EvmOnEventContext, chainId: EvmChainId, adapterAddress: Hex) => {
+export const getErc4626Adapter = async (context: EvmOnEventContext, chainId: EvmChainId, adapterAddress: Bytes) => {
     const id = erc4626AdapterId({ chainId, adapterAddress });
     const adapter = await context.ClassicErc4626Adapter.get(id);
     return adapter;
@@ -21,7 +19,7 @@ export const createErc4626Adapter = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    adapterAddress: Hex;
+    adapterAddress: Bytes;
     shareToken: Token;
     underlyingToken: Token;
     initializedBlock: EvmBlock;
@@ -43,7 +41,7 @@ export const createErc4626Adapter = async ({
     return adapter;
 };
 
-export const isErc4626Adapter = async (context: EvmOnEventContext, chainId: EvmChainId, adapterAddress: Hex) => {
+export const isErc4626Adapter = async (context: EvmOnEventContext, chainId: EvmChainId, adapterAddress: Bytes) => {
     const id = erc4626AdapterId({ chainId, adapterAddress });
     const adapter = await context.ClassicErc4626Adapter.get(id);
     return adapter !== undefined;

@@ -74,7 +74,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -170,7 +170,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
+                          "address": "0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22",
@@ -377,7 +377,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -521,7 +521,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -627,7 +627,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "2",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -760,7 +760,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "-1",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -910,7 +910,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",

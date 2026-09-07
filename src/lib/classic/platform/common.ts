@@ -1,6 +1,5 @@
-import type { Hex } from 'viem';
-
+import type { Bytes } from '../../hex';
 export type TokenBalance = {
-    tokenAddress: Hex;
+    tokenAddress: Bytes;
     rawBalance: bigint;
 };

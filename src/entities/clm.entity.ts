@@ -1,15 +1,13 @@
 import type { Clm, ClmManager, ClmStrategy, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
-import type { Hex } from 'viem';
 import type { ClmState } from '../effects/clm.effects';
 import { BIG_ZERO, type BigDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
-
-export const clmId = ({ chainId, managerAddress }: { chainId: EvmChainId; managerAddress: Hex }) =>
-    `${chainId}-${normalizeHex(managerAddress)}`;
+import { type Bytes, toHex, ZERO_ADDRESS } from '../lib/hex';
+export const clmId = ({ chainId, managerAddress }: { chainId: EvmChainId; managerAddress: Bytes }) =>
+    `${chainId}-${toHex(managerAddress)}`;
 
 export const isClmInitialized = (clm: Clm): boolean => clm.initializableStatus === 'INITIALIZED';
 
-export const getClm = async (context: EvmOnEventContext, chainId: EvmChainId, managerAddress: Hex) => {
+export const getClm = async (context: EvmOnEventContext, chainId: EvmChainId, managerAddress: Bytes) => {
     const id = clmId({ chainId, managerAddress });
     return await context.Clm.get(id);
 };
@@ -53,7 +51,7 @@ export const getOrCreateClm = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    managerAddress: Hex;
+    managerAddress: Bytes;
     clmManager: ClmManager;
     initializedBlock: EvmBlock;
 }): Promise<Clm> => {
@@ -75,7 +73,7 @@ export const getOrCreateClm = async ({
         managerToken_id: clmManager.shareToken_id,
         underlyingToken0_id: clmManager.underlyingToken0_id,
         underlyingToken1_id: clmManager.underlyingToken1_id,
-        underlyingProtocolPool: normalizeHex('0x0000000000000000000000000000000000000000'),
+        underlyingProtocolPool: ZERO_ADDRESS,
         rewardPoolToken_ids: [],
         rewardPoolTokensOrder: [],
         outputToken_ids: [],
@@ -112,23 +110,23 @@ export const finalizeClmInitialization = async ({
 }: {
     context: EvmOnEventContext;
     clm: Clm;
-    underlyingProtocolPool: Hex;
+    underlyingProtocolPool: Bytes;
     outputToken: Token | null;
 }) => {
     const outputToken_ids = [...clm.outputToken_ids];
     const outputTokensOrder = [...clm.outputTokensOrder];
 
     if (outputToken) {
-        const outputAddress = normalizeHex(outputToken.address);
-        if (!outputTokensOrder.includes(outputAddress)) {
+        const outputAddressStr = toHex(outputToken.address);
+        if (!outputTokensOrder.includes(outputAddressStr)) {
             outputToken_ids.push(outputToken.id);
-            outputTokensOrder.push(outputAddress);
+            outputTokensOrder.push(outputAddressStr);
         }
     }
 
     context.Clm.set({
         ...clm,
-        underlyingProtocolPool,
+        underlyingProtocolPool: underlyingProtocolPool,
         outputToken_ids,
         outputTokensOrder,
         initializableStatus: 'INITIALIZED',
@@ -148,11 +146,11 @@ export const linkClmRewardPool = async ({
     const rewardPoolToken_ids = [...clm.rewardPoolToken_ids];
     const rewardPoolTokensOrder = [...clm.rewardPoolTokensOrder];
     const rewardPoolsTotalSupply = [...clm.rewardPoolsTotalSupply];
-    const rewardPoolAddress = normalizeHex(rewardPoolShareToken.address);
+    const rewardPoolAddressStr = toHex(rewardPoolShareToken.address);
 
-    if (!rewardPoolTokensOrder.includes(rewardPoolAddress)) {
+    if (!rewardPoolTokensOrder.includes(rewardPoolAddressStr)) {
         rewardPoolToken_ids.push(rewardPoolShareToken.id);
-        rewardPoolTokensOrder.push(rewardPoolAddress);
+        rewardPoolTokensOrder.push(rewardPoolAddressStr);
         rewardPoolsTotalSupply.push(BIG_ZERO);
     }
 
@@ -175,14 +173,14 @@ export const addClmRewardToken = async ({
 }) => {
     const rewardToken_ids = [...clm.rewardToken_ids];
     const rewardTokensOrder = [...clm.rewardTokensOrder];
-    const rewardAddress = normalizeHex(rewardToken.address);
+    const rewardAddressStr = toHex(rewardToken.address);
 
-    if (rewardTokensOrder.includes(rewardAddress)) {
+    if (rewardTokensOrder.includes(rewardAddressStr)) {
         return;
     }
 
     rewardToken_ids.push(rewardToken.id);
-    rewardTokensOrder.push(rewardAddress);
+    rewardTokensOrder.push(rewardAddressStr);
 
     context.Clm.set({
         ...clm,

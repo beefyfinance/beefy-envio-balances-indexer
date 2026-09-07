@@ -1,5 +1,5 @@
 import type { EvmBlock } from 'envio';
-import type { Hex } from 'viem';
+import type { Hex } from '../../lib/hex';
 import { FACTORIES, registerClmManager, registerClmStrategy } from './register';
 
 /** Base chain id */

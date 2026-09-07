@@ -78,7 +78,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -154,7 +154,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -335,7 +335,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -459,7 +459,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -545,7 +545,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "2",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -658,7 +658,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "-1",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -788,7 +788,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -961,7 +961,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -1066,7 +1066,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -1198,7 +1198,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",

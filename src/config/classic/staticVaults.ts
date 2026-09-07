@@ -1,6 +1,5 @@
 import * as R from 'remeda';
-import { normalizeHex } from '../../lib/hex';
-
+import { type Bytes, type Hex, toBytes, toHex } from '../../lib/hex';
 /** Legacy vaults whose on-chain `want`/`token` reads return wrong hardcoded values. */
 export const staticVaults = [
     // very old vault https://bscscan.com/address/0x83dfD1C2F553E8026eA8626399fe26Ce419dFDaC
@@ -73,36 +72,28 @@ const normalizedStaticVaults = R.pipe(
     staticVaults,
     R.map(({ chainId, vaultAddress, underlyingTokenAddress, strategyAddress }) => ({
         chainId,
-        vaultAddress: normalizeHex(vaultAddress),
-        underlyingTokenAddress: normalizeHex(underlyingTokenAddress),
-        strategyAddress: normalizeHex(strategyAddress),
+        vaultAddress: toBytes(vaultAddress),
+        underlyingTokenAddress: toBytes(underlyingTokenAddress),
+        strategyAddress: toBytes(strategyAddress),
     }))
 );
 
-export const staticVaultsMap: Partial<
-    Record<
-        number,
-        Record<
-            `0x${string}`,
-            {
-                chainId: number;
-                vaultAddress: `0x${string}`;
-                underlyingTokenAddress: `0x${string}`;
-                strategyAddress: `0x${string}`;
-            }
-        >
-    >
-> = R.pipe(normalizedStaticVaults, R.groupBy(R.prop('chainId')), R.mapValues(R.indexBy(R.prop('vaultAddress'))));
+type StaticVault = (typeof normalizedStaticVaults)[number];
 
-export const staticStrategyVaultMap: Partial<Record<number, Record<`0x${string}`, `0x${string}`>>> = R.pipe(
+export const staticVaultsMap: Partial<Record<number, Record<Hex, StaticVault>>> = R.pipe(
+    normalizedStaticVaults,
+    R.groupBy(R.prop('chainId')),
+    R.mapValues((vaults) => R.indexBy(vaults, (vault) => toHex(vault.vaultAddress)))
+);
+
+export const staticStrategyVaultMap: Partial<Record<number, Record<Hex, Bytes>>> = R.pipe(
     normalizedStaticVaults,
     R.groupBy(R.prop('chainId')),
     R.mapValues((vaults) =>
         R.pipe(
             vaults,
-            R.map(({ strategyAddress, vaultAddress }) => ({ strategyAddress, vaultAddress })),
-            R.indexBy(R.prop('strategyAddress')),
-            R.mapValues(R.prop('vaultAddress'))
+            R.indexBy((vault) => toHex(vault.strategyAddress)),
+            R.mapValues((vault) => vault.vaultAddress)
         )
     )
 );

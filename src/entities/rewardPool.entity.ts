@@ -1,11 +1,9 @@
 import type { EvmBlock, EvmChainId, EvmOnEventContext, RewardPool, Token } from 'envio';
-import type { Hex } from 'viem';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toHex } from '../lib/hex';
+export const rewardPoolId = ({ chainId, rewardPoolAddress }: { chainId: EvmChainId; rewardPoolAddress: Bytes }) =>
+    `${chainId}-${toHex(rewardPoolAddress)}`;
 
-export const rewardPoolId = ({ chainId, rewardPoolAddress }: { chainId: EvmChainId; rewardPoolAddress: Hex }) =>
-    `${chainId}-${normalizeHex(rewardPoolAddress)}`;
-
-export const getRewardPool = async (context: EvmOnEventContext, chainId: EvmChainId, rewardPoolAddress: Hex) => {
+export const getRewardPool = async (context: EvmOnEventContext, chainId: EvmChainId, rewardPoolAddress: Bytes) => {
     const id = rewardPoolId({ chainId, rewardPoolAddress });
     const rewardPool = await context.RewardPool.get(id);
     return rewardPool;
@@ -21,7 +19,7 @@ export const createRewardPool = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    rewardPoolAddress: Hex;
+    rewardPoolAddress: Bytes;
     shareToken: Token;
     underlyingToken: Token;
     initializedBlock: EvmBlock;
@@ -44,7 +42,7 @@ export const createRewardPool = async ({
     return rewardPool;
 };
 
-export const isRewardPool = async (context: EvmOnEventContext, chainId: EvmChainId, rewardPoolAddress: Hex) => {
+export const isRewardPool = async (context: EvmOnEventContext, chainId: EvmChainId, rewardPoolAddress: Bytes) => {
     const id = rewardPoolId({ chainId, rewardPoolAddress });
     const rewardPool = await context.RewardPool.get(id);
     return rewardPool !== undefined;

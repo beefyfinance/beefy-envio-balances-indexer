@@ -1,6 +1,5 @@
 import type { ClmManager, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import { indexer } from 'envio';
-import type { Hex } from 'viem';
 import './clock.handlers';
 import { fetchClmState, parseFetchedClmState } from '../effects/clm.effects';
 import { getClmManagerTokens } from '../effects/clmManager.effects';
@@ -16,14 +15,14 @@ import { ensureClmAggregate, maybeFinalizeClm, maybeLinkClmStrategyFromManager }
 import { handleClmManagerTransfer } from '../lib/clm/position';
 import { buildClmFetchInput, loadClmTokens } from '../lib/clm/tokens';
 import { interpretAsDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toBytes, toHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
 indexer.onEvent({ contract: 'ClmManager', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClmManager.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const managerAddress = normalizeHex(event.srcAddress);
+    const managerAddress = toBytes(event.srcAddress);
     const initializedBlock = event.block;
 
     const manager = await initializeClmManager({ context, chainId, managerAddress, initializedBlock });
@@ -57,7 +56,7 @@ indexer.onEvent(
         context.log.debug('ClmManager.Transfer', { event });
 
         const chainId = toChainId(context.chain.id);
-        const managerAddress = normalizeHex(event.srcAddress);
+        const managerAddress = toBytes(event.srcAddress);
 
         const manager = await initializeClmManager({
             context,
@@ -73,14 +72,14 @@ indexer.onEvent(
             context,
             chainId,
             token: shareToken,
-            senderAddress: normalizeHex(event.params.from),
-            receiverAddress: normalizeHex(event.params.to),
+            senderAddress: toBytes(event.params.from),
+            receiverAddress: toBytes(event.params.to),
             rawTransferAmount: event.params.value,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
 
@@ -100,15 +99,15 @@ indexer.onEvent(
             context,
             chainId,
             clm,
-            fromAddress: normalizeHex(event.params.from),
-            toAddress: normalizeHex(event.params.to),
+            fromAddress: toBytes(event.params.from),
+            toAddress: toBytes(event.params.to),
             transferAmount: interpretAsDecimal(event.params.value, tokenContext.managerToken.decimals),
             state,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -124,11 +123,11 @@ indexer.onEvent(
         context.log.debug('ClmManager.Deposit', { event });
 
         const chainId = toChainId(context.chain.id);
-        const managerAddress = normalizeHex(event.srcAddress);
+        const managerAddress = toBytes(event.srcAddress);
         const clm = await getClm(context, chainId, managerAddress);
         if (!clm) return;
 
-        const account = await getOrCreateAccount({ context, chainId, accountAddress: normalizeHex(event.params.user) });
+        const account = await getOrCreateAccount({ context, chainId, accountAddress: toBytes(event.params.user) });
         if (!account) return;
 
         const tokenContext = await loadClmTokens({ context, clm });
@@ -147,7 +146,7 @@ indexer.onEvent(
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -163,11 +162,11 @@ indexer.onEvent(
         context.log.debug('ClmManager.Withdraw', { event });
 
         const chainId = toChainId(context.chain.id);
-        const managerAddress = normalizeHex(event.srcAddress);
+        const managerAddress = toBytes(event.srcAddress);
         const clm = await getClm(context, chainId, managerAddress);
         if (!clm) return;
 
-        const account = await getOrCreateAccount({ context, chainId, accountAddress: normalizeHex(event.params.user) });
+        const account = await getOrCreateAccount({ context, chainId, accountAddress: toBytes(event.params.user) });
         if (!account) return;
 
         const tokenContext = await loadClmTokens({ context, clm });
@@ -184,7 +183,7 @@ indexer.onEvent(
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -198,7 +197,7 @@ const initializeClmManager = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    managerAddress: Hex;
+    managerAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<ClmManager | null> => {
     const existingManager = await getClmManager(context, chainId, managerAddress);
@@ -208,11 +207,18 @@ const initializeClmManager = async ({
 
     context.log.info('Initializing ClmManager', { managerAddress, chainId });
 
-    const { shareTokenAddress, underlyingToken0Address, underlyingToken1Address, blacklistStatus } =
-        await context.effect(getClmManagerTokens, {
-            managerAddress,
-            chainId,
-        });
+    const {
+        shareTokenAddress: shareTokenAddressStr,
+        underlyingToken0Address: underlyingToken0AddressStr,
+        underlyingToken1Address: underlyingToken1AddressStr,
+        blacklistStatus,
+    } = await context.effect(getClmManagerTokens, {
+        managerAddress: toHex(managerAddress),
+        chainId,
+    });
+    const shareTokenAddress = toBytes(shareTokenAddressStr);
+    const underlyingToken0Address = toBytes(underlyingToken0AddressStr);
+    const underlyingToken1Address = toBytes(underlyingToken1AddressStr);
 
     if (blacklistStatus !== 'ok') {
         logBlacklistStatus(context.log, blacklistStatus, 'ClmManager', {

@@ -1,6 +1,5 @@
 import type { ClmStrategy, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import { indexer } from 'envio';
-import type { Hex } from 'viem';
 import { fetchClmState, getClmStrategyInitData, parseFetchedClmState } from '../effects/clm.effects';
 import { getClmStrategyManager } from '../effects/clmStrategy.effects';
 import { getClmOrThrow, isClmInitialized, linkClmStrategy, setClmPausableStatus } from '../entities/clm.entity';
@@ -12,14 +11,14 @@ import { toChainId } from '../lib/chain';
 import { ensureClmAggregate, maybeFinalizeClm } from '../lib/clm/init';
 import { refreshClm, refreshClmFees } from '../lib/clm/refresh';
 import { buildClmFetchInput, loadClmTokens } from '../lib/clm/tokens';
-import { ADDRESS_ZERO, interpretAsDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
+import { interpretAsDecimal } from '../lib/decimal';
+import { type Bytes, toBytes, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 
 indexer.onEvent({ contract: 'ClmStrategy', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClmStrategy.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategyAddress = toBytes(event.srcAddress);
     const initializedBlock = event.block;
 
     const strategy = await initializeClmStrategy({ context, chainId, strategyAddress, initializedBlock });
@@ -63,17 +62,17 @@ indexer.onEvent(
     },
     async ({ event, context }) => {
         const chainId = toChainId(context.chain.id);
-        const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+        const strategy = await getClmStrategy(context, chainId, toBytes(event.srcAddress));
         if (!strategy) return;
 
         const clm = await getClmForStrategy({ context, strategy });
         const initData = await context.effect(getClmStrategyInitData, {
-            strategyAddress: normalizeHex(strategy.address),
+            strategyAddress: toHex(strategy.address),
             chainId,
             blockNumber: event.block.number,
         });
         const collectedOutputAmounts = clm.outputTokensOrder.map((address) =>
-            normalizeHex(address) === normalizeHex(initData.outputTokenAddress) ? event.params.fees : 0n
+            address === initData.outputTokenAddress ? event.params.fees : 0n
         );
 
         await handleClmHarvest({
@@ -111,17 +110,17 @@ indexer.onEvent(
     },
     async ({ event, context }) => {
         const chainId = toChainId(context.chain.id);
-        const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+        const strategy = await getClmStrategy(context, chainId, toBytes(event.srcAddress));
         if (!strategy) return;
 
         const clm = await getClmForStrategy({ context, strategy });
         const initData = await context.effect(getClmStrategyInitData, {
-            strategyAddress: normalizeHex(strategy.address),
+            strategyAddress: toHex(strategy.address),
             chainId,
             blockNumber: event.block.number,
         });
         const collectedOutputAmounts = clm.outputTokensOrder.map((address) =>
-            normalizeHex(address) === normalizeHex(initData.outputTokenAddress) ? event.params.fees : 0n
+            address === initData.outputTokenAddress ? event.params.fees : 0n
         );
 
         await handleClmCollection({
@@ -166,7 +165,7 @@ indexer.onEvent(
     },
     async ({ event, context }) => {
         const chainId = toChainId(context.chain.id);
-        const strategyAddress = normalizeHex(event.srcAddress);
+        const strategyAddress = toBytes(event.srcAddress);
         const strategy = await getClmStrategy(context, chainId, strategyAddress);
         if (!strategy) return;
 
@@ -186,7 +185,7 @@ indexer.onEvent(
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -208,7 +207,7 @@ const initializeClmStrategy = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    strategyAddress: Hex;
+    strategyAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<ClmStrategy | null> => {
     const existingStrategy = await getClmStrategy(context, chainId, strategyAddress);
@@ -218,16 +217,18 @@ const initializeClmStrategy = async ({
 
     context.log.info('Initializing ClmStrategy', { strategyAddress, chainId });
 
-    const { managerAddress } = await context.effect(getClmStrategyManager, {
-        strategyAddress,
+    const { managerAddress: managerAddressStr } = await context.effect(getClmStrategyManager, {
+        strategyAddress: toHex(strategyAddress),
         chainId,
         blockNumber: initializedBlock.number,
     });
 
-    if (managerAddress === ADDRESS_ZERO) {
+    if (managerAddressStr === ZERO_ADDRESS_HEX) {
         context.log.error('ClmStrategy manager address is zero', { strategyAddress, chainId });
         return null;
     }
+
+    const managerAddress = toBytes(managerAddressStr);
 
     const clmManager = await getClmManager(context, chainId, managerAddress);
     if (!clmManager) {
@@ -264,7 +265,7 @@ const handleClmHarvest = async ({
 }: {
     context: EvmOnEventContext;
     event: {
-        srcAddress: Hex;
+        srcAddress: string;
         block: EvmBlock;
         logIndex: number;
         transaction: { hash: string; transactionIndex: number };
@@ -274,7 +275,7 @@ const handleClmHarvest = async ({
     collectedOutputAmounts: bigint[];
 }) => {
     const chainId = toChainId(context.chain.id);
-    const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+    const strategy = await getClmStrategy(context, chainId, toBytes(event.srcAddress));
     if (!strategy) return;
 
     const clm = await getClmForStrategy({ context, strategy });
@@ -302,7 +303,7 @@ const handleClmHarvest = async ({
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
+            trxHash: toBytes(event.transaction.hash),
         },
     });
 
@@ -323,7 +324,7 @@ const handleClmCollection = async ({
 }: {
     context: EvmOnEventContext;
     event: {
-        srcAddress: Hex;
+        srcAddress: string;
         block: EvmBlock;
         logIndex: number;
         transaction: { hash: string; transactionIndex: number };
@@ -333,7 +334,7 @@ const handleClmCollection = async ({
     collectedOutputAmounts: bigint[];
 }) => {
     const chainId = toChainId(context.chain.id);
-    const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+    const strategy = await getClmStrategy(context, chainId, toBytes(event.srcAddress));
     if (!strategy) return;
 
     const clm = await getClmForStrategy({ context, strategy });
@@ -361,7 +362,7 @@ const handleClmCollection = async ({
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
+            trxHash: toBytes(event.transaction.hash),
         },
     });
 
@@ -382,7 +383,7 @@ const handleClmChargedFees = async ({
 }: {
     context: EvmOnEventContext;
     event: {
-        srcAddress: Hex;
+        srcAddress: string;
         block: EvmBlock;
     };
     callFees: bigint;
@@ -390,7 +391,7 @@ const handleClmChargedFees = async ({
     strategistFees: bigint;
 }) => {
     const chainId = toChainId(context.chain.id);
-    const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+    const strategy = await getClmStrategy(context, chainId, toBytes(event.srcAddress));
     if (!strategy) return;
 
     const clm = await getClmForStrategy({ context, strategy });
@@ -414,11 +415,11 @@ const updateClmPauseStatus = async ({
     pausableStatus,
 }: {
     context: EvmOnEventContext;
-    event: { srcAddress: Hex };
+    event: { srcAddress: string };
     pausableStatus: 'RUNNING' | 'PAUSED';
 }) => {
     const chainId = toChainId(context.chain.id);
-    const strategy = await getClmStrategy(context, chainId, normalizeHex(event.srcAddress));
+    const strategy = await getClmStrategy(context, chainId, toBytes(event.srcAddress));
     if (!strategy) return;
 
     const clm = await getClmForStrategy({ context, strategy });

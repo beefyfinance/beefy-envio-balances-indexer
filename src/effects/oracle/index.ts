@@ -1,8 +1,8 @@
 import { createEffect, type Logger, S } from 'envio';
-import type { Hex } from 'viem';
 import { type ChainOracleConfig, getChainOracleConfig } from '../../config/oracle';
 import { chainIdSchema } from '../../lib/chain';
 import { changeValueEncoding, PRICE_STORE_DECIMALS_USD } from '../../lib/decimal';
+import { toBytes, toHex } from '../../lib/hex';
 import { getViemClient } from '../../lib/viem';
 import { beefyOracleAbi } from '../abis/beefy/oracle/BeefyOracle';
 import { chainlinkPriceFeedAbi } from '../abis/chainlink/ChainlinkPriceFeed';
@@ -25,7 +25,9 @@ export {
 export type { ChainOracleConfig };
 export { getChainOracleConfig };
 
-const UMBRELLA_REGISTRY_FEED_KEY_BYTES_32 = '0x556d6272656c6c61466565647300000000000000000000000000000000000000' as Hex;
+const UMBRELLA_REGISTRY_FEED_KEY_BYTES_32 = toBytes(
+    '0x556d6272656c6c61466565647300000000000000000000000000000000000000'
+);
 
 const fetchNativeToUSDPriceFromConfig = async (
     client: ReturnType<typeof getViemClient>,
@@ -46,7 +48,7 @@ const fetchNativeToUSDPriceFromConfig = async (
             ...blockTag,
             contracts: [
                 {
-                    address: oracleConfig.chainlinkNativePriceFeedAddress,
+                    address: toHex(oracleConfig.chainlinkNativePriceFeedAddress),
                     abi: chainlinkPriceFeedAbi,
                     functionName: 'latestRoundData',
                 },
@@ -70,10 +72,10 @@ const fetchNativeToUSDPriceFromConfig = async (
             ...blockTag,
             contracts: [
                 {
-                    address: oracleConfig.pythPriceFeedAddress,
+                    address: toHex(oracleConfig.pythPriceFeedAddress),
                     abi: pythAbi,
                     functionName: 'getPriceUnsafe',
-                    args: [oracleConfig.pythNativePriceId],
+                    args: [toHex(oracleConfig.pythNativePriceId)],
                 },
             ],
         });
@@ -93,10 +95,10 @@ const fetchNativeToUSDPriceFromConfig = async (
             ...blockTag,
             contracts: [
                 {
-                    address: oracleConfig.umbrellaRegistryAddress,
+                    address: toHex(oracleConfig.umbrellaRegistryAddress),
                     abi: umbrellaRegistryAbi,
                     functionName: 'getAddress',
-                    args: [UMBRELLA_REGISTRY_FEED_KEY_BYTES_32],
+                    args: [toHex(UMBRELLA_REGISTRY_FEED_KEY_BYTES_32)],
                 },
             ],
         });
@@ -112,7 +114,7 @@ const fetchNativeToUSDPriceFromConfig = async (
                     address: registryResult.result,
                     abi: umbrellaPriceFeedAbi,
                     functionName: 'getPriceData',
-                    args: [oracleConfig.umbrellaRegistryPriceFeedNameBytes32],
+                    args: [toHex(oracleConfig.umbrellaRegistryPriceFeedNameBytes32)],
                 },
             ],
         });
@@ -133,10 +135,10 @@ const fetchNativeToUSDPriceFromConfig = async (
             ...blockTag,
             contracts: [
                 {
-                    address: oracleConfig.beefyOracleAddress,
+                    address: toHex(oracleConfig.beefyOracleAddress),
                     abi: beefyOracleAbi,
                     functionName: 'getPrice',
-                    args: [oracleConfig.wrappedNativeAddress],
+                    args: [toHex(oracleConfig.wrappedNativeAddress)],
                 },
             ],
         });

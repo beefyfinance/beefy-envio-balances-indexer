@@ -1,11 +1,12 @@
 import { indexer } from 'envio';
 import { detectClassicVaultOrStrategy } from '../effects/classicVaultFactory.effects';
 import { isVaultBlacklisted } from '../lib/blacklist';
+import { toBytes, toHex } from '../lib/hex';
 
 indexer.contractRegister(
     { contract: 'ClassicVaultFactory', event: 'VaultOrStrategyCreated', fields: { transaction: ['hash', 'input'] } },
     async ({ event, context }) => {
-        const proxyAddress = event.params.proxy; // already lowercase by `address_format: lowercase`
+        const proxyAddress = toBytes(event.params.proxy);
         if (isVaultBlacklisted(event.chainId, proxyAddress)) return;
 
         const transactionHash = event.transaction.hash as `0x${string}`;
@@ -13,7 +14,7 @@ indexer.contractRegister(
 
         const { isVault, isStrategy, isBoost } = await detectClassicVaultOrStrategy({
             log: context.log,
-            contractAddress: proxyAddress as `0x${string}`,
+            contractAddress: proxyAddress,
             chainId: event.chainId,
             blockNumber: event.block.number,
             transactionHash,
@@ -21,12 +22,12 @@ indexer.contractRegister(
         });
 
         if (isVault) {
-            context.chain.ClassicVault.add(proxyAddress);
+            context.chain.ClassicVault.add(toHex(proxyAddress));
             context.log.info('Vault detected, adding to context', { proxyAddress });
         } else if (isStrategy) {
             context.log.info('Strategy detected, ignoring', { proxyAddress });
         } else if (isBoost) {
-            context.chain.ClassicBoost.add(proxyAddress);
+            context.chain.ClassicBoost.add(toHex(proxyAddress));
             context.log.info('Boost detected, adding to context', { proxyAddress });
         }
     }

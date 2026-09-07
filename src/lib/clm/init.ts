@@ -1,5 +1,4 @@
 import type { Clm, ClmManager, ClmStrategy, EvmChainId, EvmOnEventContext } from 'envio';
-import type { Hex } from 'viem';
 import {
     fetchClmState,
     getClmManagerStrategy,
@@ -14,8 +13,7 @@ import {
     linkClmStrategy,
 } from '../../entities/clm.entity';
 import { getOrCreateToken } from '../../entities/token.entity';
-import { ADDRESS_ZERO } from '../../lib/decimal';
-import { normalizeHex } from '../../lib/hex';
+import { type Bytes, toBytes, toHex, ZERO_ADDRESS_HEX } from '../../lib/hex';
 import { refreshClm } from './refresh';
 import { buildClmFetchInput, loadClmTokens } from './tokens';
 
@@ -33,7 +31,7 @@ export const ensureClmAggregate = async ({
     return await getOrCreateClm({
         context,
         chainId,
-        managerAddress: normalizeHex(manager.address),
+        managerAddress: manager.address,
         clmManager: manager,
         initializedBlock,
     });
@@ -54,20 +52,20 @@ export const maybeLinkClmStrategyFromManager = async ({
         return clm;
     }
 
-    const { strategyAddress } = await context.effect(getClmManagerStrategy, {
-        managerAddress: normalizeHex(clm.address),
+    const { strategyAddress: strategyAddressStr } = await context.effect(getClmManagerStrategy, {
+        managerAddress: toHex(clm.address),
         chainId,
         blockNumber,
     });
 
-    if (strategyAddress === ADDRESS_ZERO) {
+    if (strategyAddressStr === ZERO_ADDRESS_HEX) {
         context.log.error('ClmManager strategy address is zero', { clmId: clm.id });
         return clm;
     }
 
-    const strategy = await context.ClmStrategy.get(`${chainId}-${normalizeHex(strategyAddress)}`);
+    const strategy = await context.ClmStrategy.get(`${chainId}-${strategyAddressStr}`);
     if (!strategy) {
-        context.Clm.set({ ...clm, clmStrategy_id: `${chainId}-${normalizeHex(strategyAddress)}` });
+        context.Clm.set({ ...clm, clmStrategy_id: `${chainId}-${strategyAddressStr}` });
         return (await context.Clm.get(clm.id)) as Clm;
     }
 
@@ -95,29 +93,31 @@ export const maybeFinalizeClm = async ({
     }
 
     const initData = await context.effect(getClmStrategyInitData, {
-        strategyAddress: normalizeHex(strategy.address),
+        strategyAddress: toHex(strategy.address),
         chainId,
         blockNumber,
     });
+    const outputTokenAddressStr = initData.outputTokenAddress;
+    const underlyingProtocolPool = toBytes(initData.underlyingProtocolPool);
 
     const outputToken =
-        initData.outputTokenAddress === ADDRESS_ZERO
+        outputTokenAddressStr === ZERO_ADDRESS_HEX
             ? null
             : await getOrCreateToken({
                   context,
                   chainId,
-                  tokenAddress: normalizeHex(initData.outputTokenAddress),
+                  tokenAddress: toBytes(outputTokenAddressStr),
                   virtual: false,
               });
 
     await finalizeClmInitialization({
         context,
         clm,
-        underlyingProtocolPool: initData.underlyingProtocolPool,
+        underlyingProtocolPool,
         outputToken,
     });
 
-    const finalizedClm = (await getClm(context, chainId, normalizeHex(clm.address))) as Clm;
+    const finalizedClm = (await getClm(context, chainId, clm.address)) as Clm;
     const tokenContext = await loadClmTokens({ context, clm: finalizedClm });
     const rawState = await context.effect(
         fetchClmState,
@@ -142,8 +142,8 @@ export const isClmManagerRewardPool = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    stakedTokenAddress: Hex;
+    stakedTokenAddress: Bytes;
 }) => {
-    const manager = await context.ClmManager.get(`${chainId}-${normalizeHex(stakedTokenAddress)}`);
+    const manager = await context.ClmManager.get(`${chainId}-${toHex(stakedTokenAddress)}`);
     return manager !== undefined;
 };

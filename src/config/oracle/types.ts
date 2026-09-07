@@ -1,17 +1,17 @@
 import type { EvmChainId } from 'envio';
-import type { Hex } from 'viem';
+import type { Bytes } from '../../lib/hex';
 
 export type PriceOracleType = 'chainlink' | 'pyth' | 'umbrella' | 'beefy' | 'noop';
 
 type ChainOracleBase = {
     chainId: EvmChainId;
-    wrappedNativeAddress: Hex;
+    wrappedNativeAddress: Bytes;
     wrappedNativeDecimals: number;
 };
 
 export type ChainOracleWithBeefyPricing = ChainOracleBase & {
-    beefySwapperAddress: Hex;
-    beefyOracleAddress: Hex;
+    beefySwapperAddress: Bytes;
+    beefyOracleAddress: Bytes;
 };
 
 export type NoopOracleConfig = ChainOracleBase & {
@@ -20,20 +20,20 @@ export type NoopOracleConfig = ChainOracleBase & {
 
 export type ChainlinkOracleConfig = ChainOracleWithBeefyPricing & {
     priceOracleType: 'chainlink';
-    chainlinkNativePriceFeedAddress: Hex;
+    chainlinkNativePriceFeedAddress: Bytes;
     chainlinkNativePriceFeedDecimals: number;
 };
 
 export type PythOracleConfig = ChainOracleWithBeefyPricing & {
     priceOracleType: 'pyth';
-    pythPriceFeedAddress: Hex;
-    pythNativePriceId: Hex;
+    pythPriceFeedAddress: Bytes;
+    pythNativePriceId: Bytes;
 };
 
 export type UmbrellaOracleConfig = ChainOracleWithBeefyPricing & {
     priceOracleType: 'umbrella';
-    umbrellaRegistryAddress: Hex;
-    umbrellaRegistryPriceFeedNameBytes32: Hex;
+    umbrellaRegistryAddress: Bytes;
+    umbrellaRegistryPriceFeedNameBytes32: Bytes;
     umbrellaRegistryPriceFeedDecimals: number;
 };
 

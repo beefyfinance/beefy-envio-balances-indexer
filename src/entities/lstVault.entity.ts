@@ -1,11 +1,9 @@
 import type { EvmBlock, EvmChainId, EvmOnEventContext, LstVault, Token } from 'envio';
-import type { Hex } from 'viem';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toHex } from '../lib/hex';
+export const LstVaultId = ({ chainId, lstAddress }: { chainId: EvmChainId; lstAddress: Bytes }) =>
+    `${chainId}-${toHex(lstAddress)}`;
 
-export const LstVaultId = ({ chainId, lstAddress }: { chainId: EvmChainId; lstAddress: Hex }) =>
-    `${chainId}-${normalizeHex(lstAddress)}`;
-
-export const getLstVault = async (context: EvmOnEventContext, chainId: EvmChainId, lstAddress: Hex) => {
+export const getLstVault = async (context: EvmOnEventContext, chainId: EvmChainId, lstAddress: Bytes) => {
     const id = LstVaultId({ chainId, lstAddress });
     const lst = await context.LstVault.get(id);
     return lst;
@@ -21,7 +19,7 @@ export const createLstVault = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    lstAddress: Hex;
+    lstAddress: Bytes;
     shareToken: Token;
     underlyingToken: Token;
     initializedBlock: EvmBlock;

@@ -2,8 +2,8 @@ import { createEffect } from 'envio';
 import { staticVaultsMap } from '../config/classic/staticVaults';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema, normalizeHex } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { asHex, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 import { classicVaultAbi } from './abis/beefy/classic/ClassicVault';
 
@@ -25,41 +25,40 @@ export const getClassicVaultTokens = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const { vaultAddress, chainId } = input;
+        const { vaultAddress, chainId } = decodeEffectInput(input);
+        const vaultAddressStr = toHex(vaultAddress);
 
-        const staticVault = staticVaultsMap[chainId]?.[normalizeHex(vaultAddress)];
+        const staticVault = staticVaultsMap[chainId]?.[vaultAddressStr];
         if (staticVault) {
             return {
-                shareTokenAddress: vaultAddress,
-                underlyingTokenAddress: staticVault.underlyingTokenAddress,
-                strategyAddress: staticVault.strategyAddress,
+                shareTokenAddress: vaultAddressStr,
+                underlyingTokenAddress: toHex(staticVault.underlyingTokenAddress),
+                strategyAddress: toHex(staticVault.strategyAddress),
                 blacklistStatus: 'ok' as const,
             };
         }
 
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching ClassicVault tokens', { vaultAddress, chainId });
+        context.log.debug('Fetching ClassicVault tokens', { vaultAddress: vaultAddressStr, chainId });
 
         const [tokenResult, wantResult, strategyResult] = await client.multicall({
             allowFailure: true,
             contracts: [
-                // token (BeefyVaultV4 and before)
                 {
-                    address: vaultAddress as `0x${string}`,
+                    address: vaultAddressStr,
                     abi: classicVaultAbi,
                     functionName: 'token',
                     args: [],
                 },
-                // token (BeefyVaultV5 and after)
                 {
-                    address: vaultAddress as `0x${string}`,
+                    address: vaultAddressStr,
                     abi: classicVaultAbi,
                     functionName: 'want',
                     args: [],
                 },
                 {
-                    address: vaultAddress as `0x${string}`,
+                    address: vaultAddressStr,
                     abi: classicVaultAbi,
                     functionName: 'strategy',
                     args: [],
@@ -67,53 +66,48 @@ export const getClassicVaultTokens = createEffect(
             ],
         });
 
-        // The vault contract itself is the share token
-        const shareTokenAddress = vaultAddress;
-
-        let underlyingTokenAddress: `0x${string}` | null = null;
+        let underlyingTokenAddressStr = ZERO_ADDRESS_HEX;
         if (wantResult.status === 'success') {
-            // vault v5 and after
-            underlyingTokenAddress = wantResult.result;
+            underlyingTokenAddressStr = asHex(wantResult.result);
         } else if (tokenResult.status === 'success') {
-            // vault v4 and before
-            underlyingTokenAddress = tokenResult.result;
+            underlyingTokenAddressStr = asHex(tokenResult.result);
         } else {
-            context.log.error('ClassicVault want AND token call failed', { vaultAddress, chainId });
+            context.log.error('ClassicVault want AND token call failed', { vaultAddress: vaultAddressStr, chainId });
             return {
-                shareTokenAddress,
-                underlyingTokenAddress: ADDRESS_ZERO,
-                strategyAddress: ADDRESS_ZERO,
+                shareTokenAddress: vaultAddressStr,
+                underlyingTokenAddress: ZERO_ADDRESS_HEX,
+                strategyAddress: ZERO_ADDRESS_HEX,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         if (strategyResult.status === 'failure') {
-            context.log.error('ClassicVault strategy call failed', { vaultAddress, chainId });
-            throw new Error(`ClassicVault strategy call failed for ${vaultAddress} on chain ${chainId}`);
+            context.log.error('ClassicVault strategy call failed', { vaultAddress: vaultAddressStr, chainId });
+            throw new Error(`ClassicVault strategy call failed for ${vaultAddressStr} on chain ${chainId}`);
         }
 
-        const strategyAddress = strategyResult.result;
+        const strategyAddressStr = asHex(strategyResult.result);
 
         context.log.info('ClassicVault data fetched', {
-            vaultAddress,
-            shareTokenAddress,
-            underlyingTokenAddress,
-            strategyAddress,
+            vaultAddress: vaultAddressStr,
+            shareTokenAddress: vaultAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
+            strategyAddress: strategyAddressStr,
         });
 
-        if (underlyingTokenAddress === ADDRESS_ZERO) {
+        if (underlyingTokenAddressStr === ZERO_ADDRESS_HEX) {
             return {
-                shareTokenAddress,
-                underlyingTokenAddress,
-                strategyAddress,
+                shareTokenAddress: vaultAddressStr,
+                underlyingTokenAddress: underlyingTokenAddressStr,
+                strategyAddress: strategyAddressStr,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         return {
-            shareTokenAddress,
-            underlyingTokenAddress,
-            strategyAddress,
+            shareTokenAddress: vaultAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
+            strategyAddress: strategyAddressStr,
             blacklistStatus: 'ok' as const,
         };
     }

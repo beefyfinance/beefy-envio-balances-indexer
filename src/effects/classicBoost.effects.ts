@@ -1,8 +1,8 @@
 import { createEffect } from 'envio';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { asHex, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 import { classicBoostAbi } from './abis/beefy/classic/ClassicBoost';
 
@@ -24,22 +24,23 @@ export const getClassicBoostTokens = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const { boostAddress, chainId } = input;
+        const { boostAddress, chainId } = decodeEffectInput(input);
+        const boostAddressStr = toHex(boostAddress);
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching ClassicBoost tokens', { boostAddress, chainId });
+        context.log.debug('Fetching ClassicBoost tokens', { boostAddress: boostAddressStr, chainId });
 
         const [underlyingTokenResult, rewardTokenResult] = await client.multicall({
             allowFailure: true,
             contracts: [
                 {
-                    address: boostAddress as `0x${string}`,
+                    address: boostAddressStr,
                     abi: classicBoostAbi,
                     functionName: 'stakedToken',
                     args: [],
                 },
                 {
-                    address: boostAddress as `0x${string}`,
+                    address: boostAddressStr,
                     abi: classicBoostAbi,
                     functionName: 'rewardToken',
                     args: [],
@@ -47,42 +48,40 @@ export const getClassicBoostTokens = createEffect(
             ],
         });
 
-        // The boost contract itself is the share token (virtual token)
-        const shareTokenAddress = boostAddress;
-
         if (underlyingTokenResult.status === 'failure') {
-            context.log.error('ClassicBoost stakedToken call failed', { boostAddress, chainId });
+            context.log.error('ClassicBoost stakedToken call failed', { boostAddress: boostAddressStr, chainId });
             return {
-                shareTokenAddress,
-                stakedTokenAddress: ADDRESS_ZERO,
-                rewardTokenAddress: ADDRESS_ZERO,
+                shareTokenAddress: boostAddressStr,
+                stakedTokenAddress: ZERO_ADDRESS_HEX,
+                rewardTokenAddress: ZERO_ADDRESS_HEX,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
-        const stakedTokenAddress = underlyingTokenResult.result;
-        const rewardTokenAddress = rewardTokenResult.status === 'success' ? rewardTokenResult.result : ADDRESS_ZERO;
+        const stakedTokenAddressStr = asHex(underlyingTokenResult.result);
+        const rewardTokenAddressStr =
+            rewardTokenResult.status === 'success' ? asHex(rewardTokenResult.result) : ZERO_ADDRESS_HEX;
 
         context.log.info('ClassicBoost data fetched', {
-            boostAddress,
-            shareTokenAddress,
-            stakedTokenAddress,
-            rewardTokenAddress,
+            boostAddress: boostAddressStr,
+            shareTokenAddress: boostAddressStr,
+            stakedTokenAddress: stakedTokenAddressStr,
+            rewardTokenAddress: rewardTokenAddressStr,
         });
 
-        if (stakedTokenAddress === ADDRESS_ZERO) {
+        if (stakedTokenAddressStr === ZERO_ADDRESS_HEX) {
             return {
-                shareTokenAddress,
-                stakedTokenAddress,
-                rewardTokenAddress,
+                shareTokenAddress: boostAddressStr,
+                stakedTokenAddress: stakedTokenAddressStr,
+                rewardTokenAddress: rewardTokenAddressStr,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         return {
-            shareTokenAddress,
-            stakedTokenAddress,
-            rewardTokenAddress,
+            shareTokenAddress: boostAddressStr,
+            stakedTokenAddress: stakedTokenAddressStr,
+            rewardTokenAddress: rewardTokenAddressStr,
             blacklistStatus: 'ok' as const,
         };
     }

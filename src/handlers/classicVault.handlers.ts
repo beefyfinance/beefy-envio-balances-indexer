@@ -1,6 +1,5 @@
 import type { ClassicVault, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import { indexer } from 'envio';
-import type { Hex } from 'viem';
 import './clock.handlers';
 import { usesClassicStratHarvest1Abi } from '../config/classic/stratHarvest1';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
@@ -19,14 +18,14 @@ import { ensureClassicAggregate, maybeFinalizeClassic, maybeLinkClassicStrategy 
 import { handleClassicVaultTransfer } from '../lib/classic/position';
 import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens';
 import { interpretAsDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toBytes, toHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
 indexer.onEvent({ contract: 'ClassicVault', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClassicVault.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const vaultAddress = normalizeHex(event.srcAddress);
+    const vaultAddress = toBytes(event.srcAddress);
     const initializedBlock = event.block;
 
     const vault = await initializeClassicVault({ context, chainId, vaultAddress, initializedBlock });
@@ -52,19 +51,19 @@ indexer.onEvent({ contract: 'ClassicVault', event: 'Initialized' }, async ({ eve
 
 indexer.contractRegister({ contract: 'ClassicVault', event: 'UpgradeStrat' }, async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
-    const newStrategyAddress = normalizeHex(event.params.implementation);
-    context.chain.ClassicStrategy.add(newStrategyAddress);
+    const newStrategyAddress = toBytes(event.params.implementation);
+    context.chain.ClassicStrategy.add(toHex(newStrategyAddress));
     if (usesClassicStratHarvest1Abi(chainId, newStrategyAddress)) {
-        context.chain.ClassicStrategyStratHarvest1.add(newStrategyAddress);
+        context.chain.ClassicStrategyStratHarvest1.add(toHex(newStrategyAddress));
     } else {
-        context.chain.ClassicStrategyStratHarvest0.add(newStrategyAddress);
+        context.chain.ClassicStrategyStratHarvest0.add(toHex(newStrategyAddress));
     }
 });
 
 indexer.onEvent({ contract: 'ClassicVault', event: 'UpgradeStrat' }, async ({ event, context }) => {
     const chainId = toChainId(context.chain.id);
-    const vaultAddress = normalizeHex(event.srcAddress);
-    const newStrategyAddress = normalizeHex(event.params.implementation);
+    const vaultAddress = toBytes(event.srcAddress);
+    const newStrategyAddress = toBytes(event.params.implementation);
 
     const vault = await getClassicVault(context, chainId, vaultAddress);
     if (!vault) {
@@ -117,7 +116,7 @@ indexer.onEvent(
         context.log.debug('ClassicVault.Transfer', { event });
 
         const chainId = toChainId(context.chain.id);
-        const vaultAddress = normalizeHex(event.srcAddress);
+        const vaultAddress = toBytes(event.srcAddress);
 
         // Ensure that the vault is initialized first
         const vault = await initializeClassicVault({
@@ -134,14 +133,14 @@ indexer.onEvent(
             context,
             chainId,
             token: shareToken,
-            senderAddress: normalizeHex(event.params.from),
-            receiverAddress: normalizeHex(event.params.to),
+            senderAddress: toBytes(event.params.from),
+            receiverAddress: toBytes(event.params.to),
             rawTransferAmount: event.params.value,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
 
@@ -166,15 +165,15 @@ indexer.onEvent(
             context,
             chainId,
             classic,
-            fromAddress: normalizeHex(event.params.from),
-            toAddress: normalizeHex(event.params.to),
+            fromAddress: toBytes(event.params.from),
+            toAddress: toBytes(event.params.to),
             transferAmount: interpretAsDecimal(event.params.value, tokenContext.vaultToken.decimals),
             state,
             event: {
                 block: event.block,
                 trxIndex: event.transaction.transactionIndex,
                 logIndex: event.logIndex,
-                trxHash: normalizeHex(event.transaction.hash),
+                trxHash: toBytes(event.transaction.hash),
             },
         });
     }
@@ -188,7 +187,7 @@ const initializeClassicVault = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    vaultAddress: Hex;
+    vaultAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<ClassicVault | null> => {
     // Check if the vault already exists
@@ -200,13 +199,18 @@ const initializeClassicVault = async ({
     context.log.info('Initializing ClassicVault', { vaultAddress, chainId });
 
     // Fetch underlying tokens using effect
-    const { shareTokenAddress, underlyingTokenAddress, strategyAddress, blacklistStatus } = await context.effect(
-        getClassicVaultTokens,
-        {
-            vaultAddress,
-            chainId,
-        }
-    );
+    const {
+        shareTokenAddress: shareTokenAddressStr,
+        underlyingTokenAddress: underlyingTokenAddressStr,
+        strategyAddress: strategyAddressStr,
+        blacklistStatus,
+    } = await context.effect(getClassicVaultTokens, {
+        vaultAddress: toHex(vaultAddress),
+        chainId,
+    });
+    const shareTokenAddress = toBytes(shareTokenAddressStr);
+    const underlyingTokenAddress = toBytes(underlyingTokenAddressStr);
+    const strategyAddress = toBytes(strategyAddressStr);
 
     if (blacklistStatus !== 'ok') {
         logBlacklistStatus(context.log, blacklistStatus, 'ClassicVault', {

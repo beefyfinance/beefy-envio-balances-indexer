@@ -33,6 +33,10 @@ describe('ClassicStrategyFactory Handlers', () => {
                           "address": "0x00000000000000000000000000000000feed1010",
                           "contract": "ClassicStrategy",
                         },
+                        {
+                          "address": "0x00000000000000000000000000000000feed1010",
+                          "contract": "ClassicStrategyStratHarvest0",
+                        },
                       ],
                     },
                     "block": 10003201,

@@ -8,7 +8,6 @@ import type {
     RewardPool,
     Token,
 } from 'envio';
-import type { Hex } from 'viem';
 import type { ClmState } from '../../effects/clm.effects';
 import { getOrCreateAccount } from '../../entities/account.entity';
 import { isClmInitialized } from '../../entities/clm.entity';
@@ -17,22 +16,15 @@ import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
 import { type EventMetadata, eventId } from '../event';
-import { normalizeHex } from '../hex';
+import { type Bytes, bytesEqual, toHex } from '../hex';
 
-const isRewardPoolAddress = (clm: Clm, address: Hex): boolean => {
-    const normalized = normalizeHex(address);
-    return clm.rewardPoolTokensOrder.includes(normalized);
-};
+const isRewardPoolAddress = (clm: Clm, address: Bytes): boolean => clm.rewardPoolTokensOrder.includes(toHex(address));
 
-const shouldSkipTransferAddress = (clm: Clm, address: Hex): boolean => {
-    const normalized = normalizeHex(address);
-    return (
-        normalized === config.MINT_ADDRESS ||
-        normalized === config.BURN_ADDRESS ||
-        normalized === normalizeHex(clm.address) ||
-        isRewardPoolAddress(clm, normalized)
-    );
-};
+const shouldSkipTransferAddress = (clm: Clm, address: Bytes): boolean =>
+    bytesEqual(address, config.MINT_ADDRESS) ||
+    bytesEqual(address, config.BURN_ADDRESS) ||
+    bytesEqual(address, clm.address) ||
+    isRewardPoolAddress(clm, address);
 
 const buildRewardPoolBalancesDelta = ({
     clm,
@@ -40,12 +32,12 @@ const buildRewardPoolBalancesDelta = ({
     amount,
 }: {
     clm: Clm;
-    rewardPoolAddress: Hex;
+    rewardPoolAddress: Bytes;
     amount: BigDecimal;
-}): BigDecimal[] =>
-    clm.rewardPoolTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(rewardPoolAddress) ? amount : BIG_ZERO
-    );
+}): BigDecimal[] => {
+    const rewardPoolAddressStr = toHex(rewardPoolAddress);
+    return clm.rewardPoolTokensOrder.map((addressStr) => (addressStr === rewardPoolAddressStr ? amount : BIG_ZERO));
+};
 
 const applyBalanceDeltas = ({
     position,
@@ -180,7 +172,7 @@ const updateClmPositionFromDeltas = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     clm: Clm;
-    accountAddress: Hex;
+    accountAddress: Bytes;
     managerBalanceDelta: BigDecimal;
     rewardPoolBalancesDelta: BigDecimal[];
     rewardBalancesDelta: BigDecimal[];
@@ -270,13 +262,13 @@ export const handleClmManagerTransfer = async ({
     context: EvmOnEventContext;
     chainId: EvmChainId;
     clm: Clm;
-    fromAddress: Hex;
-    toAddress: Hex;
+    fromAddress: Bytes;
+    toAddress: Bytes;
     transferAmount: BigDecimal;
     state: ClmState;
     event: EventMetadata;
 }) => {
-    if (normalizeHex(fromAddress) === normalizeHex(toAddress) || transferAmount.eq(BIG_ZERO)) {
+    if (fromAddress === toAddress || transferAmount.eq(BIG_ZERO)) {
         return;
     }
 
@@ -324,19 +316,19 @@ export const handleClmRewardPoolTransfer = async ({
     chainId: EvmChainId;
     clm: Clm;
     rewardPool: RewardPool;
-    fromAddress: Hex;
-    toAddress: Hex;
+    fromAddress: Bytes;
+    toAddress: Bytes;
     transferAmount: BigDecimal;
     state: ClmState;
     event: EventMetadata;
 }) => {
-    if (normalizeHex(fromAddress) === normalizeHex(toAddress) || transferAmount.eq(BIG_ZERO)) {
+    if (fromAddress === toAddress || transferAmount.eq(BIG_ZERO)) {
         return;
     }
 
     const rewardPoolBalancesDelta = buildRewardPoolBalancesDelta({
         clm,
-        rewardPoolAddress: normalizeHex(rewardPool.address),
+        rewardPoolAddress: rewardPool.address,
         amount: transferAmount,
     });
 
@@ -384,14 +376,15 @@ export const handleClmRewardPoolRewardPaid = async ({
     chainId: EvmChainId;
     clm: Clm;
     rewardPool: RewardPool;
-    userAddress: Hex;
+    userAddress: Bytes;
     rewardToken: Token;
     rewardAmount: BigDecimal;
     state: ClmState;
     event: EventMetadata;
 }) => {
-    const rewardBalancesDelta = clm.rewardTokensOrder.map((address) =>
-        normalizeHex(address) === normalizeHex(rewardToken.address) ? rewardAmount : BIG_ZERO
+    const rewardTokenAddressStr = toHex(rewardToken.address);
+    const rewardBalancesDelta = clm.rewardTokensOrder.map((addressStr) =>
+        addressStr === rewardTokenAddressStr ? rewardAmount : BIG_ZERO
     );
 
     await updateClmPositionFromDeltas({

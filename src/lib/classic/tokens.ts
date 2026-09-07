@@ -1,9 +1,6 @@
 import type { Classic, EvmChainId, EvmOnEventContext, Token } from 'envio';
-import type { Hex } from 'viem';
 import { getTokenOrThrow } from '../../entities/token.entity';
-import { ADDRESS_ZERO } from '../decimal';
-import { normalizeHex } from '../hex';
-
+import { asHex, type Bytes, toBytes, toHex, ZERO_ADDRESS } from '../hex';
 export const loadClassicTokens = async ({
     context,
     classic,
@@ -65,9 +62,9 @@ const loadClmManagerContext = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    managerAddress: Hex;
+    managerAddress: Bytes;
 }) => {
-    const clmManager = await context.ClmManager.get(`${chainId}-${normalizeHex(managerAddress)}`);
+    const clmManager = await context.ClmManager.get(`${chainId}-${toHex(managerAddress)}`);
     if (!clmManager) {
         return null;
     }
@@ -78,9 +75,9 @@ const loadClmManagerContext = async ({
     ]);
 
     return {
-        clmManagerAddress: normalizeHex(clmManager.address),
-        clmUnderlyingToken0Address: normalizeHex(token0.address),
-        clmUnderlyingToken1Address: normalizeHex(token1.address),
+        clmManagerAddress: clmManager.address,
+        clmUnderlyingToken0Address: token0.address,
+        clmUnderlyingToken1Address: token1.address,
         clmUnderlyingToken0Decimals: token0.decimals,
         clmUnderlyingToken1Decimals: token1.decimals,
     };
@@ -103,13 +100,13 @@ export const buildClassicFetchInput = async ({
         throw new Error(`Classic ${classic.id} has no linked strategy`);
     }
 
-    const strategyAddress = normalizeHex(classic.classicVaultStrategy_id.slice(`${String(chainId)}-`.length)) as Hex;
+    const strategyAddress = toBytes(classic.classicVaultStrategy_id.slice(`${String(chainId)}-`.length));
 
     let clmContext =
         (await loadClmManagerContext({
             context,
             chainId,
-            managerAddress: normalizeHex(tokens.underlyingToken.address),
+            managerAddress: tokens.underlyingToken.address,
         })) ?? null;
 
     if (!clmContext) {
@@ -117,7 +114,7 @@ export const buildClassicFetchInput = async ({
             clmContext = await loadClmManagerContext({
                 context,
                 chainId,
-                managerAddress: normalizeHex(rewardPoolToken.address),
+                managerAddress: rewardPoolToken.address,
             });
             if (clmContext) {
                 break;
@@ -128,28 +125,28 @@ export const buildClassicFetchInput = async ({
     return {
         chainId,
         blockNumber,
-        vaultAddress: normalizeHex(classic.address),
-        strategyAddress,
-        underlyingTokenAddress: normalizeHex(tokens.underlyingToken.address),
+        vaultAddress: toHex(classic.address),
+        strategyAddress: toHex(strategyAddress),
+        underlyingTokenAddress: toHex(tokens.underlyingToken.address),
         underlyingPlatform: classic.underlyingPlatform,
         underlyingTokenDecimals: tokens.underlyingToken.decimals,
         underlyingBreakdownTokens: tokens.underlyingBreakdownTokens.map((token) => ({
-            address: normalizeHex(token.address),
+            address: toHex(token.address),
             decimals: token.decimals,
         })),
-        rewardPoolTokenAddresses: classic.rewardPoolTokensOrder.map(normalizeHex),
-        erc4626AdapterTokenAddresses: classic.erc4626AdapterTokensOrder.map(normalizeHex),
+        rewardPoolTokenAddresses: classic.rewardPoolTokensOrder.map(asHex),
+        erc4626AdapterTokenAddresses: classic.erc4626AdapterTokensOrder.map(asHex),
         boostRewardTokens: tokens.boostRewardTokens.map((token) => ({
-            address: normalizeHex(token.address),
+            address: toHex(token.address),
             decimals: token.decimals,
         })),
         rewardTokens: tokens.rewardTokens.map((token) => ({
-            address: normalizeHex(token.address),
+            address: toHex(token.address),
             decimals: token.decimals,
         })),
-        clmManagerAddress: clmContext?.clmManagerAddress ?? ADDRESS_ZERO,
-        clmUnderlyingToken0Address: clmContext?.clmUnderlyingToken0Address ?? ADDRESS_ZERO,
-        clmUnderlyingToken1Address: clmContext?.clmUnderlyingToken1Address ?? ADDRESS_ZERO,
+        clmManagerAddress: toHex(clmContext?.clmManagerAddress ?? ZERO_ADDRESS),
+        clmUnderlyingToken0Address: toHex(clmContext?.clmUnderlyingToken0Address ?? ZERO_ADDRESS),
+        clmUnderlyingToken1Address: toHex(clmContext?.clmUnderlyingToken1Address ?? ZERO_ADDRESS),
         clmUnderlyingToken0Decimals: clmContext?.clmUnderlyingToken0Decimals ?? 0,
         clmUnderlyingToken1Decimals: clmContext?.clmUnderlyingToken1Decimals ?? 0,
     };

@@ -7,18 +7,16 @@ import type {
     EvmOnEventContext,
     Token,
 } from 'envio';
-import type { Hex } from 'viem';
 import type { ClassicState } from '../effects/classic.effects';
 import { BIG_ZERO, type BigDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
-
-export const classicId = ({ chainId, vaultAddress }: { chainId: EvmChainId; vaultAddress: Hex }) =>
-    `${chainId}-${normalizeHex(vaultAddress)}`;
+import { type Bytes, toHex } from '../lib/hex';
+export const classicId = ({ chainId, vaultAddress }: { chainId: EvmChainId; vaultAddress: Bytes }) =>
+    `${chainId}-${toHex(vaultAddress)}`;
 
 export const isClassicInitialized = (classic: Classic): boolean => classic.initializableStatus === 'INITIALIZED';
 
-export const getClassic = async (context: EvmOnEventContext, chainId: EvmChainId, vaultAddress: Hex | string) => {
-    const id = classicId({ chainId, vaultAddress: normalizeHex(vaultAddress) as Hex });
+export const getClassic = async (context: EvmOnEventContext, chainId: EvmChainId, vaultAddress: Bytes) => {
+    const id = classicId({ chainId, vaultAddress });
     return await context.Classic.get(id);
 };
 
@@ -58,7 +56,7 @@ export const getOrCreateClassic = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    vaultAddress: Hex;
+    vaultAddress: Bytes;
     classicVault: ClassicVault;
     initializedBlock: EvmBlock;
 }): Promise<Classic> => {
@@ -124,7 +122,7 @@ export const finalizeClassicInitialization = async ({
     underlyingBreakdownTokens: Token[];
 }) => {
     const underlyingBreakdownToken_ids = underlyingBreakdownTokens.map((token) => token.id);
-    const underlyingBreakdownTokensOrder = underlyingBreakdownTokens.map((token) => normalizeHex(token.address));
+    const underlyingBreakdownTokensOrder = underlyingBreakdownTokens.map((token) => toHex(token.address));
 
     context.Classic.set({
         ...classic,
@@ -148,11 +146,11 @@ export const linkClassicRewardPool = async ({
     const rewardPoolToken_ids = [...classic.rewardPoolToken_ids];
     const rewardPoolTokensOrder = [...classic.rewardPoolTokensOrder];
     const rewardPoolsTotalSupply = [...classic.rewardPoolsTotalSupply];
-    const rewardPoolAddress = normalizeHex(rewardPoolShareToken.address);
+    const rewardPoolAddressStr = toHex(rewardPoolShareToken.address);
 
-    if (!rewardPoolTokensOrder.includes(rewardPoolAddress)) {
+    if (!rewardPoolTokensOrder.includes(rewardPoolAddressStr)) {
         rewardPoolToken_ids.push(rewardPoolShareToken.id);
-        rewardPoolTokensOrder.push(rewardPoolAddress);
+        rewardPoolTokensOrder.push(rewardPoolAddressStr);
         rewardPoolsTotalSupply.push(BIG_ZERO);
     }
 
@@ -175,14 +173,14 @@ export const addClassicBoostRewardToken = async ({
 }) => {
     const boostRewardToken_ids = [...classic.boostRewardToken_ids];
     const boostRewardTokensOrder = [...classic.boostRewardTokensOrder];
-    const rewardAddress = normalizeHex(rewardToken.address);
+    const rewardAddressStr = toHex(rewardToken.address);
 
-    if (boostRewardTokensOrder.includes(rewardAddress)) {
+    if (boostRewardTokensOrder.includes(rewardAddressStr)) {
         return;
     }
 
     boostRewardToken_ids.push(rewardToken.id);
-    boostRewardTokensOrder.push(rewardAddress);
+    boostRewardTokensOrder.push(rewardAddressStr);
 
     context.Classic.set({
         ...classic,
@@ -202,14 +200,14 @@ export const addClassicRewardToken = async ({
 }) => {
     const rewardToken_ids = [...classic.rewardToken_ids];
     const rewardTokensOrder = [...classic.rewardTokensOrder];
-    const rewardAddress = normalizeHex(rewardToken.address);
+    const rewardAddressStr = toHex(rewardToken.address);
 
-    if (rewardTokensOrder.includes(rewardAddress)) {
+    if (rewardTokensOrder.includes(rewardAddressStr)) {
         return;
     }
 
     rewardToken_ids.push(rewardToken.id);
-    rewardTokensOrder.push(rewardAddress);
+    rewardTokensOrder.push(rewardAddressStr);
 
     context.Classic.set({
         ...classic,
@@ -231,11 +229,11 @@ export const linkClassicErc4626Adapter = async ({
     const erc4626AdapterTokensOrder = [...classic.erc4626AdapterTokensOrder];
     const erc4626AdaptersTotalSupply = [...classic.erc4626AdaptersTotalSupply];
     const erc4626AdapterVaultSharesBalances = [...classic.erc4626AdapterVaultSharesBalances];
-    const adapterAddress = normalizeHex(adapterShareToken.address);
+    const adapterAddressStr = toHex(adapterShareToken.address);
 
-    if (!erc4626AdapterTokensOrder.includes(adapterAddress)) {
+    if (!erc4626AdapterTokensOrder.includes(adapterAddressStr)) {
         erc4626AdapterToken_ids.push(adapterShareToken.id);
-        erc4626AdapterTokensOrder.push(adapterAddress);
+        erc4626AdapterTokensOrder.push(adapterAddressStr);
         erc4626AdaptersTotalSupply.push(BIG_ZERO);
         erc4626AdapterVaultSharesBalances.push(BIG_ZERO);
     }
@@ -319,10 +317,8 @@ export const incrementClassicFees = async ({
 export const isClassicVaultAddress = async (
     context: EvmOnEventContext,
     chainId: EvmChainId,
-    vaultAddress: Hex | string
+    vaultAddress: Bytes
 ): Promise<boolean> => {
-    const vault = await context.ClassicVault.get(
-        classicId({ chainId, vaultAddress: normalizeHex(vaultAddress) as Hex })
-    );
+    const vault = await context.ClassicVault.get(classicId({ chainId, vaultAddress }));
     return vault !== undefined;
 };

@@ -1,11 +1,9 @@
 import type { Classic, ClassicBoost, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
-import type { Hex } from 'viem';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toHex } from '../lib/hex';
+export const classicBoostId = ({ chainId, boostAddress }: { chainId: EvmChainId; boostAddress: Bytes }) =>
+    `${chainId}-${toHex(boostAddress)}`;
 
-export const classicBoostId = ({ chainId, boostAddress }: { chainId: EvmChainId; boostAddress: Hex }) =>
-    `${chainId}-${normalizeHex(boostAddress)}`;
-
-export const getClassicBoost = async (context: EvmOnEventContext, chainId: EvmChainId, boostAddress: Hex) => {
+export const getClassicBoost = async (context: EvmOnEventContext, chainId: EvmChainId, boostAddress: Bytes) => {
     const id = classicBoostId({ chainId, boostAddress });
     const boost = await context.ClassicBoost.get(id);
     return boost;
@@ -23,7 +21,7 @@ export const createClassicBoost = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    boostAddress: Hex;
+    boostAddress: Bytes;
     shareToken: Token;
     underlyingToken: Token;
     rewardToken: Token;
@@ -48,7 +46,7 @@ export const createClassicBoost = async ({
     return boost;
 };
 
-export const isClassicBoost = async (context: EvmOnEventContext, chainId: EvmChainId, boostAddress: Hex) => {
+export const isClassicBoost = async (context: EvmOnEventContext, chainId: EvmChainId, boostAddress: Bytes) => {
     const id = classicBoostId({ chainId, boostAddress });
     const boost = await context.ClassicBoost.get(id);
     return boost !== undefined;

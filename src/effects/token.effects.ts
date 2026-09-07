@@ -1,7 +1,8 @@
 import { createEffect, S } from 'envio';
 import { erc20Abi } from 'viem';
 import { chainIdSchema } from '../lib/chain';
-import { hexSchema } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { hexSchema, toHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
 export const getTokenMetadata = createEffect(
@@ -28,14 +29,15 @@ export const getTokenMetadata = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const { tokenAddress, chainId } = input;
+        const { tokenAddress, chainId } = decodeEffectInput(input);
+        const tokenAddressStr = toHex(tokenAddress);
 
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching token metadata', { tokenAddress, chainId });
+        context.log.debug('Fetching token metadata', { tokenAddress: tokenAddressStr, chainId });
 
         const erc20 = {
-            address: tokenAddress as `0x${string}`,
+            address: tokenAddressStr,
             abi: erc20Abi,
         } as const;
 
@@ -58,7 +60,7 @@ export const getTokenMetadata = createEffect(
             symbolResult.status === 'failure'
         ) {
             context.log.error('[INVALID_TOKEN] token metadata calls reverted', {
-                tokenAddress,
+                tokenAddress: tokenAddressStr,
                 chainId,
                 decimals: decimalsResult.status,
                 name: nameResult.status,
@@ -76,7 +78,7 @@ export const getTokenMetadata = createEffect(
         }
 
         context.log.info('Got token details', {
-            tokenAddress,
+            tokenAddress: tokenAddressStr,
             name: nameResult.result,
             symbol: symbolResult.result,
             decimals: decimalsResult.result,

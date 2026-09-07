@@ -1,8 +1,8 @@
 import { createEffect } from 'envio';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { asHex, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 import { clmManagerAbi } from './abis/beefy/clm/ClmManager';
 
@@ -24,16 +24,17 @@ export const getClmManagerTokens = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const { managerAddress, chainId } = input;
+        const { managerAddress, chainId } = decodeEffectInput(input);
+        const managerAddressStr = toHex(managerAddress);
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching ClmManager tokens', { managerAddress, chainId });
+        context.log.debug('Fetching ClmManager tokens', { managerAddress: managerAddressStr, chainId });
 
         const [wantsResult] = await client.multicall({
             allowFailure: true,
             contracts: [
                 {
-                    address: managerAddress as `0x${string}`,
+                    address: managerAddressStr,
                     abi: clmManagerAbi,
                     functionName: 'wants',
                     args: [],
@@ -41,41 +42,40 @@ export const getClmManagerTokens = createEffect(
             ],
         });
 
-        // The manager contract itself is the share token
-        const shareTokenAddress = managerAddress;
-
         if (wantsResult.status === 'failure') {
-            context.log.error('ClmManager wants call failed', { managerAddress, chainId });
+            context.log.error('ClmManager wants call failed', { managerAddress: managerAddressStr, chainId });
             return {
-                shareTokenAddress,
-                underlyingToken0Address: ADDRESS_ZERO,
-                underlyingToken1Address: ADDRESS_ZERO,
+                shareTokenAddress: managerAddressStr,
+                underlyingToken0Address: ZERO_ADDRESS_HEX,
+                underlyingToken1Address: ZERO_ADDRESS_HEX,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
-        const [underlyingToken0Address, underlyingToken1Address] = wantsResult.result;
+        const [token0, token1] = wantsResult.result;
+        const underlyingToken0AddressStr = asHex(token0);
+        const underlyingToken1AddressStr = asHex(token1);
 
         context.log.info('ClmManager data fetched', {
-            managerAddress,
-            shareTokenAddress,
-            underlyingToken0Address,
-            underlyingToken1Address,
+            managerAddress: managerAddressStr,
+            shareTokenAddress: managerAddressStr,
+            underlyingToken0Address: underlyingToken0AddressStr,
+            underlyingToken1Address: underlyingToken1AddressStr,
         });
 
-        if (underlyingToken0Address === ADDRESS_ZERO || underlyingToken1Address === ADDRESS_ZERO) {
+        if (underlyingToken0AddressStr === ZERO_ADDRESS_HEX || underlyingToken1AddressStr === ZERO_ADDRESS_HEX) {
             return {
-                shareTokenAddress,
-                underlyingToken0Address,
-                underlyingToken1Address,
+                shareTokenAddress: managerAddressStr,
+                underlyingToken0Address: underlyingToken0AddressStr,
+                underlyingToken1Address: underlyingToken1AddressStr,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         return {
-            shareTokenAddress,
-            underlyingToken0Address,
-            underlyingToken1Address,
+            shareTokenAddress: managerAddressStr,
+            underlyingToken0Address: underlyingToken0AddressStr,
+            underlyingToken1Address: underlyingToken1AddressStr,
             blacklistStatus: 'ok' as const,
         };
     }

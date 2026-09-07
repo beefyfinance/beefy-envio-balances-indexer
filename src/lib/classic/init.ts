@@ -8,7 +8,6 @@ import type {
     EvmOnEventContext,
     Token,
 } from 'envio';
-import type { Hex } from 'viem';
 import { detectClassicPlatform, fetchClassicState, parseFetchedClassicState } from '../../effects/classic.effects';
 import {
     addClassicBoostRewardToken,
@@ -22,7 +21,7 @@ import {
     linkClassicVaultStrategy,
 } from '../../entities/classic.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../../entities/token.entity';
-import { normalizeHex } from '../hex';
+import { type Bytes, toBytes, toHex } from '../hex';
 import { refreshClassic } from './refresh';
 import { buildClassicFetchInput, loadClassicTokens } from './tokens';
 
@@ -40,7 +39,7 @@ export const ensureClassicAggregate = async ({
     const classic = await getOrCreateClassic({
         context,
         chainId,
-        vaultAddress: normalizeHex(classicVault.address),
+        vaultAddress: classicVault.address,
         classicVault,
         initializedBlock,
     });
@@ -90,10 +89,16 @@ export const maybeFinalizeClassic = async ({
         return classic;
     }
 
+    const underlyingTokenEntity = await context.Token.get(classic.underlyingToken_id);
+    if (!underlyingTokenEntity) {
+        context.log.error('Classic underlying token not found during finalize', { classicId: classic.id });
+        return classic;
+    }
+
     const underlyingToken = await getOrCreateToken({
         context,
         chainId,
-        tokenAddress: (await context.Token.get(classic.underlyingToken_id))?.address as `0x${string}`,
+        tokenAddress: underlyingTokenEntity.address,
         virtual: false,
     });
     if (!underlyingToken) {
@@ -103,9 +108,9 @@ export const maybeFinalizeClassic = async ({
 
     const platformData = await context.effect(detectClassicPlatform, {
         chainId,
-        vaultAddress: normalizeHex(classic.address),
-        strategyAddress: normalizeHex(strategy.address),
-        underlyingTokenAddress: normalizeHex(underlyingToken.address),
+        vaultAddress: toHex(classic.address),
+        strategyAddress: toHex(strategy.address),
+        underlyingTokenAddress: toHex(underlyingToken.address),
         underlyingPlatform: classic.underlyingPlatform,
     });
 
@@ -114,7 +119,7 @@ export const maybeFinalizeClassic = async ({
             getOrCreateToken({
                 context,
                 chainId,
-                tokenAddress,
+                tokenAddress: toBytes(tokenAddress),
                 virtual: false,
             })
         )
@@ -160,7 +165,7 @@ export const isClassicVaultStakedToken = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    stakedTokenAddress: Hex;
+    stakedTokenAddress: Bytes;
 }) => isClassicVaultAddress(context, chainId, stakedTokenAddress);
 
 export const linkClassicBoost = async ({
@@ -230,7 +235,7 @@ export const tryLinkClassicBoost = async ({
         !(await isClassicVaultStakedToken({
             context,
             chainId,
-            stakedTokenAddress: normalizeHex(stakedToken.address),
+            stakedTokenAddress: stakedToken.address,
         }))
     ) {
         return boost;
@@ -265,13 +270,13 @@ export const tryLinkClassicErc4626Adapter = async ({
         !(await isClassicVaultStakedToken({
             context,
             chainId,
-            stakedTokenAddress: normalizeHex(underlyingToken.address),
+            stakedTokenAddress: underlyingToken.address,
         }))
     ) {
         return adapter;
     }
 
-    const classic = await getClassic(context, chainId, normalizeHex(underlyingToken.address));
+    const classic = await getClassic(context, chainId, underlyingToken.address);
     if (!classic) {
         return adapter;
     }

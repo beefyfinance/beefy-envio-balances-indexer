@@ -68,7 +68,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -78,7 +78,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -163,7 +163,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -173,7 +173,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -352,7 +352,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "1",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -362,7 +362,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -470,7 +470,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -480,7 +480,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -578,7 +578,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "2",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -588,7 +588,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -733,7 +733,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -743,7 +743,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -864,7 +864,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -874,7 +874,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -978,7 +978,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -988,7 +988,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
@@ -1085,7 +1085,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0xA6854c1F54198D351D6d4263806F5A876099839b",
+                          "address": "0xa6854c1f54198d351d6d4263806f5a876099839b",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xa6854c1f54198d351d6d4263806f5a876099839b",
@@ -1095,7 +1095,7 @@ describe('ClassicBoost Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x1dd2d631c92b1aCdFCDd51A0F7145A50130050C4",
+                          "address": "0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x1dd2d631c92b1acdfcdd51a0f7145a50130050c4",

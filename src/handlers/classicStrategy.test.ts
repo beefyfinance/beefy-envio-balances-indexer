@@ -209,6 +209,10 @@ describe('ClassicStrategy Handlers', () => {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "contract": "ClassicStrategy",
                         },
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategyStratHarvest0",
+                        },
                       ],
                     },
                     "block": 12132390,
@@ -421,6 +425,10 @@ describe('ClassicStrategy Handlers', () => {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "contract": "ClassicStrategy",
                         },
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategyStratHarvest0",
+                        },
                       ],
                     },
                     "block": 12132390,
@@ -467,6 +475,10 @@ describe('ClassicStrategy Handlers', () => {
                         {
                           "address": "0x0000000000000000000000000000000000000007",
                           "contract": "ClassicStrategy",
+                        },
+                        {
+                          "address": "0x0000000000000000000000000000000000000007",
+                          "contract": "ClassicStrategyStratHarvest0",
                         },
                       ],
                     },
@@ -517,6 +529,10 @@ describe('ClassicStrategy Handlers', () => {
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "contract": "ClassicStrategy",
+                        },
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategyStratHarvest0",
                         },
                       ],
                     },
@@ -1113,6 +1129,10 @@ describe('ClassicStrategy Handlers', () => {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "contract": "ClassicStrategy",
                         },
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategyStratHarvest0",
+                        },
                       ],
                     },
                     "block": 12132390,
@@ -1460,6 +1480,10 @@ describe('ClassicStrategy Handlers', () => {
                         {
                           "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
                           "contract": "ClassicStrategy",
+                        },
+                        {
+                          "address": "0x83dfd1c2f553e8026ea8626399fe26ce419dfdac",
+                          "contract": "ClassicStrategyStratHarvest0",
                         },
                       ],
                     },

@@ -1,6 +1,5 @@
 import type { ClassicVaultStrategy, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import { indexer } from 'envio';
-import type { Hex } from 'viem';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { getClassicStrategyVault } from '../effects/classicStrategy.effects';
 import {
@@ -15,14 +14,14 @@ import { toChainId } from '../lib/chain';
 import { ensureClassicAggregate, maybeFinalizeClassic } from '../lib/classic/init';
 import { refreshClassic, refreshClassicFees } from '../lib/classic/refresh';
 import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens';
-import { ADDRESS_ZERO, interpretAsDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
+import { interpretAsDecimal } from '../lib/decimal';
+import { type Bytes, toBytes, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 
 indexer.onEvent({ contract: 'ClassicStrategy', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('ClassicStrategy.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategyAddress = toBytes(event.srcAddress);
     const initializedBlock = event.block;
 
     const strategy = await initializeClassicStrategy({ context, chainId, strategyAddress, initializedBlock });
@@ -116,7 +115,7 @@ const handleClassicStrategyHarvest = async ({
     compoundedAmount: bigint;
 }) => {
     const chainId = toChainId(context.chain.id);
-    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategyAddress = toBytes(event.srcAddress);
     const strategy = await getClassicVaultStrategy(context, chainId, strategyAddress);
     if (!strategy) return;
 
@@ -147,7 +146,7 @@ const handleClassicStrategyHarvest = async ({
             block: event.block,
             trxIndex: event.transaction.transactionIndex,
             logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
+            trxHash: toBytes(event.transaction.hash),
         },
     });
 
@@ -173,7 +172,7 @@ const handleClassicStrategyChargedFees = async ({
     strategistFees: bigint;
 }) => {
     const chainId = toChainId(context.chain.id);
-    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategyAddress = toBytes(event.srcAddress);
     const strategy = await getClassicVaultStrategy(context, chainId, strategyAddress);
     if (!strategy) return;
 
@@ -203,7 +202,7 @@ const handleClassicStrategyPauseChange = async ({
     pausableStatus: 'RUNNING' | 'PAUSED';
 }) => {
     const chainId = toChainId(context.chain.id);
-    const strategyAddress = normalizeHex(event.srcAddress);
+    const strategyAddress = toBytes(event.srcAddress);
     const strategy = await getClassicVaultStrategy(context, chainId, strategyAddress);
     if (!strategy) return;
 
@@ -228,7 +227,7 @@ const initializeClassicStrategy = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    strategyAddress: Hex;
+    strategyAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<ClassicVaultStrategy | null> => {
     // Check if the strategy already exists
@@ -240,16 +239,18 @@ const initializeClassicStrategy = async ({
     context.log.info('Initializing ClassicStrategy', { strategyAddress, chainId });
 
     // Fetch vault address using effect
-    const { vaultAddress } = await context.effect(getClassicStrategyVault, {
-        strategyAddress,
+    const { vaultAddress: vaultAddressStr } = await context.effect(getClassicStrategyVault, {
+        strategyAddress: toHex(strategyAddress),
         chainId,
         blockNumber: initializedBlock.number,
     });
 
-    if (vaultAddress === ADDRESS_ZERO) {
+    if (vaultAddressStr === ZERO_ADDRESS_HEX) {
         context.log.error('ClassicStrategy vault address is zero', { strategyAddress, chainId });
         return null;
     }
+
+    const vaultAddress = toBytes(vaultAddressStr);
 
     // Get the ClassicVault entity
     const classicVault = await getClassicVault(context, chainId, vaultAddress);

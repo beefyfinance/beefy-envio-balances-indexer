@@ -1,8 +1,8 @@
 import { createEffect, S } from 'envio';
 import { staticStrategyVaultMap } from '../config/classic/staticVaults';
 import { chainIdSchema } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema, normalizeHex } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { asHex, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 import { classicStrategyAbi } from './abis/beefy/classic/ClassicStrategy';
 
@@ -22,24 +22,24 @@ export const getClassicStrategyVault = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const { strategyAddress, chainId, blockNumber } = input;
-        const normalizedStrategy = normalizeHex(strategyAddress);
+        const { strategyAddress, chainId, blockNumber } = decodeEffectInput(input);
+        const strategyAddressStr = toHex(strategyAddress);
 
-        const staticVaultAddress = staticStrategyVaultMap[chainId]?.[normalizedStrategy];
+        const staticVaultAddress = staticStrategyVaultMap[chainId]?.[strategyAddressStr];
         if (staticVaultAddress) {
-            return { vaultAddress: staticVaultAddress };
+            return { vaultAddress: toHex(staticVaultAddress) };
         }
 
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching ClassicStrategy vault', { strategyAddress, chainId });
+        context.log.debug('Fetching ClassicStrategy vault', { strategyAddress: strategyAddressStr, chainId });
 
         const [vaultResult] = await client.multicall({
             allowFailure: true,
             blockNumber: BigInt(blockNumber),
             contracts: [
                 {
-                    address: strategyAddress as `0x${string}`,
+                    address: strategyAddressStr,
                     abi: classicStrategyAbi,
                     functionName: 'vault',
                     args: [],
@@ -48,21 +48,21 @@ export const getClassicStrategyVault = createEffect(
         });
 
         if (vaultResult.status === 'failure') {
-            context.log.error('ClassicStrategy vault call failed', { strategyAddress, chainId });
+            context.log.error('ClassicStrategy vault call failed', { strategyAddress: strategyAddressStr, chainId });
             return {
-                vaultAddress: ADDRESS_ZERO,
+                vaultAddress: ZERO_ADDRESS_HEX,
             };
         }
 
-        const vaultAddress = normalizeHex(vaultResult.result);
+        const vaultAddressStr = asHex(vaultResult.result);
 
         context.log.info('ClassicStrategy vault fetched', {
-            strategyAddress,
-            vaultAddress,
+            strategyAddress: strategyAddressStr,
+            vaultAddress: vaultAddressStr,
         });
 
         return {
-            vaultAddress,
+            vaultAddress: vaultAddressStr,
         };
     }
 );

@@ -1,4 +1,5 @@
-import type { Hex, PublicClient } from 'viem';
+import type { PublicClient } from 'viem';
+import { type Bytes, toBytes, toHex } from '../../hex';
 import type { TokenBalance } from './common';
 
 const blockTag = (blockNumber?: number) => (blockNumber !== undefined ? { blockNumber: BigInt(blockNumber) } : {});
@@ -15,10 +16,10 @@ const aTokenAbi = [
     { inputs: [], name: 'aToken', outputs: [{ type: 'address' }], stateMutability: 'view', type: 'function' },
 ] as const;
 
-export const isAaveVault = async (client: PublicClient, strategyAddress: Hex): Promise<boolean> => {
+export const isAaveVault = async (client: PublicClient, strategyAddress: Bytes): Promise<boolean> => {
     const [result] = await client.multicall({
         allowFailure: true,
-        contracts: [{ address: strategyAddress, abi: aTokenAbi, functionName: 'aToken' }],
+        contracts: [{ address: toHex(strategyAddress), abi: aTokenAbi, functionName: 'aToken' }],
     });
     return result.status === 'success';
 };
@@ -30,14 +31,14 @@ export const getVaultTokenBreakdownAave = async ({
     blockNumber,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
-    underlyingTokenAddress: Hex;
+    vaultAddress: Bytes;
+    underlyingTokenAddress: Bytes;
     blockNumber?: number;
 }): Promise<TokenBalance[]> => {
     const [balanceResult] = await client.multicall({
         allowFailure: true,
         ...blockTag(blockNumber),
-        contracts: [{ address: vaultAddress, abi: balanceAbi, functionName: 'balance' }],
+        contracts: [{ address: toHex(vaultAddress), abi: balanceAbi, functionName: 'balance' }],
     });
     if (balanceResult.status === 'failure') {
         return [];
@@ -71,8 +72,8 @@ export const isCurveVault = async ({
     underlyingTokenAddress,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
-    underlyingTokenAddress: Hex;
+    vaultAddress: Bytes;
+    underlyingTokenAddress: Bytes;
 }): Promise<boolean> => {
     const breakdown = await getVaultTokenBreakdownCurve({ client, vaultAddress, underlyingTokenAddress });
     return breakdown.length > 0;
@@ -85,18 +86,20 @@ export const getVaultTokenBreakdownCurve = async ({
     blockNumber,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
-    underlyingTokenAddress: Hex;
+    vaultAddress: Bytes;
+    underlyingTokenAddress: Bytes;
     blockNumber?: number;
 }): Promise<TokenBalance[]> => {
+    const vaultAddressStr = toHex(vaultAddress);
+    const underlyingTokenAddressStr = toHex(underlyingTokenAddress);
     const [wantTotalBalanceResult, totalSupplyResult, coin0Result, coin1Result] = await client.multicall({
         allowFailure: true,
         ...blockTag(blockNumber),
         contracts: [
-            { address: vaultAddress, abi: balanceAbi, functionName: 'balance' },
-            { address: underlyingTokenAddress, abi: totalSupplyAbi, functionName: 'totalSupply' },
-            { address: underlyingTokenAddress, abi: coinsAbi, functionName: 'coins', args: [0n] },
-            { address: underlyingTokenAddress, abi: coinsAbi, functionName: 'coins', args: [1n] },
+            { address: vaultAddressStr, abi: balanceAbi, functionName: 'balance' },
+            { address: underlyingTokenAddressStr, abi: totalSupplyAbi, functionName: 'totalSupply' },
+            { address: underlyingTokenAddressStr, abi: coinsAbi, functionName: 'coins', args: [0n] },
+            { address: underlyingTokenAddressStr, abi: coinsAbi, functionName: 'coins', args: [1n] },
         ],
     });
 
@@ -115,24 +118,26 @@ export const getVaultTokenBreakdownCurve = async ({
         return [];
     }
 
-    const coins: Hex[] = [coin0Result.result, coin1Result.result];
+    const coins: Bytes[] = [toBytes(coin0Result.result), toBytes(coin1Result.result)];
     for (let i = 2; i < 8; i++) {
         const [nextCoinResult] = await client.multicall({
             allowFailure: true,
             ...blockTag(blockNumber),
-            contracts: [{ address: underlyingTokenAddress, abi: coinsAbi, functionName: 'coins', args: [BigInt(i)] }],
+            contracts: [
+                { address: underlyingTokenAddressStr, abi: coinsAbi, functionName: 'coins', args: [BigInt(i)] },
+            ],
         });
         if (nextCoinResult.status === 'failure') {
             break;
         }
-        coins.push(nextCoinResult.result);
+        coins.push(toBytes(nextCoinResult.result));
     }
 
     const reserveResults = await client.multicall({
         allowFailure: true,
         ...blockTag(blockNumber),
         contracts: coins.map((_, index) => ({
-            address: underlyingTokenAddress,
+            address: underlyingTokenAddressStr,
             abi: balancesAbi,
             functionName: 'balances',
             args: [BigInt(index)],
@@ -187,8 +192,8 @@ export const isBeefyClmVault = async ({
     underlyingTokenAddress,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
-    underlyingTokenAddress: Hex;
+    vaultAddress: Bytes;
+    underlyingTokenAddress: Bytes;
 }): Promise<boolean> => {
     const breakdown = await getVaultTokenBreakdownBeefyClmVault({ client, vaultAddress, underlyingTokenAddress });
     return breakdown.length > 0;
@@ -200,15 +205,16 @@ export const getVaultTokenBreakdownBeefyClm = async ({
     blockNumber,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
+    vaultAddress: Bytes;
     blockNumber?: number;
 }): Promise<TokenBalance[]> => {
+    const vaultAddressStr = toHex(vaultAddress);
     const [wantsResult, balancesResult] = await client.multicall({
         allowFailure: true,
         ...blockTag(blockNumber),
         contracts: [
-            { address: vaultAddress, abi: wantsAbi, functionName: 'wants' },
-            { address: vaultAddress, abi: clmBalancesAbi, functionName: 'balances' },
+            { address: vaultAddressStr, abi: wantsAbi, functionName: 'wants' },
+            { address: vaultAddressStr, abi: clmBalancesAbi, functionName: 'balances' },
         ],
     });
 
@@ -217,8 +223,8 @@ export const getVaultTokenBreakdownBeefyClm = async ({
     }
 
     return [
-        { tokenAddress: wantsResult.result[0], rawBalance: balancesResult.result[0] },
-        { tokenAddress: wantsResult.result[1], rawBalance: balancesResult.result[1] },
+        { tokenAddress: toBytes(wantsResult.result[0]), rawBalance: balancesResult.result[0] },
+        { tokenAddress: toBytes(wantsResult.result[1]), rawBalance: balancesResult.result[1] },
     ];
 };
 
@@ -229,18 +235,20 @@ export const getVaultTokenBreakdownBeefyClmVault = async ({
     blockNumber,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
-    underlyingTokenAddress: Hex;
+    vaultAddress: Bytes;
+    underlyingTokenAddress: Bytes;
     blockNumber?: number;
 }): Promise<TokenBalance[]> => {
+    const vaultAddressStr = toHex(vaultAddress);
+    const underlyingTokenAddressStr = toHex(underlyingTokenAddress);
     const [vaultBalanceResult, vaultTotalSupplyResult, clmTokensResult, clmBalancesResult] = await client.multicall({
         allowFailure: true,
         ...blockTag(blockNumber),
         contracts: [
-            { address: vaultAddress, abi: balanceAbi, functionName: 'balance' },
-            { address: vaultAddress, abi: totalSupplyAbi, functionName: 'totalSupply' },
-            { address: underlyingTokenAddress, abi: wantsAbi, functionName: 'wants' },
-            { address: underlyingTokenAddress, abi: clmBalancesAbi, functionName: 'balances' },
+            { address: vaultAddressStr, abi: balanceAbi, functionName: 'balance' },
+            { address: vaultAddressStr, abi: totalSupplyAbi, functionName: 'totalSupply' },
+            { address: underlyingTokenAddressStr, abi: wantsAbi, functionName: 'wants' },
+            { address: underlyingTokenAddressStr, abi: clmBalancesAbi, functionName: 'balances' },
         ],
     });
 
@@ -259,7 +267,7 @@ export const getVaultTokenBreakdownBeefyClmVault = async ({
     const totalBalances = [clmBalancesResult.result[0], clmBalancesResult.result[1]];
 
     return tokens.map((token, index) => ({
-        tokenAddress: token,
+        tokenAddress: toBytes(token),
         rawBalance: vaultTotalSupply === 0n ? 0n : ((totalBalances[index] ?? 0n) * vaultBalance) / vaultTotalSupply,
     }));
 };
@@ -283,9 +291,9 @@ export const detectClassicVaultUnderlyingPlatform = async ({
     underlyingPlatform,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
-    strategyAddress: Hex;
-    underlyingTokenAddress: Hex;
+    vaultAddress: Bytes;
+    strategyAddress: Bytes;
+    underlyingTokenAddress: Bytes;
     underlyingPlatform: string;
 }): Promise<string> => {
     if (underlyingPlatform !== PLATFORM_UNKNOWN) {
@@ -308,7 +316,7 @@ export const detectClassicVaultUnderlyingPlatform = async ({
 
     const [totalAssetsResult] = await client.multicall({
         allowFailure: true,
-        contracts: [{ address: vaultAddress, abi: totalAssetsAbi, functionName: 'totalAssets' }],
+        contracts: [{ address: toHex(vaultAddress), abi: totalAssetsAbi, functionName: 'totalAssets' }],
     });
     if (totalAssetsResult.status === 'success') {
         return PLATFORM_BEEFY_LST_VAULT;
@@ -326,9 +334,9 @@ export const getVaultTokenBreakdown = async ({
     blockNumber,
 }: {
     client: PublicClient;
-    vaultAddress: Hex;
-    strategyAddress: Hex;
-    underlyingTokenAddress: Hex;
+    vaultAddress: Bytes;
+    strategyAddress: Bytes;
+    underlyingTokenAddress: Bytes;
     underlyingPlatform: string;
     blockNumber?: number;
 }): Promise<TokenBalance[]> => {
@@ -359,7 +367,7 @@ export const getVaultTokenBreakdown = async ({
         const [totalAssetsResult] = await client.multicall({
             allowFailure: true,
             ...blockTag(blockNumber),
-            contracts: [{ address: vaultAddress, abi: totalAssetsAbi, functionName: 'totalAssets' }],
+            contracts: [{ address: toHex(vaultAddress), abi: totalAssetsAbi, functionName: 'totalAssets' }],
         });
         if (totalAssetsResult.status === 'failure') {
             return [];
