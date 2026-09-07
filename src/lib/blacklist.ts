@@ -2,8 +2,7 @@ import { addressBookByChainId } from '@beefyfinance/blockchain-addressbook';
 import { type EvmChainId, indexer, type Logger, S } from 'envio';
 import * as R from 'remeda';
 import { config } from './config';
-import { normalizeHex } from './hex';
-
+import { asHex, type Bytes, toHex } from './hex';
 export const rawVaultBlacklist =
     // rg -Ni '\[BLACKLIST\]' ./hyperindex.log | jq -c '{chainId, address: .contractAddress}'
     [
@@ -331,7 +330,7 @@ export const rawVaultBlacklist =
 const vaultBlacklist = R.pipe(
     rawVaultBlacklist,
     // ensure lowercase addresses
-    R.map((entry) => ({ ...entry, address: normalizeHex(entry.address) })),
+    R.map((entry) => ({ ...entry, address: asHex(entry.address) })),
     // O(1) lookup
     // { [chainId]: { [address]: true } }
     R.groupBy((entry) => entry.chainId),
@@ -344,11 +343,11 @@ const vaultBlacklist = R.pipe(
     )
 );
 
-export function isVaultBlacklisted(chainId: EvmChainId, address: string) {
+export function isVaultBlacklisted(chainId: EvmChainId, address: Bytes) {
     if (!(chainId in vaultBlacklist)) {
         return false;
     }
-    return vaultBlacklist[chainId as keyof typeof vaultBlacklist]?.[normalizeHex(address)] ?? false;
+    return vaultBlacklist[chainId as keyof typeof vaultBlacklist]?.[toHex(address)] ?? false;
 }
 
 const allAccountBlacklist = R.pipe(
@@ -364,6 +363,7 @@ const allAccountBlacklist = R.pipe(
         { chainId: 56, address: '0xac18fcb470f913b94946bee43dc52e197d765791' },
         { chainId: 8453, address: '0x6f19da51d488926c007b9ebaa5968291a2ec6a63' },
     ],
+    R.map((entry) => ({ ...entry, address: asHex(entry.address) })),
     // ignore addresses from address book to all chains
     R.concat(
         R.pipe(
@@ -377,7 +377,7 @@ const allAccountBlacklist = R.pipe(
                         cfg.platforms.beefyfinance.zapTokenManager,
                     ],
                     R.filter((address) => address !== undefined),
-                    R.map((address) => ({ chainId, address }))
+                    R.map((address) => ({ chainId, address: asHex(address) }))
                 )
             )
         )
@@ -389,14 +389,12 @@ const allAccountBlacklist = R.pipe(
             R.flatMap((chainId) =>
                 R.pipe(
                     [config.ADDRESS_ZERO, config.BURN_ADDRESS, config.MINT_ADDRESS],
-                    R.map((address) => ({ chainId, address }))
+                    R.map((address) => ({ chainId, address: toHex(address) }))
                 )
             )
         )
     ),
 
-    // ensure lowercase addresses
-    R.map((entry) => ({ ...entry, address: normalizeHex(entry.address) })),
     // O(1) lookup
     // { [chainId]: { [address]: true } }
     R.groupBy((entry) => entry.chainId),
@@ -409,9 +407,9 @@ const allAccountBlacklist = R.pipe(
     )
 );
 
-export async function isAccountBlacklisted(chainId: EvmChainId, address: string) {
-    const lowerAddress = normalizeHex(address);
-    if (allAccountBlacklist[chainId][lowerAddress]) {
+export async function isAccountBlacklisted(chainId: EvmChainId, address: Bytes) {
+    const addressStr = toHex(address);
+    if (allAccountBlacklist[chainId][addressStr]) {
         return true;
     }
     return false;
@@ -438,7 +436,7 @@ export const logBlacklistStatus = (
     log: Logger,
     status: BlacklistStatus,
     type: string,
-    data: Record<string, unknown> & { contractAddress: string }
+    data: Record<string, unknown> & { contractAddress: Bytes }
 ) => {
-    log.debug(`[BLACKLIST] ${type}`, { status, ...data, contractAddress: data.contractAddress });
+    log.debug(`[BLACKLIST] ${type}`, { status, ...data, contractAddress: toHex(data.contractAddress) });
 };

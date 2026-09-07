@@ -1,11 +1,11 @@
 import { indexer, S } from 'envio';
 import * as R from 'remeda';
-import { hexSchema } from './hex';
+import { bytesSchema } from './hex';
 
 const configSchema = S.schema({
-    ADDRESS_ZERO: hexSchema,
-    BURN_ADDRESS: hexSchema,
-    MINT_ADDRESS: hexSchema,
+    ADDRESS_ZERO: bytesSchema,
+    BURN_ADDRESS: bytesSchema,
+    MINT_ADDRESS: bytesSchema,
     RPC_URL: S.schema(
         R.pipe(
             indexer.chainIds,

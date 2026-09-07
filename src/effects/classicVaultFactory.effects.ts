@@ -1,6 +1,8 @@
 import type { EvmChainId, EvmOnEventContext } from 'envio';
 import { decodeFunctionData } from 'viem';
+import { type Bytes, toHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { classicVaultFactoryAbi, classicVaultFactoryDetectionAbi } from './abis/beefy/classic/ClassicVaultFactory';
 
 const detectClassicVaultOrStrategyWithEthCall = async ({
     contractAddress,
@@ -9,7 +11,7 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     transactionHash,
     log,
 }: {
-    contractAddress: `0x${string}`;
+    contractAddress: Bytes;
     chainId: EvmChainId;
     blockNumber?: number;
     transactionHash: `0x${string}`;
@@ -20,47 +22,27 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     isBoost: boolean;
 }> => {
     const client = getViemClient(chainId, log);
+    const contractAddressStr = toHex(contractAddress);
 
     // Try standard Erc20 interface first (most common)
     const [vault, strategy, rewardToken] = await client.multicall({
         allowFailure: true,
         contracts: [
             {
-                address: contractAddress as `0x${string}`,
-                abi: [
-                    {
-                        name: 'vault',
-                        type: 'function',
-                        inputs: [],
-                        outputs: [],
-                    },
-                ],
+                address: contractAddressStr,
+                abi: classicVaultFactoryDetectionAbi,
                 functionName: 'vault',
                 args: [],
             },
             {
-                address: contractAddress as `0x${string}`,
-                abi: [
-                    {
-                        name: 'strategy',
-                        type: 'function',
-                        inputs: [],
-                        outputs: [],
-                    },
-                ],
+                address: contractAddressStr,
+                abi: classicVaultFactoryDetectionAbi,
                 functionName: 'strategy',
                 args: [],
             },
             {
-                address: contractAddress as `0x${string}`,
-                abi: [
-                    {
-                        name: 'rewardToken',
-                        type: 'function',
-                        inputs: [],
-                        outputs: [],
-                    },
-                ],
+                address: contractAddressStr,
+                abi: classicVaultFactoryDetectionAbi,
                 functionName: 'rewardToken',
                 args: [],
             },
@@ -86,7 +68,7 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
             blockNumber,
         });
         throw new Error(
-            `.vault() and .strategy() and .rewardToken() calls FAILED for contract ${chainId}:${contractAddress} with transaction hash ${transactionHash}`
+            `.vault() and .strategy() and .rewardToken() calls FAILED for contract ${chainId}:${contractAddressStr} with transaction hash ${transactionHash}`
         );
     }
 
@@ -105,7 +87,7 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
             rewardTokenResult: rewardToken.status,
         });
         throw new Error(
-            `More than one function succeeded on contract ${chainId}:${contractAddress} with transaction hash ${transactionHash}. vault: ${vault.status}, strategy: ${strategy.status}, rewardToken: ${rewardToken.status}.`
+            `More than one function succeeded on contract ${chainId}:${contractAddressStr} with transaction hash ${transactionHash}. vault: ${vault.status}, strategy: ${strategy.status}, rewardToken: ${rewardToken.status}.`
         );
     }
 
@@ -116,42 +98,13 @@ const detectClassicVaultOrStrategyWithEthCall = async ({
     };
 };
 
-/** Minimal ABI for parsing factory tx input (`cloneVault` / `cloneContract` / `booooost`). */
-export const vaultOrStrategyFactoryAbi = [
-    {
-        inputs: [{ internalType: 'address', name: 'implementation', type: 'address' }],
-        name: 'cloneContract',
-        outputs: [{ internalType: 'address', name: '', type: 'address' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [],
-        name: 'cloneVault',
-        outputs: [{ internalType: 'contract BeefyVaultV7', name: '', type: 'address' }],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-    {
-        inputs: [
-            { internalType: 'address', name: 'mooToken', type: 'address' },
-            { internalType: 'address', name: 'rewardToken', type: 'address' },
-            { internalType: 'uint256', name: 'duration_in_sec', type: 'uint256' },
-        ],
-        name: 'booooost',
-        outputs: [],
-        stateMutability: 'nonpayable',
-        type: 'function',
-    },
-] as const;
-
 const detectClassicVaultOrStrategyWithTransactionInput = async ({
     transactionInput,
 }: {
     transactionInput: `0x${string}`;
 }) => {
     const trxData = decodeFunctionData({
-        abi: vaultOrStrategyFactoryAbi,
+        abi: classicVaultFactoryAbi,
         data: transactionInput,
     });
 
@@ -194,7 +147,7 @@ export async function detectClassicVaultOrStrategy({
     blockNumber,
     log,
 }: {
-    contractAddress: `0x${string}`;
+    contractAddress: Bytes;
     chainId: EvmChainId;
     transactionInput: `0x${string}`;
     transactionHash: `0x${string}`;

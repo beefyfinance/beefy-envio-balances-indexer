@@ -2,6 +2,7 @@ import { createTestIndexer } from 'envio';
 import { parseUnits } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { ADDRESS_ZERO } from '../lib/decimal';
+import { FACTORIES, registerClassicStrategy } from './testFixtures/register';
 
 describe('Token Handlers', () => {
     describe('Initialized event', () => {
@@ -15,19 +16,11 @@ describe('Token Handlers', () => {
                     8453: {
                         simulate: [
                             {
-                                contract: 'ClmManagerFactory',
-                                event: 'ClmManagerCreated',
-                                block: { number: 17_452_329, timestamp: 1718500000 },
-                                logIndex: 0,
-                                srcAddress: '0x7bc78990ac1ef0754cfde935b2d84e9acf13ed29',
-                                params: { proxy: '0x603492ff8943f5ac69aa69cf09fc96fda2606ee7' },
-                            },
-                            {
                                 contract: 'Token',
                                 event: 'Initialized',
                                 block: { number: 17_452_334, timestamp: 1718500600 },
                                 logIndex: 0,
-                                srcAddress: '0x603492ff8943f5ac69aa69cf09fc96fda2606ee7',
+                                srcAddress: '0xc55e93c62874d8100dbd2dfe307edc1036ad5434',
                                 params: { version: 1n },
                             },
                         ],
@@ -39,30 +32,16 @@ describe('Token Handlers', () => {
               {
                 "changes": [
                   {
-                    "addresses": {
-                      "sets": [
-                        {
-                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "contract": "ClmManager",
-                        },
-                      ],
-                    },
-                    "block": 17452329,
-                    "chainId": 8453,
-                    "eventsProcessed": 1,
-                  },
-                  {
                     "Token": {
                       "sets": [
                         {
-                          "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "chainId": 8453,
+                          "address": "0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                           "decimals": 18,
                           "holderCount": 0,
-                          "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "id": "8453-0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                           "isVirtual": false,
-                          "name": "Cow Sushi Base WETH-USDC",
-                          "symbol": "cowSushiBaseWETH-USDC",
+                          "name": "Moo BIFI",
+                          "symbol": "mooBIFI",
                           "totalSupply": "0",
                         },
                       ],
@@ -133,7 +112,6 @@ describe('Token Handlers', () => {
                       "sets": [
                         {
                           "address": "0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 2,
                           "id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
@@ -149,14 +127,12 @@ describe('Token Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "amount": "-10",
-                          "chainId": 1,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "token_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                         },
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "amount": "10",
-                          "chainId": 1,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "token_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                         },
@@ -169,8 +145,7 @@ describe('Token Handlers', () => {
                           "balanceAfter": "-10",
                           "balanceBefore": "0",
                           "blockNumber": 22089841n,
-                          "blockTimestamp": "2025-03-20T18:22:23.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2025-03-20T18:22:23.000Z,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1-22089841-121-511",
                           "logIndex": 511,
                           "tokenBalance_id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
@@ -183,8 +158,7 @@ describe('Token Handlers', () => {
                           "balanceAfter": "10",
                           "balanceBefore": "0",
                           "blockNumber": 22089841n,
-                          "blockTimestamp": "2025-03-20T18:22:23.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2025-03-20T18:22:23.000Z,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1-22089841-121-511",
                           "logIndex": 511,
                           "tokenBalance_id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
@@ -215,7 +189,7 @@ describe('Token Handlers', () => {
                                 event: 'Initialized',
                                 block: { number: 19_077_712, timestamp: 1712000000 },
                                 logIndex: 0,
-                                srcAddress: '0x020d570516a85c3e47d8d48c17fbcf63053cc9f5',
+                                srcAddress: '0xc55e93c62874d8100dbd2dfe307edc1036ad5434',
                                 params: { version: 1n },
                             },
                             {
@@ -223,7 +197,7 @@ describe('Token Handlers', () => {
                                 event: 'Transfer',
                                 block: { number: 32_339_635, timestamp: 1719900000 },
                                 logIndex: 1,
-                                srcAddress: '0x020d570516a85c3e47d8d48c17fbcf63053cc9f5',
+                                srcAddress: '0xc55e93c62874d8100dbd2dfe307edc1036ad5434',
                                 transaction: {
                                     hash: '0xd7b83bfd594af70b73bae313752f252b4beda8afb97709ed1a586181563b079e',
                                     transactionIndex: 4,
@@ -246,14 +220,13 @@ describe('Token Handlers', () => {
                     "Token": {
                       "sets": [
                         {
-                          "address": "0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
-                          "chainId": 8453,
+                          "address": "0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                           "decimals": 18,
                           "holderCount": 0,
-                          "id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "id": "8453-0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                           "isVirtual": false,
-                          "name": "Cow Sushi Base WETH-USDbC",
-                          "symbol": "cowSushiBaseWETH-USDbC",
+                          "name": "Moo BIFI",
+                          "symbol": "mooBIFI",
                           "totalSupply": "0",
                         },
                       ],
@@ -274,14 +247,13 @@ describe('Token Handlers', () => {
                     "Token": {
                       "sets": [
                         {
-                          "address": "0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
-                          "chainId": 8453,
+                          "address": "0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                           "decimals": 18,
                           "holderCount": 1,
-                          "id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "id": "8453-0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                           "isVirtual": false,
-                          "name": "Cow Sushi Base WETH-USDbC",
-                          "symbol": "cowSushiBaseWETH-USDbC",
+                          "name": "Moo BIFI",
+                          "symbol": "mooBIFI",
                           "totalSupply": "1",
                         },
                       ],
@@ -291,9 +263,8 @@ describe('Token Handlers', () => {
                         {
                           "account_id": "0xc29d2531651fcd304c60fbfb8073a518d8fe0a21",
                           "amount": "1",
-                          "chainId": 8453,
-                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
-                          "token_id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
+                          "token_id": "8453-0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                         },
                       ],
                     },
@@ -304,12 +275,11 @@ describe('Token Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 32339635n,
-                          "blockTimestamp": "2024-07-02T06:00:00.000Z",
-                          "chainId": 8453,
-                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5-32339635-4-1",
+                          "blockTimestamp": 2024-07-02T06:00:00.000Z,
+                          "id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0xc55e93c62874d8100dbd2dfe307edc1036ad5434-32339635-4-1",
                           "logIndex": 1,
-                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
-                          "token_id": "8453-0x020d570516a85c3e47d8d48c17fbcf63053cc9f5",
+                          "tokenBalance_id": "8453-0xc29d2531651fcd304c60fbfb8073a518d8fe0a21-0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
+                          "token_id": "8453-0xc55e93c62874d8100dbd2dfe307edc1036ad5434",
                           "trxHash": "0xd7b83bfd594af70b73bae313752f252b4beda8afb97709ed1a586181563b079e",
                           "trxIndex": 4,
                         },
@@ -326,6 +296,10 @@ describe('Token Handlers', () => {
 
         it('Should not decrement holderCount on self-transfer (from === to)', async () => {
             const indexer = createTestIndexer();
+            const blockNum = 12_132_390;
+            const timestampSec = Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000);
+            const vaultAddress = '0xba53af4c2f1649f82e8070fb306ddbf2771a1950' as const;
+            const strategyAddress = '0xe807517273de0161d8309bc9363193f2162b9b65' as const;
 
             const trace = await indexer.process({
                 chains: {
@@ -334,23 +308,31 @@ describe('Token Handlers', () => {
                             {
                                 contract: 'ClassicVault',
                                 event: 'Initialized',
-                                block: {
-                                    number: 12_132_390,
-                                    timestamp: Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000),
-                                },
+                                block: { number: blockNum, timestamp: timestampSec },
                                 logIndex: 0,
-                                srcAddress: '0xba53af4c2f1649f82e8070fb306ddbf2771a1950',
+                                srcAddress: vaultAddress,
+                                params: { version: 1n },
+                            },
+                            registerClassicStrategy({
+                                factory: FACTORIES[56].ClassicStrategyFactory,
+                                proxy: strategyAddress,
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 1,
+                            }),
+                            {
+                                contract: 'ClassicStrategy',
+                                event: 'Initialized',
+                                block: { number: blockNum, timestamp: timestampSec },
+                                logIndex: 2,
+                                srcAddress: strategyAddress,
                                 params: { version: 1n },
                             },
                             {
                                 contract: 'ClassicVault',
                                 event: 'Transfer',
-                                block: {
-                                    number: 12_132_390,
-                                    timestamp: Math.floor(Date.parse('2021-10-27T09:56:05.000Z') / 1000),
-                                },
+                                block: { number: blockNum, timestamp: timestampSec },
                                 logIndex: 387,
-                                srcAddress: '0xba53af4c2f1649f82e8070fb306ddbf2771a1950',
+                                srcAddress: vaultAddress,
                                 transaction: {
                                     hash: '0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88',
                                     transactionIndex: 164,
@@ -381,15 +363,186 @@ describe('Token Handlers', () => {
                         },
                       ],
                     },
+                    "Classic": {
+                      "sets": [
+                        {
+                          "address": "0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "boostRewardToNativePrices": [],
+                          "boostRewardToken_ids": [],
+                          "boostRewardTokensOrder": [],
+                          "classicVaultStrategy_id": "56-0xe807517273de0161d8309bc9363193f2162b9b65",
+                          "classicVault_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterToken_ids": [],
+                          "erc4626AdapterTokensOrder": [],
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 12132390n,
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
+                          "nativeToUSDPrice": "452.83830981",
+                          "pausableStatus": "RUNNING",
+                          "rewardPoolToken_ids": [],
+                          "rewardPoolTokensOrder": [],
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "rewardToken_ids": [],
+                          "rewardTokensOrder": [],
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [],
+                          "underlyingBreakdownToken_ids": [],
+                          "underlyingBreakdownTokensOrder": [],
+                          "underlyingPlatform": "UNKNOWN",
+                          "underlyingToNativePrice": "0",
+                          "underlyingToken_id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultToken_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                      ],
+                    },
+                    "ClassicPosition": {
+                      "sets": [
+                        {
+                          "account_id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "boostBalance": "0",
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "createdWithTrxHash": "0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88",
+                          "erc4626AdapterBalances": [],
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "rewardPoolBalances": [],
+                          "totalBalance": "0",
+                          "vaultBalance": "0",
+                        },
+                      ],
+                    },
+                    "ClassicPositionInteraction": {
+                      "sets": [
+                        {
+                          "account_id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "blockNumber": 12132390n,
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
+                          "boostBalance": "0",
+                          "boostBalanceDelta": "0",
+                          "boostRewardBalancesDelta": [],
+                          "boostRewardToNativePrices": [],
+                          "classicPosition_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-0x94342d418137f494bfa8e133cb79e55a3e7dd532",
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterBalances": [],
+                          "erc4626AdapterBalancesDelta": [],
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdapterVaultSharesBalancesDelta": [],
+                          "id": "56-0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88-164-387-0",
+                          "logIndex": 387,
+                          "nativeToUSDPrice": "452.83830981",
+                          "rewardBalancesDelta": [],
+                          "rewardPoolBalances": [],
+                          "rewardPoolBalancesDelta": [],
+                          "rewardToNativePrices": [],
+                          "totalBalance": "0",
+                          "trxHash": "0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88",
+                          "trxIndex": 164,
+                          "type": "VAULT_DEPOSIT",
+                          "underlyingBreakdownToNativePrices": [],
+                          "underlyingToNativePrice": "0",
+                          "vaultBalance": "0",
+                          "vaultBalanceDelta": "26.493322047799471367",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingAmount": "1081841.858326645878430335",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                      ],
+                    },
+                    "ClassicSnapshot": {
+                      "sets": [
+                        {
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
+                          "boostRewardToNativePrices": [],
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-3600-1635325200",
+                          "nativeToUSDPrice": "452.83830981",
+                          "period": 3600n,
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "roundedTimestamp": 2021-10-27T09:00:00.000Z,
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [],
+                          "underlyingToNativePrice": "0",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                        {
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
+                          "boostRewardToNativePrices": [],
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-86400-1635292800",
+                          "nativeToUSDPrice": "452.83830981",
+                          "period": 86400n,
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "roundedTimestamp": 2021-10-27T00:00:00.000Z,
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [],
+                          "underlyingToNativePrice": "0",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                        {
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
+                          "boostRewardToNativePrices": [],
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
+                          "erc4626AdapterVaultSharesBalances": [],
+                          "erc4626AdaptersTotalSupply": [],
+                          "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-604800-1635033600",
+                          "nativeToUSDPrice": "452.83830981",
+                          "period": 604800n,
+                          "rewardPoolsTotalSupply": [],
+                          "rewardToNativePrices": [],
+                          "roundedTimestamp": 2021-10-24T00:00:00.000Z,
+                          "totalBeefyFees": "0",
+                          "totalCallFees": "0",
+                          "totalStrategistFees": "0",
+                          "underlyingAmount": "1081841.858326645878430335",
+                          "underlyingBreakdownToNativePrices": [],
+                          "underlyingToNativePrice": "0",
+                          "vaultTokenTotalSupply": "945591.987127200030222661",
+                          "vaultUnderlyingBalance": "1081841.858326645878430335",
+                          "vaultUnderlyingBreakdownBalances": [],
+                          "vaultUnderlyingTotalSupply": "24999999.999999999999999999",
+                        },
+                      ],
+                    },
                     "ClassicVault": {
                       "sets": [
                         {
                           "address": "0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
-                          "chainId": 56,
+                          "classic_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
                           "shareToken_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "underlyingToken_id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
                         },
@@ -398,13 +551,13 @@ describe('Token Handlers', () => {
                     "ClassicVaultStrategy": {
                       "sets": [
                         {
-                          "address": "0xe807517273De0161D8309BC9363193f2162b9B65",
-                          "chainId": 56,
+                          "address": "0xe807517273de0161d8309bc9363193f2162b9b65",
                           "classicVault_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "id": "56-0xe807517273de0161d8309bc9363193f2162b9b65",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 12132390n,
-                          "initializedTimestamp": "2021-10-27T09:56:05.000Z",
+                          "initializedTimestamp": 2021-10-27T09:56:05.000Z,
+                          "pausableStatus": "RUNNING",
                         },
                       ],
                     },
@@ -412,7 +565,6 @@ describe('Token Handlers', () => {
                       "sets": [
                         {
                           "address": "0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
-                          "chainId": 56,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
@@ -422,8 +574,7 @@ describe('Token Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x111111111117dC0aa78b770fA6A738034120C302",
-                          "chainId": 56,
+                          "address": "0x111111111117dc0aa78b770fa6a738034120c302",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "56-0x111111111117dc0aa78b770fa6a738034120c302",
@@ -439,7 +590,6 @@ describe('Token Handlers', () => {
                         {
                           "account_id": "0x94342d418137f494bfa8e133cb79e55a3e7dd532",
                           "amount": "0",
-                          "chainId": 56,
                           "id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                           "token_id": "56-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
                         },
@@ -452,8 +602,7 @@ describe('Token Handlers', () => {
                           "balanceAfter": "0",
                           "balanceBefore": "0",
                           "blockNumber": 12132390n,
-                          "blockTimestamp": "2021-10-27T09:56:05.000Z",
-                          "chainId": 56,
+                          "blockTimestamp": 2021-10-27T09:56:05.000Z,
                           "id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950-12132390-164-387",
                           "logIndex": 387,
                           "tokenBalance_id": "56-0x94342d418137f494bfa8e133cb79e55a3e7dd532-0xba53af4c2f1649f82e8070fb306ddbf2771a1950",
@@ -463,9 +612,21 @@ describe('Token Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xe807517273de0161d8309bc9363193f2162b9b65",
+                          "contract": "ClassicStrategy",
+                        },
+                        {
+                          "address": "0xe807517273de0161d8309bc9363193f2162b9b65",
+                          "contract": "ClassicStrategyStratHarvest0",
+                        },
+                      ],
+                    },
                     "block": 12132390,
                     "chainId": 56,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 4,
                   },
                 ],
               }

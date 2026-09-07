@@ -1,9 +1,10 @@
 import { createEffect } from 'envio';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { asHex, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { rewardPoolAbi } from './abis/beefy/common/RewardPool';
 
 export const getRewardPoolTokens = createEffect(
     {
@@ -19,60 +20,58 @@ export const getRewardPoolTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
-        const { rewardPoolAddress, chainId } = input;
+        const { rewardPoolAddress, chainId } = decodeEffectInput(input);
+        const rewardPoolAddressStr = toHex(rewardPoolAddress);
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching RewardPool tokens', { rewardPoolAddress, chainId });
+        context.log.debug('Fetching RewardPool tokens', { rewardPoolAddress: rewardPoolAddressStr, chainId });
 
         const [underlyingTokenResult] = await client.multicall({
             allowFailure: true,
             contracts: [
                 {
-                    address: rewardPoolAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'stakedToken',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    address: rewardPoolAddressStr,
+                    abi: rewardPoolAbi,
                     functionName: 'stakedToken',
                     args: [],
                 },
             ],
         });
 
-        // The reward pool contract itself is the share token (virtual token)
-        const shareTokenAddress = rewardPoolAddress;
-
         if (underlyingTokenResult.status === 'failure') {
-            context.log.error('RewardPool stakedToken call failed', { rewardPoolAddress, chainId });
+            context.log.error('RewardPool stakedToken call failed', {
+                rewardPoolAddress: rewardPoolAddressStr,
+                chainId,
+            });
             return {
-                shareTokenAddress,
-                underlyingTokenAddress: ADDRESS_ZERO,
+                shareTokenAddress: rewardPoolAddressStr,
+                underlyingTokenAddress: ZERO_ADDRESS_HEX,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
-        const underlyingTokenAddress = underlyingTokenResult.result;
+        const underlyingTokenAddressStr = asHex(underlyingTokenResult.result);
 
-        context.log.info('RewardPool data fetched', { rewardPoolAddress, shareTokenAddress, underlyingTokenAddress });
+        context.log.info('RewardPool data fetched', {
+            rewardPoolAddress: rewardPoolAddressStr,
+            shareTokenAddress: rewardPoolAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
+        });
 
-        if (underlyingTokenAddress === ADDRESS_ZERO) {
+        if (underlyingTokenAddressStr === ZERO_ADDRESS_HEX) {
             return {
-                shareTokenAddress,
-                underlyingTokenAddress,
+                shareTokenAddress: rewardPoolAddressStr,
+                underlyingTokenAddress: underlyingTokenAddressStr,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         return {
-            shareTokenAddress,
-            underlyingTokenAddress,
+            shareTokenAddress: rewardPoolAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
             blacklistStatus: 'ok' as const,
         };
     }

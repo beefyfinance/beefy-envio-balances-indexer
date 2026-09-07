@@ -7,7 +7,7 @@
     "build": "tsc --build",
     "watch": "tsc --watch",
     "codegen": "envio codegen",
-    "dev": "envio dev",
+    "dev": "NODE_OPTIONS='--max-old-space-size=12288' envio dev",
     "start": "envio start",
     "stop": "envio stop",
     "deploy": "git checkout prod && git merge origin/main --ff-only && git push && git checkout -",
@@ -18,11 +18,12 @@
     "test:lint": "biome ci",
     "test:ts": "tsc --noEmit",
     "test:unit": "vitest run",
-    "test:unit:watch": "vitest watch --reporter=verbose"
+    "test:unit:watch": "vitest watch --reporter=verbose",
+    "parity:diff": "tsx scripts/parity-diff.ts"
   },
   "dependencies": {
     "@beefyfinance/blockchain-addressbook": "0.54.213",
-    "envio": "3.1.2",
+    "envio": "3.10.0",
     "remeda": "2.34.0",
     "viem": "2.48.11"
   },

@@ -1,11 +1,9 @@
 import type { ClassicVault, ClassicVaultStrategy, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
-import type { Hex } from 'viem';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toHex } from '../lib/hex';
+export const classicVaultId = ({ chainId, vaultAddress }: { chainId: EvmChainId; vaultAddress: Bytes }) =>
+    `${chainId}-${toHex(vaultAddress)}`;
 
-export const classicVaultId = ({ chainId, vaultAddress }: { chainId: EvmChainId; vaultAddress: Hex }) =>
-    `${chainId}-${normalizeHex(vaultAddress)}`;
-
-export const getClassicVault = async (context: EvmOnEventContext, chainId: EvmChainId, vaultAddress: Hex) => {
+export const getClassicVault = async (context: EvmOnEventContext, chainId: EvmChainId, vaultAddress: Bytes) => {
     const id = classicVaultId({ chainId, vaultAddress });
     const vault = await context.ClassicVault.get(id);
     return vault;
@@ -22,20 +20,20 @@ export const createClassicVault = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    vaultAddress: Hex;
+    vaultAddress: Bytes;
     shareToken: Token;
     underlyingToken: Token;
-    strategyAddress: Hex;
+    strategyAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<ClassicVault> => {
     const id = classicVaultId({ chainId, vaultAddress });
 
     const vault: ClassicVault = {
         id,
-        chainId,
         address: vaultAddress,
         shareToken_id: shareToken.id,
         underlyingToken_id: underlyingToken.id,
+        classic_id: undefined,
         initializableStatus: 'INITIALIZED',
         initializedBlock: BigInt(initializedBlock.number),
         initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
@@ -54,13 +52,13 @@ export const createClassicVault = async ({
     return vault;
 };
 
-export const classicVaultStrategyId = ({ chainId, strategyAddress }: { chainId: EvmChainId; strategyAddress: Hex }) =>
-    `${chainId}-${normalizeHex(strategyAddress)}`;
+export const classicVaultStrategyId = ({ chainId, strategyAddress }: { chainId: EvmChainId; strategyAddress: Bytes }) =>
+    `${chainId}-${toHex(strategyAddress)}`;
 
 export const getClassicVaultStrategy = async (
     context: EvmOnEventContext,
     chainId: EvmChainId,
-    strategyAddress: Hex
+    strategyAddress: Bytes
 ) => {
     const id = classicVaultStrategyId({ chainId, strategyAddress });
     const strategy = await context.ClassicVaultStrategy.get(id);
@@ -76,7 +74,7 @@ export const createClassicVaultStrategy = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    strategyAddress: Hex;
+    strategyAddress: Bytes;
     classicVault: ClassicVault;
     initializedBlock: EvmBlock;
 }): Promise<ClassicVaultStrategy> => {
@@ -84,10 +82,10 @@ export const createClassicVaultStrategy = async ({
 
     const strategy: ClassicVaultStrategy = {
         id,
-        chainId,
         address: strategyAddress,
         classicVault_id: classicVault.id,
         initializableStatus: 'INITIALIZED',
+        pausableStatus: 'RUNNING',
         initializedBlock: BigInt(initializedBlock.number),
         initializedTimestamp: new Date(initializedBlock.timestamp * 1000),
     };
@@ -96,7 +94,11 @@ export const createClassicVaultStrategy = async ({
     return strategy;
 };
 
-export const isClassicVaultStrategy = async (context: EvmOnEventContext, chainId: EvmChainId, strategyAddress: Hex) => {
+export const isClassicVaultStrategy = async (
+    context: EvmOnEventContext,
+    chainId: EvmChainId,
+    strategyAddress: Bytes
+) => {
     const id = classicVaultStrategyId({ chainId, strategyAddress });
     const strategy = await context.ClassicVaultStrategy.get(id);
     return strategy !== undefined;

@@ -1,19 +1,18 @@
 import type { EvmBlock, EvmChainId, EvmOnEventContext, LstVault } from 'envio';
 import { indexer } from 'envio';
-import type { Hex } from 'viem';
 import { getLstVaultTokens } from '../effects/lstVault.effects';
 import { createLstVault, getLstVault } from '../entities/lstVault.entity';
 import { getOrCreateToken, getTokenOrThrow } from '../entities/token.entity';
 import { logBlacklistStatus } from '../lib/blacklist';
 import { toChainId } from '../lib/chain';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toBytes, toHex } from '../lib/hex';
 import { handleTokenTransfer } from '../lib/token';
 
 indexer.onEvent({ contract: 'LstVault', event: 'Initialized' }, async ({ event, context }) => {
     context.log.debug('LstVault.Initialized', { event });
 
     const chainId = toChainId(context.chain.id);
-    const lstAddress = normalizeHex(event.srcAddress);
+    const lstAddress = toBytes(event.srcAddress);
     const initializedBlock = event.block;
 
     const lst = await initializeLstVault({ context, chainId, lstAddress, initializedBlock });
@@ -22,38 +21,45 @@ indexer.onEvent({ contract: 'LstVault', event: 'Initialized' }, async ({ event, 
     context.log.info('LstVault initialized successfully', { lstAddress });
 });
 
-indexer.onEvent({ contract: 'LstVault', event: 'Transfer' }, async ({ event, context }) => {
-    context.log.debug('LstVault.Transfer', { event });
+indexer.onEvent(
+    {
+        contract: 'LstVault',
+        event: 'Transfer',
+        fields: { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] },
+    },
+    async ({ event, context }) => {
+        context.log.debug('LstVault.Transfer', { event });
 
-    const chainId = toChainId(context.chain.id);
-    const lstAddress = normalizeHex(event.srcAddress);
+        const chainId = toChainId(context.chain.id);
+        const lstAddress = toBytes(event.srcAddress);
 
-    // Ensure that the LST vault is initialized first
-    const lst = await initializeLstVault({
-        context,
-        chainId,
-        lstAddress,
-        initializedBlock: event.block,
-    });
-    if (!lst) return;
+        // Ensure that the LST vault is initialized first
+        const lst = await initializeLstVault({
+            context,
+            chainId,
+            lstAddress,
+            initializedBlock: event.block,
+        });
+        if (!lst) return;
 
-    const shareToken = await getTokenOrThrow({ context, id: lst.shareToken_id });
+        const shareToken = await getTokenOrThrow({ context, id: lst.shareToken_id });
 
-    await handleTokenTransfer({
-        context,
-        chainId,
-        token: shareToken,
-        senderAddress: normalizeHex(event.params.from),
-        receiverAddress: normalizeHex(event.params.to),
-        rawTransferAmount: event.params.value,
-        event: {
-            block: event.block,
-            trxIndex: event.transaction.transactionIndex,
-            logIndex: event.logIndex,
-            trxHash: normalizeHex(event.transaction.hash),
-        },
-    });
-});
+        await handleTokenTransfer({
+            context,
+            chainId,
+            token: shareToken,
+            senderAddress: toBytes(event.params.from),
+            receiverAddress: toBytes(event.params.to),
+            rawTransferAmount: event.params.value,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: toBytes(event.transaction.hash),
+            },
+        });
+    }
+);
 
 const initializeLstVault = async ({
     context,
@@ -63,7 +69,7 @@ const initializeLstVault = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    lstAddress: Hex;
+    lstAddress: Bytes;
     initializedBlock: EvmBlock;
 }): Promise<LstVault | null> => {
     // Check if the LST vault already exists
@@ -75,10 +81,16 @@ const initializeLstVault = async ({
     context.log.info('Initializing LstVault', { lstAddress, chainId });
 
     // Fetch underlying tokens using effect
-    const { shareTokenAddress, underlyingTokenAddress, blacklistStatus } = await context.effect(getLstVaultTokens, {
-        lstAddress,
+    const {
+        shareTokenAddress: shareTokenAddressStr,
+        underlyingTokenAddress: underlyingTokenAddressStr,
+        blacklistStatus,
+    } = await context.effect(getLstVaultTokens, {
+        lstAddress: toHex(lstAddress),
         chainId,
     });
+    const shareTokenAddress = toBytes(shareTokenAddressStr);
+    const underlyingTokenAddress = toBytes(underlyingTokenAddressStr);
 
     if (blacklistStatus !== 'ok') {
         logBlacklistStatus(context.log, blacklistStatus, 'LstVault', {

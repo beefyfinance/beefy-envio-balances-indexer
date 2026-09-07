@@ -2,8 +2,18 @@
 name: beefy-balance-indexer
 description: Beefy Finance Balance Indexer - Tracks ERC20 balances across multiple networks
 address_format: lowercase
+bytes_type: uint8array
 raw_events: false
 save_full_history: false
+# Per-chain entity/effect isolation (recommended; default in HyperIndex v4)
+disable_default_cross_chain: true
+storage:
+  postgres:
+    default: true
+    column_name_format: snake_case
+  clickhouse:
+    default: false # TODO: enable when clickhouse is ready
+    column_name_format: snake_case
 
 contracts:
   # factories
@@ -14,7 +24,7 @@ contracts:
       - event: "ProxyCreated(address proxy)"
         name: VaultOrStrategyCreated
         field_selection:
-          transaction_fields: [hash, transactionIndex, input]
+          transaction_fields: [hash, input]
 
   - name: ClassicStrategyFactory
     abi_file_path: abis/beefy/classic/ClassicVaultFactory.json
@@ -73,6 +83,7 @@ contracts:
     handler: src/handlers/classicVault.handlers.ts
     events:
       - event: "Initialized(uint8 version)"
+      - event: "UpgradeStrat(address implementation)"
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
           transaction_fields: [hash, transactionIndex]
@@ -82,6 +93,27 @@ contracts:
     handler: src/handlers/classicStrategy.handlers.ts
     events:
       - event: "Initialized(uint8 version)"
+      - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
+      - event: "ChargedFees(uint256 callFees, uint256 beefyFees, uint256 strategistFees)"
+        name: ChargedFeesV2
+      - event: "Paused(address account)"
+      - event: "Unpaused(address account)"
+
+  - name: ClassicStrategyStratHarvest0
+    abi_file_path: abis/beefy/classic/ClassicStrategyStratHarvest0.json
+    handler: src/handlers/classicStrategy.handlers.ts
+    events:
+      - event: "StratHarvest(address indexed harvester, uint256 wantHarvested, uint256 tvl)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+
+  - name: ClassicStrategyStratHarvest1
+    abi_file_path: abis/beefy/classic/ClassicStrategyStratHarvest1.json
+    handler: src/handlers/classicStrategy.handlers.ts
+    events:
+      - event: "StratHarvest(address indexed harvester, uint256 wantHarvested, uint256 tvl)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
 
   - name: ClassicBoost
     abi_file_path: abis/beefy/classic/ClassicBoost.json
@@ -97,6 +129,9 @@ contracts:
       - event: "RewardAdded(uint256 reward)"
         field_selection:
           transaction_fields: [hash, transactionIndex]
+      - event: "RewardPaid(address indexed user, uint256 reward)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
 
   - name: RewardPool
     abi_file_path: abis/beefy/common/RewardPool.json
@@ -109,6 +144,12 @@ contracts:
       - event: "NotifyReward(address indexed reward, uint256 amount, uint256 duration)"
         field_selection:
           transaction_fields: [hash, transactionIndex]
+      - event: "RewardPaid(address indexed user, address indexed reward, uint256 amount)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+      - event: "AddReward(address indexed reward)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
 
   - name: ClmManager
     abi_file_path: abis/beefy/clm/ClmManager.json
@@ -118,12 +159,38 @@ contracts:
       - event: "Transfer(address indexed from, address indexed to, uint256 value)"
         field_selection:
           transaction_fields: [hash, transactionIndex]
+      - event: "Deposit(address indexed user, uint256 shares, uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+      - event: "Withdraw(address indexed user, uint256 shares, uint256 amount0, uint256 amount1)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
 
   - name: ClmStrategy
     abi_file_path: abis/beefy/clm/ClmStrategy.json
     handler: src/handlers/clmStrategy.handlers.ts
     events:
       - event: "Initialized(uint8 version)"
+      - event: "Harvest(uint256 fee0, uint256 fee1)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+      - event: "HarvestRewards(uint256 fees)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+      - event: "ClaimedFees(uint256 feeMain0, uint256 feeMain1, uint256 feeAlt0, uint256 feeAlt1)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+      - event: "ClaimedRewards(uint256 fees)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+      - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
+      - event: "ChargedFees(uint256 callFeeAmount, uint256 beefyFeeAmount, uint256 strategistFeeAmount)"
+        name: ChargedFeesV2
+      - event: "TVL(uint256 bal0, uint256 bal1)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
+      - event: "Paused(address account)"
+      - event: "Unpaused(address account)"
 
   - name: LstVault
     abi_file_path: abis/beefy/lst/LstVault.json
@@ -300,6 +367,10 @@ chains:
           - 0x81350D3b7eaCA4d4Afb66721A9b5bBE2a6301b35
           - 0x48F4634c8383aF01BF71AefBC125eb582eb3C74D # old gov vault
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -514,6 +585,10 @@ chains:
           - 0x86d38c6b6313c5A3021D68D1F57CF5e69197592A # old gov vault
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -565,6 +640,10 @@ chains:
           - 0x01e8881ed2Fb41E0B3dF29f382fAf707a0B26969
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -610,6 +689,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -1504,6 +1587,10 @@ chains:
           - 0x0d5761D9181C7745855FC985f646a842EB254eB9 # old gov vault
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -1723,6 +1810,10 @@ chains:
           - 0xf424488cd9213b6fd83f63c2bdca8b0492b2a9a5
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -1819,6 +1910,10 @@ chains:
           - 0xAe3F0C61F3Dc48767ccCeF3aD50b29437BE4b1a4
           - 0xF49c523F08B4e7c8E51a44088ea2a5e6b5f397D9 # old gov
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -2169,6 +2264,10 @@ chains:
           - 0x7fB900C14c9889A559C777D016a885995cE759Ee # old gov vault
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -2277,6 +2376,10 @@ chains:
         address: []
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -2320,6 +2423,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -2445,6 +2552,10 @@ chains:
         address: []
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -2501,6 +2612,10 @@ chains:
           - 0x405EE7F4f067604b787346bC22ACb66b06b15A4B
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -2546,6 +2661,10 @@ chains:
         address: []
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -2588,6 +2707,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -2701,6 +2824,10 @@ chains:
           - 0x01e8881ed2fb41e0b3df29f382faf707a0b26969
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -2743,6 +2870,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -2813,6 +2944,10 @@ chains:
           - 0xeD4ea30c755676C07d3e0e0f74Ff84C0193B4551
           - 0x2a30C5e0d577108F694d2A96179cd73611Ee069b # old gov vault
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -2899,6 +3034,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -3013,6 +3152,10 @@ chains:
           - 0xc3a4fdcba79DB04b4C3e352b1C467B3Ba909D84A
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -3104,6 +3247,10 @@ chains:
           - 0x3ee361ea7bf033b7abb840a6853d417e85941965
           - 0x405ee7f4f067604b787346bc22acb66b06b15a4b
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -3237,6 +3384,10 @@ chains:
           - 0x61645aE7BB524C2ea11cF90D673079EE2AbbB961 # old gov vault
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -3345,6 +3496,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -3834,6 +3989,10 @@ chains:
           - 0xDeB0a777ba6f59C78c654B8c92F80238c8002DD2 # old gov vault
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -3920,6 +4079,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -4008,6 +4171,10 @@ chains:
         address: []
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -4049,6 +4216,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -4093,6 +4264,10 @@ chains:
       - name: ClassicBoost
         address: []
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []
@@ -4178,6 +4353,10 @@ chains:
         address: []
       - name: ClassicStrategy
         address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
+        address: []
       - name: ClmStrategy
         address: []
       - name: ClmManager
@@ -4237,6 +4416,10 @@ chains:
           - 0x3355df6d4c9c3035724fd0e3914de96a5a83aaf4
           - 0x829e669bfb45AB51E853572920D9258a4907f89D
       - name: ClassicStrategy
+        address: []
+      - name: ClassicStrategyStratHarvest0
+        address: []
+      - name: ClassicStrategyStratHarvest1
         address: []
       - name: ClmStrategy
         address: []

@@ -1,9 +1,10 @@
 import { createEffect } from 'envio';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { asHex, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { erc4626AdapterAbi } from './abis/beefy/common/Erc4626Adapter';
 
 export const getErc4626AdapterTokens = createEffect(
     {
@@ -19,60 +20,55 @@ export const getErc4626AdapterTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
-        const { adapterAddress, chainId } = input;
+        const { adapterAddress, chainId } = decodeEffectInput(input);
+        const adapterAddressStr = toHex(adapterAddress);
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching Erc4626Adapter tokens', { adapterAddress, chainId });
+        context.log.debug('Fetching Erc4626Adapter tokens', { adapterAddress: adapterAddressStr, chainId });
 
         const [underlyingTokenResult] = await client.multicall({
             allowFailure: true,
             contracts: [
                 {
-                    address: adapterAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'asset',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    address: adapterAddressStr,
+                    abi: erc4626AdapterAbi,
                     functionName: 'asset',
                     args: [],
                 },
             ],
         });
 
-        // The adapter contract itself is the share token
-        const shareTokenAddress = adapterAddress;
-
         if (underlyingTokenResult.status === 'failure') {
-            context.log.error('Erc4626Adapter asset call failed', { adapterAddress, chainId });
+            context.log.error('Erc4626Adapter asset call failed', { adapterAddress: adapterAddressStr, chainId });
             return {
-                shareTokenAddress,
-                underlyingTokenAddress: ADDRESS_ZERO,
+                shareTokenAddress: adapterAddressStr,
+                underlyingTokenAddress: ZERO_ADDRESS_HEX,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
-        const underlyingTokenAddress = underlyingTokenResult.result;
+        const underlyingTokenAddressStr = asHex(underlyingTokenResult.result);
 
-        context.log.info('Erc4626Adapter data fetched', { adapterAddress, shareTokenAddress, underlyingTokenAddress });
+        context.log.info('Erc4626Adapter data fetched', {
+            adapterAddress: adapterAddressStr,
+            shareTokenAddress: adapterAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
+        });
 
-        if (underlyingTokenAddress === ADDRESS_ZERO) {
+        if (underlyingTokenAddressStr === ZERO_ADDRESS_HEX) {
             return {
-                shareTokenAddress,
-                underlyingTokenAddress,
+                shareTokenAddress: adapterAddressStr,
+                underlyingTokenAddress: underlyingTokenAddressStr,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         return {
-            shareTokenAddress,
-            underlyingTokenAddress,
+            shareTokenAddress: adapterAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
             blacklistStatus: 'ok' as const,
         };
     }

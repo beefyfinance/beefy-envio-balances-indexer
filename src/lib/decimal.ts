@@ -26,3 +26,24 @@ export const interpretAsDecimal = (
     const stringValue = rawValue.toString();
     return new BigDecimal(stringValue).dividedBy(BIG_TEN.pow(decimals));
 };
+
+export const interpretAllAsDecimal = (
+    rawValues: (string | bigint | BigDecimal | number)[],
+    decimals: string | number
+): BigDecimal[] => {
+    return rawValues.map((rawValue) => interpretAsDecimal(rawValue, decimals));
+};
+
+export const changeValueEncoding = (value: bigint, currentDecimals: number, requestedDecimals: number): bigint => {
+    if (currentDecimals === requestedDecimals) {
+        return value;
+    }
+    if (currentDecimals > requestedDecimals) {
+        return value / 10n ** BigInt(currentDecimals - requestedDecimals);
+    }
+    return value * 10n ** BigInt(requestedDecimals - currentDecimals);
+};
+
+export const PRICE_STORE_DECIMALS_USD = 18;
+export const PRICE_STORE_DECIMALS_TOKEN_TO_NATIVE = 18;
+export const BEEFY_SWAPPER_VALUE_SCALER = 1000n;

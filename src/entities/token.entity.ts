@@ -1,11 +1,9 @@
 import type { EvmChainId, EvmOnEventContext, Token } from 'envio';
-import type { Hex } from 'viem';
 import { getTokenMetadata } from '../effects/token.effects';
 import { BigDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
-
-export const tokenId = ({ chainId, tokenAddress }: { chainId: EvmChainId; tokenAddress: Hex }) =>
-    `${chainId}-${normalizeHex(tokenAddress)}`;
+import { type Bytes, toHex } from '../lib/hex';
+export const tokenId = ({ chainId, tokenAddress }: { chainId: EvmChainId; tokenAddress: Bytes }) =>
+    `${chainId}-${toHex(tokenAddress)}`;
 
 export const getOrCreateToken = async ({
     context,
@@ -15,15 +13,15 @@ export const getOrCreateToken = async ({
 }: {
     context: EvmOnEventContext;
     chainId: EvmChainId;
-    tokenAddress: Hex;
+    tokenAddress: Bytes;
     virtual:
         | false
         | {
               suffix: string;
-              stakingToken: Hex;
+              stakingToken: Bytes;
           };
 }): Promise<Token | null> => {
-    context.log.debug('Getting or creating token', { chainId, tokenAddress, virtual });
+    context.log.debug('Getting or creating token', { chainId, tokenAddress: tokenAddress, virtual });
     const id = tokenId({ chainId, tokenAddress });
     const maybeExistingToken = await context.Token.get(id);
     if (maybeExistingToken) {
@@ -35,26 +33,30 @@ export const getOrCreateToken = async ({
 
     if (virtual === false) {
         const result = await context.effect(getTokenMetadata, {
-            tokenAddress: tokenAddress,
+            tokenAddress: toHex(tokenAddress),
             chainId: chainId,
         });
         if (result.status === 'invalid') {
-            context.log.error('[INVALID_TOKEN] skipping token creation', { chainId, tokenAddress });
+            context.log.error('[INVALID_TOKEN] skipping token creation', {
+                chainId,
+                tokenAddress: tokenAddress,
+            });
             return null;
         }
         tokenMetadata = { name: result.name, symbol: result.symbol, decimals: result.decimals };
         isVirtual = false;
     } else {
         isVirtual = true;
+        const stakingTokenStr = toHex(virtual.stakingToken);
         const stakingTokenMetadata = await context.effect(getTokenMetadata, {
-            tokenAddress: virtual.stakingToken,
+            tokenAddress: stakingTokenStr,
             chainId: chainId,
         });
         if (stakingTokenMetadata.status === 'invalid') {
             context.log.error('[INVALID_TOKEN] skipping virtual token creation (staking token invalid)', {
                 chainId,
-                tokenAddress,
-                stakingToken: virtual.stakingToken,
+                tokenAddress: tokenAddress,
+                stakingToken: stakingTokenStr,
             });
             return null;
         }
@@ -67,7 +69,6 @@ export const getOrCreateToken = async ({
 
     return await context.Token.getOrCreate({
         id,
-        chainId,
         address: tokenAddress,
         isVirtual,
 

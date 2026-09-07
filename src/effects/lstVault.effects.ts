@@ -1,9 +1,10 @@
 import { createEffect } from 'envio';
 import { blacklistStatus } from '../lib/blacklist';
 import { chainIdSchema } from '../lib/chain';
-import { ADDRESS_ZERO } from '../lib/decimal';
-import { hexSchema } from '../lib/hex';
+import { decodeEffectInput } from '../lib/effect';
+import { asHex, hexSchema, toHex, ZERO_ADDRESS_HEX } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
+import { lstVaultAbi } from './abis/beefy/lst/LstVault';
 
 export const getLstVaultTokens = createEffect(
     {
@@ -19,60 +20,55 @@ export const getLstVaultTokens = createEffect(
         },
         rateLimit: false,
         cache: true,
+        crossChain: false,
     },
     async ({ input, context }) => {
-        const { lstAddress, chainId } = input;
+        const { lstAddress, chainId } = decodeEffectInput(input);
+        const lstAddressStr = toHex(lstAddress);
         const client = getViemClient(chainId, context.log);
 
-        context.log.debug('Fetching LstVault tokens', { lstAddress, chainId });
+        context.log.debug('Fetching LstVault tokens', { lstAddress: lstAddressStr, chainId });
 
         const [underlyingTokenResult] = await client.multicall({
             allowFailure: true,
             contracts: [
                 {
-                    address: lstAddress as `0x${string}`,
-                    abi: [
-                        {
-                            inputs: [],
-                            name: 'asset',
-                            outputs: [{ name: '', type: 'address' }],
-                            stateMutability: 'view',
-                            type: 'function',
-                        },
-                    ],
+                    address: lstAddressStr,
+                    abi: lstVaultAbi,
                     functionName: 'asset',
                     args: [],
                 },
             ],
         });
 
-        // The LST contract itself is the share token
-        const shareTokenAddress = lstAddress;
-
         if (underlyingTokenResult.status === 'failure') {
-            context.log.error('LstVault asset call failed', { lstAddress, chainId });
+            context.log.error('LstVault asset call failed', { lstAddress: lstAddressStr, chainId });
             return {
-                shareTokenAddress,
-                underlyingTokenAddress: ADDRESS_ZERO,
+                shareTokenAddress: lstAddressStr,
+                underlyingTokenAddress: ZERO_ADDRESS_HEX,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
-        const underlyingTokenAddress = underlyingTokenResult.result;
+        const underlyingTokenAddressStr = asHex(underlyingTokenResult.result);
 
-        context.log.info('LstVault data fetched', { lstAddress, shareTokenAddress, underlyingTokenAddress });
+        context.log.info('LstVault data fetched', {
+            lstAddress: lstAddressStr,
+            shareTokenAddress: lstAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
+        });
 
-        if (underlyingTokenAddress === ADDRESS_ZERO) {
+        if (underlyingTokenAddressStr === ZERO_ADDRESS_HEX) {
             return {
-                shareTokenAddress,
-                underlyingTokenAddress,
+                shareTokenAddress: lstAddressStr,
+                underlyingTokenAddress: underlyingTokenAddressStr,
                 blacklistStatus: 'blacklisted' as const,
             };
         }
 
         return {
-            shareTokenAddress,
-            underlyingTokenAddress,
+            shareTokenAddress: lstAddressStr,
+            underlyingTokenAddress: underlyingTokenAddressStr,
             blacklistStatus: 'ok' as const,
         };
     }

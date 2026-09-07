@@ -1,7 +1,7 @@
 import { createTestIndexer } from 'envio';
 import { encodeFunctionData } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { vaultOrStrategyFactoryAbi } from '../effects/classicVaultFactory.effects';
+import { classicVaultFactoryAbi } from '../effects/abis/beefy/classic/ClassicVaultFactory';
 
 describe('ClassicVaultFactory Handlers', () => {
     describe('VaultOrStrategyCreated event', () => {
@@ -20,9 +20,8 @@ describe('ClassicVaultFactory Handlers', () => {
                                 srcAddress: '0xbc4a342b0c057501e081484a2d24e576e854f823',
                                 transaction: {
                                     hash: '0xdf0648408ce8b090539f2d7c809aae57f87ce7f1a5f14c1f21ced3c9f6f27cc2',
-                                    transactionIndex: 0,
                                     input: encodeFunctionData({
-                                        abi: vaultOrStrategyFactoryAbi,
+                                        abi: classicVaultFactoryAbi,
                                         functionName: 'cloneVault',
                                         args: [],
                                     }),
@@ -71,9 +70,8 @@ describe('ClassicVaultFactory Handlers', () => {
                                 srcAddress: '0xbc4a342b0c057501e081484a2d24e576e854f823',
                                 transaction: {
                                     hash: '0xd5f31b6ea5c1bffc7a50e46ae558d6937c08e5733b83d6bef4b05888faa9bfac',
-                                    transactionIndex: 0,
                                     input: encodeFunctionData({
-                                        abi: vaultOrStrategyFactoryAbi,
+                                        abi: classicVaultFactoryAbi,
                                         functionName: 'booooost',
                                         args: [
                                             '0x0000000000000000000000000000000000000001',
@@ -126,9 +124,8 @@ describe('ClassicVaultFactory Handlers', () => {
                                 srcAddress: '0xbc4a342b0c057501e081484a2d24e576e854f823',
                                 transaction: {
                                     hash: '0x519bac361b822c2f8e1902cd3d1fdab34729075854f2c6e59458b3c9fbea75d1',
-                                    transactionIndex: 0,
                                     input: encodeFunctionData({
-                                        abi: vaultOrStrategyFactoryAbi,
+                                        abi: classicVaultFactoryAbi,
                                         functionName: 'cloneContract',
                                         args: ['0x0000000000000000000000000000000000000001'],
                                     }),
@@ -169,9 +166,8 @@ describe('ClassicVaultFactory Handlers', () => {
                                 srcAddress: '0xbc4a342b0c057501e081484a2d24e576e854f823',
                                 transaction: {
                                     hash: '0x8a9a3dde3386957af9763ce41a22a1dbd162b9c0e3711e4490e6c30c6d3f6b88',
-                                    transactionIndex: 0,
                                     input: encodeFunctionData({
-                                        abi: vaultOrStrategyFactoryAbi,
+                                        abi: classicVaultFactoryAbi,
                                         functionName: 'cloneVault',
                                         args: [],
                                     }),

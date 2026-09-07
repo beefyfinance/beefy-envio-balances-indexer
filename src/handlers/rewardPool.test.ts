@@ -2,6 +2,7 @@ import { createTestIndexer } from 'envio';
 import { parseUnits } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { ADDRESS_ZERO } from '../lib/decimal';
+import { FACTORIES, registerRewardPool } from './testFixtures/register';
 
 /** Ethereum mainnet reward pool from config.yaml */
 const POOL_ETH = '0x5e3e4ed40e754254095f091aa51871d125f4380a' as const;
@@ -53,11 +54,12 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
@@ -67,7 +69,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -77,8 +78,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -130,11 +130,12 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
@@ -144,7 +145,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -154,8 +154,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -177,17 +176,25 @@ describe('RewardPool Handlers', () => {
 
         it('Should skip blacklisted RewardPool during initialization', async () => {
             const indexer = createTestIndexer();
+            const badPool = '0x0000000000000000000000000000000000000008';
+            const block = { number: blockNum, timestamp: timestampSec };
 
             const trace = await indexer.process({
                 chains: {
                     1: {
                         simulate: [
+                            registerRewardPool({
+                                factory: FACTORIES[1].RewardPoolFactory,
+                                proxy: badPool,
+                                block,
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'RewardPool',
                                 event: 'Initialized',
-                                block: { number: blockNum, timestamp: timestampSec },
-                                logIndex: 0,
-                                srcAddress: '0x0000000000000000000000000000000000000008',
+                                block,
+                                logIndex: 1,
+                                srcAddress: badPool,
                                 params: { version: 1n },
                             },
                         ],
@@ -202,9 +209,17 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x0000000000000000000000000000000000000008",
+                          "contract": "RewardPool",
+                        },
+                      ],
+                    },
                     "block": 17539954,
                     "chainId": 1,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -296,11 +311,12 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
@@ -310,7 +326,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 2,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -320,8 +335,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -337,14 +351,12 @@ describe('RewardPool Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "amount": "-1",
-                          "chainId": 1,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "token_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                         },
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "amount": "1",
-                          "chainId": 1,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "token_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                         },
@@ -357,8 +369,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "-1",
                           "balanceBefore": "0",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-10",
                           "logIndex": 10,
                           "tokenBalance_id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -371,8 +382,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-10",
                           "logIndex": 10,
                           "tokenBalance_id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -425,11 +435,12 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
@@ -439,7 +450,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -449,8 +459,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -512,11 +521,12 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
@@ -526,7 +536,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 1,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -536,8 +545,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "2",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -553,7 +561,6 @@ describe('RewardPool Handlers', () => {
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "amount": "2",
-                          "chainId": 1,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "token_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                         },
@@ -566,8 +573,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "2",
                           "balanceBefore": "0",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-12",
                           "logIndex": 12,
                           "tokenBalance_id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -628,11 +634,12 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
@@ -642,7 +649,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 1,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -652,8 +658,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "-1",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -669,7 +674,6 @@ describe('RewardPool Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "amount": "-1",
-                          "chainId": 1,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "token_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                         },
@@ -682,8 +686,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "-1",
                           "balanceBefore": "0",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-13",
                           "logIndex": 13,
                           "tokenBalance_id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -761,11 +764,12 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
@@ -775,7 +779,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 2,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -785,8 +788,7 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
@@ -802,14 +804,12 @@ describe('RewardPool Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "amount": "-0.5",
-                          "chainId": 1,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "token_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                         },
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "amount": "0.5",
-                          "chainId": 1,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "token_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                         },
@@ -822,8 +822,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "-1",
                           "balanceBefore": "0",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-14",
                           "logIndex": 14,
                           "tokenBalance_id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -836,8 +835,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-14",
                           "logIndex": 14,
                           "tokenBalance_id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -850,8 +848,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "0.5",
                           "balanceBefore": "1",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-15",
                           "logIndex": 15,
                           "tokenBalance_id": "1-0x515e02402b7a3f67551763206d12cbde2d98766f-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -864,8 +861,7 @@ describe('RewardPool Handlers', () => {
                           "balanceAfter": "-0.5",
                           "balanceBefore": "-1",
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a-17539954-2-15",
                           "logIndex": 15,
                           "tokenBalance_id": "1-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -888,7 +884,7 @@ describe('RewardPool Handlers', () => {
     describe('NotifyReward event', () => {
         const rewardToken = '0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1';
 
-        it('Should create PoolRewardedEvent when NotifyReward event is emitted', async () => {
+        it('Should create RewardPoolRewardedEvent when NotifyReward event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
@@ -916,39 +912,39 @@ describe('RewardPool Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should create PoolRewardedEvent entity with correct reward token, amount, and vesting duration'
+                'Should create RewardPoolRewardedEvent entity with correct reward token, amount, and vesting duration'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
-                    "PoolRewardedEvent": {
-                      "sets": [
-                        {
-                          "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
-                          "id": "1-0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-2-20",
-                          "logIndex": 20,
-                          "poolShareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "rewardAmount": "100",
-                          "rewardToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
-                          "rewardVestingSeconds": 86400n,
-                          "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                          "trxIndex": 2,
-                        },
-                      ],
-                    },
                     "RewardPool": {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                        },
+                      ],
+                    },
+                    "RewardPoolRewardedEvent": {
+                      "sets": [
+                        {
+                          "blockNumber": 17539954n,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
+                          "id": "1-0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-2-20",
+                          "logIndex": 20,
+                          "poolShareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "rewardAmount": "100",
+                          "rewardToken_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "rewardVestingSeconds": 86400n,
+                          "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                          "trxIndex": 2,
                         },
                       ],
                     },
@@ -956,7 +952,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -966,14 +961,23 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "isVirtual": false,
                           "name": "Beefy QI",
                           "symbol": "beQI",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "isVirtual": false,
+                          "name": "Beefy",
+                          "symbol": "BIFI",
                           "totalSupply": "0",
                         },
                       ],
@@ -1018,34 +1022,34 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
-                    "PoolRewardedEvent": {
-                      "sets": [
-                        {
-                          "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
-                          "id": "1-0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-2-21",
-                          "logIndex": 21,
-                          "poolShareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "rewardAmount": "0",
-                          "rewardToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
-                          "rewardVestingSeconds": 0n,
-                          "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                          "trxIndex": 2,
-                        },
-                      ],
-                    },
                     "RewardPool": {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
+                          "classic_id": undefined,
+                          "clm_id": undefined,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
                           "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                        },
+                      ],
+                    },
+                    "RewardPoolRewardedEvent": {
+                      "sets": [
+                        {
+                          "blockNumber": 17539954n,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
+                          "id": "1-0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-2-21",
+                          "logIndex": 21,
+                          "poolShareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "rewardAmount": "0",
+                          "rewardToken_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "rewardVestingSeconds": 0n,
+                          "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                          "trxIndex": 2,
                         },
                       ],
                     },
@@ -1053,7 +1057,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -1063,14 +1066,23 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "isVirtual": false,
                           "name": "Beefy QI",
                           "symbol": "beQI",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "isVirtual": false,
+                          "name": "Beefy",
+                          "symbol": "BIFI",
                           "totalSupply": "0",
                         },
                       ],
@@ -1130,47 +1142,46 @@ describe('RewardPool Handlers', () => {
               {
                 "changes": [
                   {
-                    "PoolRewardedEvent": {
+                    "RewardPool": {
+                      "sets": [
+                        {
+                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "classic_id": undefined,
+                          "clm_id": undefined,
+                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 17539954n,
+                          "initializedTimestamp": 2024-06-15T12:00:00.000Z,
+                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
+                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                        },
+                      ],
+                    },
+                    "RewardPoolRewardedEvent": {
                       "sets": [
                         {
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-2-22",
                           "logIndex": 22,
                           "poolShareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "rewardAmount": "1",
-                          "rewardToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                          "rewardToken_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "rewardVestingSeconds": 100n,
                           "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                           "trxIndex": 2,
                         },
                         {
                           "blockNumber": 17539954n,
-                          "blockTimestamp": "2024-06-15T12:00:00.000Z",
-                          "chainId": 1,
+                          "blockTimestamp": 2024-06-15T12:00:00.000Z,
                           "id": "1-0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc-2-23",
                           "logIndex": 23,
                           "poolShareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
                           "rewardAmount": "2",
-                          "rewardToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
+                          "rewardToken_id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
                           "rewardVestingSeconds": 200n,
                           "trxHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                           "trxIndex": 2,
-                        },
-                      ],
-                    },
-                    "RewardPool": {
-                      "sets": [
-                        {
-                          "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
-                          "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "initializableStatus": "INITIALIZED",
-                          "initializedBlock": 17539954n,
-                          "initializedTimestamp": "2024-06-15T12:00:00.000Z",
-                          "shareToken_id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "underlyingToken_id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                         },
                       ],
                     },
@@ -1178,7 +1189,6 @@ describe('RewardPool Handlers', () => {
                       "sets": [
                         {
                           "address": "0x5e3e4ed40e754254095f091aa51871d125f4380a",
-                          "chainId": 1,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x5e3e4ed40e754254095f091aa51871d125f4380a",
@@ -1188,14 +1198,23 @@ describe('RewardPool Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x6c9D885B37b131aa68794ee1549fFB80be381Fa9",
-                          "chainId": 1,
+                          "address": "0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "1-0x6c9d885b37b131aa68794ee1549ffb80be381fa9",
                           "isVirtual": false,
                           "name": "Beefy QI",
                           "symbol": "beQI",
+                          "totalSupply": "0",
+                        },
+                        {
+                          "address": "0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "decimals": 18,
+                          "holderCount": 0,
+                          "id": "1-0xb1f1ee126e9c96231cc3d3fad7c08b4cf873b1f1",
+                          "isVirtual": false,
+                          "name": "Beefy",
+                          "symbol": "BIFI",
                           "totalSupply": "0",
                         },
                       ],

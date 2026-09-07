@@ -1,6 +1,7 @@
 import { createTestIndexer } from 'envio';
 import { describe, expect, it } from 'vitest';
 import { ADDRESS_ZERO } from '../lib/decimal';
+import { FACTORIES, registerErc4626Adapter } from './testFixtures/register';
 
 describe('Erc4626Adapter Handlers', () => {
     const adapterAddr = '0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5' as const;
@@ -13,18 +14,24 @@ describe('Erc4626Adapter Handlers', () => {
     const trxIdx = 3;
 
     describe('Initialized event', () => {
-        it('Should create Erc4626Adapter entity when Initialized event is emitted', async () => {
+        it('Should create ClassicErc4626Adapter entity when Initialized event is emitted', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: adapterAddr,
+                                block: { number: blockInit, timestamp: tsInit },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: blockInit, timestamp: tsInit },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: adapterAddr,
                                 params: { version: 1n },
                             },
@@ -35,20 +42,20 @@ describe('Erc4626Adapter Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should create Erc4626Adapter entity with correct shareToken and underlyingToken'
+                'Should create ClassicErc4626Adapter entity with correct shareToken and underlyingToken'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
-                          "initializedTimestamp": "2024-04-23T00:28:05.000Z",
+                          "initializedTimestamp": 2024-04-23T00:28:05.000Z,
                           "shareToken_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "underlyingToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                         },
@@ -58,7 +65,6 @@ describe('Erc4626Adapter Handlers', () => {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -68,8 +74,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -80,27 +85,41 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 13521369,
                     "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
             `);
         });
 
-        it('Should handle already initialized Erc4626Adapter gracefully', async () => {
+        it('Should handle already initialized ClassicErc4626Adapter gracefully', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: adapterAddr2,
+                                block: { number: blockDup, timestamp: tsDup },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: blockDup, timestamp: tsDup },
-                                logIndex: 0,
+                                logIndex: 2,
                                 srcAddress: adapterAddr2,
                                 params: { version: 1n },
                             },
@@ -119,20 +138,20 @@ describe('Erc4626Adapter Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should return early without errors when Erc4626Adapter is already initialized'
+                'Should return early without errors when ClassicErc4626Adapter is already initialized'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
-                          "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13522734n,
-                          "initializedTimestamp": "2024-04-23T08:00:00.000Z",
+                          "initializedTimestamp": 2024-04-23T08:00:00.000Z,
                           "shareToken_id": "8453-0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
                           "underlyingToken_id": "8453-0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22",
                         },
@@ -142,7 +161,6 @@ describe('Erc4626Adapter Handlers', () => {
                       "sets": [
                         {
                           "address": "0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
-                          "chainId": 8453,
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
@@ -152,8 +170,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22",
-                          "chainId": 8453,
+                          "address": "0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22",
                           "decimals": 18,
                           "holderCount": 0,
                           "id": "8453-0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22",
@@ -164,16 +181,24 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xd5dbbd88dd9f57e8220c8b02bb20bc50ce84b848",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 13522734,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                 ],
               }
             `);
         });
 
-        it('Should skip blacklisted Erc4626Adapter during initialization', async () => {
+        it('Should skip blacklisted ClassicErc4626Adapter during initialization', async () => {
             const indexer = createTestIndexer();
             // No ERC4626 asset() implementation → effect returns blacklisted (avoid reserved precompile addrs).
             const badAdapter = '0x1111111111111111111111111111111111111111' as const;
@@ -182,11 +207,17 @@ describe('Erc4626Adapter Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: badAdapter,
+                                block: { number: 17539954, timestamp: 1719900000 },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: 17539954, timestamp: 1719900000 },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: badAdapter,
                                 params: { version: 1n },
                             },
@@ -197,14 +228,22 @@ describe('Erc4626Adapter Handlers', () => {
             expect(trace.changes.length).toBeGreaterThan(0);
             expect(
                 trace,
-                'Should return null and log blacklist status for blacklisted Erc4626Adapter'
+                'Should return null and log blacklist status for blacklisted ClassicErc4626Adapter'
             ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x1111111111111111111111111111111111111111",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 17539954,
                     "chainId": 8453,
-                    "eventsProcessed": 1,
+                    "eventsProcessed": 2,
                   },
                 ],
               }
@@ -216,18 +255,24 @@ describe('Erc4626Adapter Handlers', () => {
         // `getTokenMetadata -> status: 'invalid'` path in `getOrCreateToken`. Then drop the
         // `.skip`, fill in srcAddress + chainId, and let the inline snapshot regenerate.
         // biome-ignore lint/suspicious/noSkippedTests: intentional placeholder; see TODO above
-        it.skip('Should skip Erc4626Adapter when underlying token metadata is invalid', async () => {
+        it.skip('Should skip ClassicErc4626Adapter when underlying token metadata is invalid', async () => {
             const indexer = createTestIndexer();
 
             const trace = await indexer.process({
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: '0x0000000000000000000000000000000000000000',
+                                block: { number: 17539954, timestamp: 1719900000 },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: 17539954, timestamp: 1719900000 },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: '0x0000000000000000000000000000000000000000',
                                 params: { version: 1n },
                             },
@@ -254,11 +299,17 @@ describe('Erc4626Adapter Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: adapterAddr,
+                                block: { number: blockInit, timestamp: tsInit },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: blockInit, timestamp: tsInit },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: adapterAddr,
                                 params: { version: 1n },
                             },
@@ -299,15 +350,15 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
-                          "initializedTimestamp": "2024-04-23T00:28:05.000Z",
+                          "initializedTimestamp": 2024-04-23T00:28:05.000Z,
                           "shareToken_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "underlyingToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                         },
@@ -317,7 +368,6 @@ describe('Erc4626Adapter Handlers', () => {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 2,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -327,8 +377,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -344,14 +393,12 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "amount": "-1",
-                          "chainId": 8453,
                           "id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "token_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                         },
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "amount": "1",
-                          "chainId": 8453,
                           "id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "token_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                         },
@@ -364,8 +411,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "-1",
                           "balanceBefore": "0",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-5",
                           "logIndex": 5,
                           "tokenBalance_id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -378,8 +424,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-5",
                           "logIndex": 5,
                           "tokenBalance_id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -389,9 +434,17 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 13521369,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                 ],
               }
@@ -405,11 +458,17 @@ describe('Erc4626Adapter Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: adapterAddr,
+                                block: { number: blockInit, timestamp: tsInit },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: blockInit, timestamp: tsInit },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: adapterAddr,
                                 params: { version: 1n },
                             },
@@ -435,15 +494,15 @@ describe('Erc4626Adapter Handlers', () => {
               {
                 "changes": [
                   {
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
-                          "initializedTimestamp": "2024-04-23T00:28:05.000Z",
+                          "initializedTimestamp": 2024-04-23T00:28:05.000Z,
                           "shareToken_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "underlyingToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                         },
@@ -453,7 +512,6 @@ describe('Erc4626Adapter Handlers', () => {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -463,8 +521,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -475,9 +532,17 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 13521369,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                 ],
               }
@@ -491,11 +556,17 @@ describe('Erc4626Adapter Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: adapterAddr,
+                                block: { number: blockInit, timestamp: tsInit },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: blockInit, timestamp: tsInit },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: adapterAddr,
                                 params: { version: 1n },
                             },
@@ -529,15 +600,15 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
-                          "initializedTimestamp": "2024-04-23T00:28:05.000Z",
+                          "initializedTimestamp": 2024-04-23T00:28:05.000Z,
                           "shareToken_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "underlyingToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                         },
@@ -547,7 +618,6 @@ describe('Erc4626Adapter Handlers', () => {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 1,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -557,8 +627,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "2",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -574,7 +643,6 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "amount": "2",
-                          "chainId": 8453,
                           "id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "token_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                         },
@@ -587,8 +655,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "2",
                           "balanceBefore": "0",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-7",
                           "logIndex": 7,
                           "tokenBalance_id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -598,9 +665,17 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 13521369,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                 ],
               }
@@ -614,11 +689,17 @@ describe('Erc4626Adapter Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: adapterAddr,
+                                block: { number: blockInit, timestamp: tsInit },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: blockInit, timestamp: tsInit },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: adapterAddr,
                                 params: { version: 1n },
                             },
@@ -652,15 +733,15 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
-                          "initializedTimestamp": "2024-04-23T00:28:05.000Z",
+                          "initializedTimestamp": 2024-04-23T00:28:05.000Z,
                           "shareToken_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "underlyingToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                         },
@@ -670,7 +751,6 @@ describe('Erc4626Adapter Handlers', () => {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 1,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -680,8 +760,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "-1",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -697,7 +776,6 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "amount": "-1",
-                          "chainId": 8453,
                           "id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "token_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                         },
@@ -710,8 +788,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "-1",
                           "balanceBefore": "0",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-8",
                           "logIndex": 8,
                           "tokenBalance_id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -721,9 +798,17 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 13521369,
                     "chainId": 8453,
-                    "eventsProcessed": 2,
+                    "eventsProcessed": 3,
                   },
                 ],
               }
@@ -737,11 +822,17 @@ describe('Erc4626Adapter Handlers', () => {
                 chains: {
                     8453: {
                         simulate: [
+                            registerErc4626Adapter({
+                                factory: FACTORIES[8453].Erc4626AdapterFactory,
+                                proxy: adapterAddr,
+                                block: { number: blockInit, timestamp: tsInit },
+                                logIndex: 0,
+                            }),
                             {
                                 contract: 'Erc4626Adapter',
                                 event: 'Initialized',
                                 block: { number: blockInit, timestamp: tsInit },
-                                logIndex: 0,
+                                logIndex: 1,
                                 srcAddress: adapterAddr,
                                 params: { version: 1n },
                             },
@@ -792,15 +883,15 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
-                    "Erc4626Adapter": {
+                    "ClassicErc4626Adapter": {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
+                          "classic_id": undefined,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 13521369n,
-                          "initializedTimestamp": "2024-04-23T00:28:05.000Z",
+                          "initializedTimestamp": 2024-04-23T00:28:05.000Z,
                           "shareToken_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "underlyingToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                         },
@@ -810,7 +901,6 @@ describe('Erc4626Adapter Handlers', () => {
                       "sets": [
                         {
                           "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
-                          "chainId": 8453,
                           "decimals": 6,
                           "holderCount": 2,
                           "id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -820,8 +910,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "totalSupply": "0",
                         },
                         {
-                          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-                          "chainId": 8453,
+                          "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "decimals": 6,
                           "holderCount": 0,
                           "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
@@ -837,14 +926,12 @@ describe('Erc4626Adapter Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "amount": "-0.5",
-                          "chainId": 8453,
                           "id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "token_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                         },
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "amount": "0.5",
-                          "chainId": 8453,
                           "id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                           "token_id": "8453-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
                         },
@@ -857,8 +944,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "-1",
                           "balanceBefore": "0",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-9",
                           "logIndex": 9,
                           "tokenBalance_id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -871,8 +957,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "1",
                           "balanceBefore": "0",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-9",
                           "logIndex": 9,
                           "tokenBalance_id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -885,8 +970,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "0.5",
                           "balanceBefore": "1",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-10",
                           "logIndex": 10,
                           "tokenBalance_id": "8453-0x515e02402b7a3f67551763206d12cbde2d98766f-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -899,8 +983,7 @@ describe('Erc4626Adapter Handlers', () => {
                           "balanceAfter": "-0.5",
                           "balanceBefore": "-1",
                           "blockNumber": 13521369n,
-                          "blockTimestamp": "2024-04-23T00:28:05.000Z",
-                          "chainId": 8453,
+                          "blockTimestamp": 2024-04-23T00:28:05.000Z,
                           "id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5-13521369-3-10",
                           "logIndex": 10,
                           "tokenBalance_id": "8453-0x94b32bdb9ff47f3239f04514bce862c7d95600ca-0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
@@ -910,9 +993,17 @@ describe('Erc4626Adapter Handlers', () => {
                         },
                       ],
                     },
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0xd75ccf9890d8fdfcccc9adf94bebb10d2dcbf5f5",
+                          "contract": "Erc4626Adapter",
+                        },
+                      ],
+                    },
                     "block": 13521369,
                     "chainId": 8453,
-                    "eventsProcessed": 3,
+                    "eventsProcessed": 4,
                   },
                 ],
               }

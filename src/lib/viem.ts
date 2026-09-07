@@ -152,7 +152,7 @@ export const getViemClient = (chainId: EvmChainId, logger: Logger) => {
         return clients.get(chainId) as PublicClient;
     }
 
-    const client = createPublicClient({
+    const baseClient = createPublicClient({
         chain: chainMap[chainId],
         // Enable multicall batching for efficiency
         // batch: {
@@ -197,6 +197,20 @@ export const getViemClient = (chainId: EvmChainId, logger: Logger) => {
             timeout: 30_000,
         }),
     });
+
+    const client = baseClient.extend((innerClient) => ({
+        async multicall(parameters: Parameters<typeof innerClient.multicall>[0]) {
+            const blockCreated = innerClient.chain?.contracts?.multicall3?.blockCreated;
+            const blockNumber = parameters.blockNumber;
+            const needsDeployless =
+                blockNumber !== undefined && blockCreated !== undefined && blockNumber < BigInt(blockCreated);
+
+            return innerClient.multicall({
+                ...parameters,
+                deployless: parameters.deployless ?? needsDeployless,
+            });
+        },
+    }));
 
     clients.set(chainId, client);
     return client;

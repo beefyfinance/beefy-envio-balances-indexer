@@ -1,12 +1,11 @@
 import type { Account, EvmBlock, EvmChainId, EvmOnEventContext, Token, TokenBalance } from 'envio';
-import type { Hex } from 'viem';
 import { BigDecimal } from '../lib/decimal';
-import { normalizeHex } from '../lib/hex';
+import { type Bytes, toHex } from '../lib/hex';
 import { accountId } from './account.entity';
 import { tokenId } from './token.entity';
 
 export const tokenBalanceId = ({ chainId, account, token }: { chainId: EvmChainId; account: Account; token: Token }) =>
-    `${chainId}-${normalizeHex(account.address)}-${normalizeHex(token.address)}`;
+    `${chainId}-${toHex(account.address)}-${toHex(token.address)}`;
 
 export const TokenBalanceChangeId = ({
     chainId,
@@ -22,8 +21,7 @@ export const TokenBalanceChangeId = ({
     blockNumber: number;
     trxIndex: number;
     logIndex: number;
-}) =>
-    `${chainId}-${normalizeHex(account.address)}-${normalizeHex(token.address)}-${blockNumber}-${trxIndex}-${logIndex}`;
+}) => `${chainId}-${toHex(account.address)}-${toHex(token.address)}-${blockNumber}-${trxIndex}-${logIndex}`;
 
 export const getOrCreateTokenBalanceEntity = async ({
     context,
@@ -39,10 +37,8 @@ export const getOrCreateTokenBalanceEntity = async ({
     return await context.TokenBalance.getOrCreate({
         id: tokenBalanceId({ chainId, account, token }),
 
-        chainId: chainId,
-
-        account_id: accountId({ accountAddress: account.address as Hex }),
-        token_id: tokenId({ chainId, tokenAddress: token.address as Hex }),
+        account_id: accountId({ accountAddress: account.address }),
+        token_id: tokenId({ chainId, tokenAddress: token.address }),
 
         amount: new BigDecimal(0),
     });
@@ -65,7 +61,7 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
         block: EvmBlock;
         trxIndex: number;
         logIndex: number;
-        trxHash: Hex;
+        trxHash: Bytes;
     };
     balanceBefore: InstanceType<typeof BigDecimal>;
     balanceAfter: InstanceType<typeof BigDecimal>;
@@ -80,11 +76,9 @@ export const getOrCreateTokenBalanceChangeEntity = async ({
             logIndex: event.logIndex,
         }),
 
-        chainId: chainId,
-
         tokenBalance_id: tokenBalanceId({ chainId, account, token }),
-        account_id: accountId({ accountAddress: account.address as Hex }),
-        token_id: tokenId({ chainId, tokenAddress: token.address as Hex }),
+        account_id: accountId({ accountAddress: account.address }),
+        token_id: tokenId({ chainId, tokenAddress: token.address }),
 
         balanceBefore,
         balanceAfter,

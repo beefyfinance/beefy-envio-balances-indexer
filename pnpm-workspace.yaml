@@ -2,13 +2,14 @@ packages:
   - "."
 
 minimumReleaseAge: 10080 # 1 week
+# Temporary: envio@3.10.0 is newer than the 7-day floor. Remove once it ages in.
 minimumReleaseAgeExclude:
-  - envio-darwin-arm64@3.1.2
-  - envio-darwin-x64@3.1.2
-  - envio-linux-arm64@3.1.2
-  - envio-linux-x64-musl@3.1.2
-  - envio-linux-x64@3.1.2
-  - envio@3.1.2
+  - envio@3.10.0
+  - envio-darwin-arm64@3.10.0
+  - envio-darwin-x64@3.10.0
+  - envio-linux-arm64@3.10.0
+  - envio-linux-x64@3.10.0
+  - envio-linux-x64-musl@3.10.0
 
 allowBuilds:
   "@biomejs/biome": true
