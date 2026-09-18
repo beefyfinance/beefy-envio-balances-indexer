@@ -1,0 +1,36 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "fromToken", "type": "address" },
+      { "indexed": true, "internalType": "address", "name": "toToken", "type": "address" },
+      {
+        "components": [
+          { "internalType": "address", "name": "router", "type": "address" },
+          { "internalType": "bytes", "name": "data", "type": "bytes" },
+          { "internalType": "uint256", "name": "amountIndex", "type": "uint256" },
+          { "internalType": "uint256", "name": "minIndex", "type": "uint256" },
+          { "internalType": "int8", "name": "minAmountSign", "type": "int8" }
+        ],
+        "indexed": false,
+        "internalType": "struct BeefySwapper.SwapInfo",
+        "name": "swapInfo",
+        "type": "tuple"
+      }
+    ],
+    "name": "SetSwapInfo",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [{ "indexed": false, "internalType": "address", "name": "oracle", "type": "address" }],
+    "name": "SetOracle",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [{ "indexed": false, "internalType": "uint256", "name": "slippage", "type": "uint256" }],
+    "name": "SetSlippage",
+    "type": "event"
+  }
+]

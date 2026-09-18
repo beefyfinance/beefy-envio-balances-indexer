@@ -22,10 +22,10 @@
     "parity:diff": "tsx scripts/parity-diff.ts"
   },
   "dependencies": {
-    "@beefyfinance/blockchain-addressbook": "0.54.213",
-    "envio": "3.10.0",
+    "@beefyfinance/blockchain-addressbook": "0.59.12",
+    "envio": "3.12.1",
     "remeda": "2.34.0",
-    "viem": "2.48.11"
+    "viem": "2.56.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.14",

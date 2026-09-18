@@ -181,6 +181,14 @@ export const ORACLE_CONFIGS: Record<EvmChainId, ChainOracleConfig> = {
         chainlinkNativePriceFeedDecimals: DEFAULT_CHAINLINK_FEED_DECIMALS,
     },
 
+    4663: {
+        // robinhood
+        ...getBeefyPricingConfig(4663),
+        priceOracleType: 'chainlink',
+        chainlinkNativePriceFeedAddress: toBytes('0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9'),
+        chainlinkNativePriceFeedDecimals: DEFAULT_CHAINLINK_FEED_DECIMALS,
+    },
+
     5000: {
         // mantle
         ...getBeefyPricingConfig(5000),

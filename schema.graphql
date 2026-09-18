@@ -143,7 +143,7 @@ enum PausableStatus {
 ##### Infrastructure ###########
 ################################
 
-type ClockTick @internal @storage(postgres: true) {
+type ClockTick @internal @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] }) {
   "chainId-period-roundedTimestamp"
   id: ID!
 
@@ -1105,4 +1105,67 @@ type LstVault {
   initializedBlock: BigInt!
   "The first timestamp the lst was active on"
   initializedTimestamp: Timestamp!
+}
+
+################################
+##### Swapper ##################
+################################
+
+"""
+A Beefy swapper contract. One row per indexed address.
+Oracle and slippage stay unset until those events are seen.
+"""
+type Swapper {
+  "chain - swapper address"
+  id: ID!
+
+  "The swapper contract address"
+  address: Bytes! @index
+
+  "Oracle used to calculate minimum swap output"
+  oracle: Bytes
+  "Transaction hash of the last SetOracle"
+  oracleTrxHash: Bytes
+
+  "Global slippage as a raw 1e18 fraction. 1e18 is 100 percent"
+  slippage: BigInt
+  "Transaction hash of the last SetSlippage"
+  slippageTrxHash: Bytes
+
+  "Latest routes configured on this swapper"
+  routes: [SwapperRoute!]! @derivedFrom(field: "swapper")
+}
+
+"""
+Latest stored swap route for a token pair on a swapper.
+"""
+type SwapperRoute {
+  "chain - from token - to token"
+  id: ID!
+
+  "The swapper this route belongs to"
+  swapper: Swapper! @index
+
+  "Token swapped from"
+  fromToken: Token! @index
+  "Token swapped to"
+  toToken: Token! @index
+
+  "Router that executes the swap"
+  router: Bytes! @index
+  "Template calldata with blank amount slots"
+  data: Bytes!
+  "Byte offset where the input amount is written"
+  amountIndex: BigInt!
+  "Byte offset where the minimum output is written"
+  minIndex: BigInt!
+  "Sign of the minimum output. Negative values encode a negative min amount"
+  minAmountSign: Int!
+
+  "Transaction hash of the last SetSwapInfo for this pair"
+  trxHash: Bytes! @index
+  "Block number of the last SetSwapInfo for this pair"
+  blockNumber: BigInt! @index
+  "Timestamp of the last SetSwapInfo for this pair"
+  blockTimestamp: Timestamp! @index
 }

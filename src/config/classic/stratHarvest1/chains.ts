@@ -29,6 +29,7 @@ export const CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN: Partial<Record<EvmC
     1329: [], // sei.json
     2222: [], // kava — no subgraph deployment
     4326: [], // megaeth.json (subgraph config has no harvest1 field yet)
+    4663: [], // robinhood.json
     5000: [], // mantle.json
     8453: [], // base.json
     9745: [], // plasma.json (subgraph config has no harvest1 field yet)

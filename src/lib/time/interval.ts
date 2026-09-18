@@ -29,6 +29,7 @@ const MEAN_BLOCK_TIME_SECONDS: Record<number, number> = {
     1329: 1,
     2222: 6,
     4326: 1,
+    4663: 1,
     5000: 2,
     8453: 2,
     9745: 1,
