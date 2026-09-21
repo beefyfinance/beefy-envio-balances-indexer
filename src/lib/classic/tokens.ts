@@ -1,6 +1,7 @@
 import type { Classic, EvmChainId, EvmOnEventContext, Token } from 'envio';
 import { getTokenOrThrow } from '../../entities/token.entity';
 import { asHex, type Bytes, toBytes, toHex, ZERO_ADDRESS } from '../hex';
+
 export const loadClassicTokens = async ({
     context,
     classic,
@@ -102,23 +103,16 @@ export const buildClassicFetchInput = async ({
 
     const strategyAddress = toBytes(classic.classicVaultStrategy_id.slice(`${String(chainId)}-`.length));
 
-    let clmContext =
-        (await loadClmManagerContext({
-            context,
-            chainId,
-            managerAddress: tokens.underlyingToken.address,
-        })) ?? null;
+    const clmCandidates =
+        tokens.underlyingBreakdownTokens.length === 2
+            ? [tokens.underlyingToken.address, ...tokens.rewardPoolTokens.map((token) => token.address)]
+            : [];
 
-    if (!clmContext) {
-        for (const rewardPoolToken of tokens.rewardPoolTokens) {
-            clmContext = await loadClmManagerContext({
-                context,
-                chainId,
-                managerAddress: rewardPoolToken.address,
-            });
-            if (clmContext) {
-                break;
-            }
+    let clmContext = null;
+    for (const managerAddress of clmCandidates) {
+        clmContext = await loadClmManagerContext({ context, chainId, managerAddress });
+        if (clmContext) {
+            break;
         }
     }
 

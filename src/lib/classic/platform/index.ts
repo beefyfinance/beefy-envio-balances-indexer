@@ -188,15 +188,16 @@ const clmBalancesAbi = [
 
 export const isBeefyClmVault = async ({
     client,
-    vaultAddress,
     underlyingTokenAddress,
 }: {
     client: PublicClient;
-    vaultAddress: Bytes;
     underlyingTokenAddress: Bytes;
 }): Promise<boolean> => {
-    const breakdown = await getVaultTokenBreakdownBeefyClmVault({ client, vaultAddress, underlyingTokenAddress });
-    return breakdown.length > 0;
+    const [wantsResult] = await client.multicall({
+        allowFailure: true,
+        contracts: [{ address: toHex(underlyingTokenAddress), abi: wantsAbi, functionName: 'wants' }],
+    });
+    return wantsResult.status === 'success';
 };
 
 export const getVaultTokenBreakdownBeefyClm = async ({
@@ -218,13 +219,14 @@ export const getVaultTokenBreakdownBeefyClm = async ({
         ],
     });
 
-    if (wantsResult.status === 'failure' || balancesResult.status === 'failure') {
+    if (wantsResult.status === 'failure') {
         return [];
     }
 
+    const amounts = balancesResult.status === 'success' ? balancesResult.result : ([0n, 0n] as const);
     return [
-        { tokenAddress: toBytes(wantsResult.result[0]), rawBalance: balancesResult.result[0] },
-        { tokenAddress: toBytes(wantsResult.result[1]), rawBalance: balancesResult.result[1] },
+        { tokenAddress: toBytes(wantsResult.result[0]), rawBalance: amounts[0] },
+        { tokenAddress: toBytes(wantsResult.result[1]), rawBalance: amounts[1] },
     ];
 };
 
@@ -252,21 +254,15 @@ export const getVaultTokenBreakdownBeefyClmVault = async ({
         ],
     });
 
-    if (
-        vaultBalanceResult.status === 'failure' ||
-        vaultTotalSupplyResult.status === 'failure' ||
-        clmTokensResult.status === 'failure' ||
-        clmBalancesResult.status === 'failure'
-    ) {
+    if (clmTokensResult.status === 'failure') {
         return [];
     }
 
-    const vaultBalance = vaultBalanceResult.result;
-    const vaultTotalSupply = vaultTotalSupplyResult.result;
-    const tokens = [clmTokensResult.result[0], clmTokensResult.result[1]];
-    const totalBalances = [clmBalancesResult.result[0], clmBalancesResult.result[1]];
+    const vaultBalance = vaultBalanceResult.status === 'success' ? vaultBalanceResult.result : 0n;
+    const vaultTotalSupply = vaultTotalSupplyResult.status === 'success' ? vaultTotalSupplyResult.result : 0n;
+    const totalBalances = clmBalancesResult.status === 'success' ? clmBalancesResult.result : ([0n, 0n] as const);
 
-    return tokens.map((token, index) => ({
+    return clmTokensResult.result.map((token, index) => ({
         tokenAddress: toBytes(token),
         rawBalance: vaultTotalSupply === 0n ? 0n : ((totalBalances[index] ?? 0n) * vaultBalance) / vaultTotalSupply,
     }));
@@ -306,7 +302,7 @@ export const detectClassicVaultUnderlyingPlatform = async ({
     if (await isCurveVault({ client, vaultAddress, underlyingTokenAddress })) {
         return PLATFORM_CURVE;
     }
-    if (await isBeefyClmVault({ client, vaultAddress, underlyingTokenAddress })) {
+    if (await isBeefyClmVault({ client, underlyingTokenAddress })) {
         return PLATFORM_BEEFY_CLM_VAULT;
     }
     const beefyClmBreakdown = await getVaultTokenBreakdownBeefyClm({ client, vaultAddress });
