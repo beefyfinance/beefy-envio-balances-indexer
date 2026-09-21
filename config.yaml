@@ -28,11 +28,13 @@ contracts:
           transaction_fields: [hash, input]
 
   - name: ClassicStrategyFactory
-    abi_file_path: abis/beefy/classic/ClassicVaultFactory.json
+    abi_file_path: abis/beefy/classic/ClassicStrategyFactory.json
     handler: src/handlers/classicStrategyFactory.handlers.ts
     events:
       - event: "ProxyCreated(address proxy)"
         name: StrategyCreated
+      - event: "ProxyCreated(string strategyName, address proxy)"
+        name: StrategyCreatedWithName
 
   - name: ClassicBoostFactory
     abi_file_path: abis/beefy/classic/ClassicBoostFactory.json
@@ -64,6 +66,8 @@ contracts:
     events:
       - event: "ProxyCreated(address proxy)"
         name: ClmStrategyCreated
+      - event: "ProxyCreated(string strategyName, address proxy)"
+        name: ClmStrategyCreatedWithName
 
   - name: ContractFactory
     abi_file_path: abis/beefy/ContractFactory.json
@@ -112,7 +116,7 @@ contracts:
     abi_file_path: abis/beefy/classic/ClassicStrategyStratHarvest1.json
     handler: src/handlers/classicStrategy.handlers.ts
     events:
-      - event: "StratHarvest(address indexed harvester, uint256 wantHarvested, uint256 tvl)"
+      - event: "StratHarvest(address indexed harvester, uint256 indexed wantHarvested, uint256 indexed tvl)"
         field_selection:
           transaction_fields: [hash, transactionIndex]
 

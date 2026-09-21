@@ -14,12 +14,14 @@
     "format": "biome check --write --unsafe",
     "format:safe": "biome check --write",
     "db:console": "PGPASSWORD=testing psql -h localhost -p ${ENVIO_PG_PORT:-5433} -U postgres -d envio-dev",
+    "db:console:clickhouse": "docker exec -it envio-clickhouse clickhouse-client ",
     "test": "pnpm run test:lint && pnpm run test:ts && pnpm run test:unit",
     "test:lint": "biome ci",
     "test:ts": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest watch --reporter=verbose",
-    "parity:diff": "tsx scripts/parity-diff.ts"
+    "parity:diff": "tsx scripts/parity-diff.ts",
+    "integrity": "tsx scripts/integrity/cli.ts"
   },
   "dependencies": {
     "@beefyfinance/blockchain-addressbook": "0.59.12",

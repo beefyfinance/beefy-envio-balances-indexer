@@ -13,3 +13,15 @@ indexer.contractRegister(
         context.log.info('ClmStrategyCreated', { contractAddress });
     }
 );
+
+indexer.contractRegister(
+    { contract: 'ClmStrategyFactory', event: 'ClmStrategyCreatedWithName' },
+    async ({ event, context }) => {
+        const contractAddress = toBytes(event.params.proxy);
+        if (isVaultBlacklisted(event.chainId, contractAddress)) return;
+
+        context.chain.ClmStrategy.add(toHex(contractAddress));
+
+        context.log.info('ClmStrategyCreatedWithName', { contractAddress, strategyName: event.params.strategyName });
+    }
+);

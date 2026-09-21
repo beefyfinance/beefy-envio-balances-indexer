@@ -48,4 +48,54 @@ describe('ClassicStrategyFactory Handlers', () => {
             `);
         });
     });
+
+    describe('StrategyCreatedWithName event', () => {
+        it('Should register ClassicStrategy when the named ProxyCreated event is emitted', async () => {
+            const indexer = createTestIndexer();
+
+            const trace = await indexer.process({
+                chains: {
+                    8453: {
+                        simulate: [
+                            {
+                                contract: 'ClassicStrategyFactory',
+                                event: 'StrategyCreatedWithName',
+                                block: { number: 10003201, timestamp: 1717000000 },
+                                logIndex: 0,
+                                srcAddress: '0x705a3168f2c48263b1249a11940e6602a4f22a9a',
+                                params: {
+                                    strategyName: 'StrategyCurveConvex',
+                                    proxy: '0x00000000000000000000000000000000feed2020',
+                                },
+                            },
+                        ],
+                    },
+                },
+            });
+
+            expect(trace).toMatchInlineSnapshot(`
+              {
+                "changes": [
+                  {
+                    "addresses": {
+                      "sets": [
+                        {
+                          "address": "0x00000000000000000000000000000000feed2020",
+                          "contract": "ClassicStrategy",
+                        },
+                        {
+                          "address": "0x00000000000000000000000000000000feed2020",
+                          "contract": "ClassicStrategyStratHarvest0",
+                        },
+                      ],
+                    },
+                    "block": 10003201,
+                    "chainId": 8453,
+                    "eventsProcessed": 1,
+                  },
+                ],
+              }
+            `);
+        });
+    });
 });
