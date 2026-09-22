@@ -12,6 +12,7 @@ import type { ClassicState } from '../../effects/classic.effects';
 import { getOrCreateAccount } from '../../entities/account.entity';
 import { isClassicInitialized } from '../../entities/classic.entity';
 import { getOrCreateClassicPosition, updateClassicPositionBalances } from '../../entities/classicPosition.entity';
+import { applyIndexedDeltas } from '../array';
 import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
@@ -61,6 +62,7 @@ const buildErc4626AdapterBalancesDelta = ({
 
 const applyBalanceDeltas = ({
     position,
+    classic,
     vaultBalanceDelta,
     boostBalanceDelta,
     rewardPoolBalancesDelta,
@@ -68,6 +70,7 @@ const applyBalanceDeltas = ({
     state,
 }: {
     position: ClassicPosition;
+    classic: Classic;
     vaultBalanceDelta: BigDecimal;
     boostBalanceDelta: BigDecimal;
     rewardPoolBalancesDelta: BigDecimal[];
@@ -77,15 +80,17 @@ const applyBalanceDeltas = ({
     const vaultBalance = position.vaultBalance.plus(vaultBalanceDelta);
     const boostBalance = position.boostBalance.plus(boostBalanceDelta);
 
-    const rewardPoolBalances = rewardPoolBalancesDelta.map((delta, index) => {
-        const previous = position.rewardPoolBalances[index] ?? BIG_ZERO;
-        return previous.plus(delta);
-    });
+    const rewardPoolBalances = applyIndexedDeltas(
+        position.rewardPoolBalances,
+        rewardPoolBalancesDelta,
+        classic.rewardPoolTokensOrder.length
+    );
 
-    const erc4626AdapterBalances = erc4626AdapterBalancesDelta.map((delta, index) => {
-        const previous = position.erc4626AdapterBalances[index] ?? BIG_ZERO;
-        return previous.plus(delta);
-    });
+    const erc4626AdapterBalances = applyIndexedDeltas(
+        position.erc4626AdapterBalances,
+        erc4626AdapterBalancesDelta,
+        classic.erc4626AdapterTokensOrder.length
+    );
 
     const erc4626AdapterVaultSharesBalances = erc4626AdapterBalances.map((adapterBalance, index) => {
         const adapterTotalSupply = state.erc4626AdaptersTotalSupply[index] ?? BIG_ZERO;
@@ -233,6 +238,7 @@ const updateClassicPositionFromDeltas = async ({
 
     const balances = applyBalanceDeltas({
         position,
+        classic,
         vaultBalanceDelta,
         boostBalanceDelta,
         rewardPoolBalancesDelta,

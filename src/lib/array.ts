@@ -1,3 +1,5 @@
+import { BIG_ZERO, type BigDecimal } from './decimal';
+
 /**
  * Splits an array of results from batch calls into separate arrays based on batch sizes.
  */
@@ -48,3 +50,16 @@ export function zipSameLength<A, B>(a: readonly A[], b: readonly B[]): Array<[A,
     // biome-ignore lint/style/noNonNullAssertion: we checked the length above
     return a.map((item, i) => [item, b[i]!]);
 }
+
+/** Zero-filled BigDecimal vector of the given length. */
+export const zeros = (length: number): BigDecimal[] => Array.from({ length }, () => BIG_ZERO);
+
+/**
+ * Apply sparse deltas onto `previous`, padded or truncated to `length`.
+ * Empty deltas keep prior values (and pad with zero) instead of shrinking the vector.
+ */
+export const applyIndexedDeltas = (
+    previous: readonly BigDecimal[],
+    deltas: readonly BigDecimal[],
+    length: number
+): BigDecimal[] => Array.from({ length }, (_, index) => (previous[index] ?? BIG_ZERO).plus(deltas[index] ?? BIG_ZERO));

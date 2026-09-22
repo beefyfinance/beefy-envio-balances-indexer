@@ -12,6 +12,7 @@ import type { ClmState } from '../../effects/clm.effects';
 import { getOrCreateAccount } from '../../entities/account.entity';
 import { isClmInitialized } from '../../entities/clm.entity';
 import { getOrCreateClmPosition, updateClmPositionBalances } from '../../entities/clmPosition.entity';
+import { applyIndexedDeltas } from '../array';
 import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
@@ -41,19 +42,22 @@ const buildRewardPoolBalancesDelta = ({
 
 const applyBalanceDeltas = ({
     position,
+    clm,
     managerBalanceDelta,
     rewardPoolBalancesDelta,
 }: {
     position: ClmPosition;
+    clm: Clm;
     managerBalanceDelta: BigDecimal;
     rewardPoolBalancesDelta: BigDecimal[];
 }) => {
     const managerBalance = position.managerBalance.plus(managerBalanceDelta);
 
-    const rewardPoolBalances = rewardPoolBalancesDelta.map((delta, index) => {
-        const previous = position.rewardPoolBalances[index] ?? BIG_ZERO;
-        return previous.plus(delta);
-    });
+    const rewardPoolBalances = applyIndexedDeltas(
+        position.rewardPoolBalances,
+        rewardPoolBalancesDelta,
+        clm.rewardPoolTokensOrder.length
+    );
 
     let totalBalance = managerBalance;
     for (const balance of rewardPoolBalances) {
@@ -190,10 +194,11 @@ const updateClmPositionFromDeltas = async ({
         return;
     }
 
-    let position = await getOrCreateClmPosition({ context, clm, account });
+    let position = await getOrCreateClmPosition({ context, clm, account, createdWithTrxHash: event.trxHash });
 
     const balances = applyBalanceDeltas({
         position,
+        clm,
         managerBalanceDelta,
         rewardPoolBalancesDelta,
     });

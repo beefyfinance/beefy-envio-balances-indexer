@@ -1,4 +1,5 @@
 import type { Account, Classic, ClassicPosition, EvmOnEventContext } from 'envio';
+import { zeros } from '../lib/array';
 import { BIG_ZERO, type BigDecimal } from '../lib/decimal';
 import { type Bytes, toHex, ZERO_HASH } from '../lib/hex';
 export const classicPositionId = ({ classicId, accountAddress }: { classicId: string; accountAddress: Bytes }) =>
@@ -41,9 +42,9 @@ export const getOrCreateClassicPosition = async ({
         createdWithTrxHash: createdWithTrxHash ?? ZERO_HASH,
         vaultBalance: BIG_ZERO,
         boostBalance: BIG_ZERO,
-        rewardPoolBalances: [],
-        erc4626AdapterBalances: [],
-        erc4626AdapterVaultSharesBalances: [],
+        rewardPoolBalances: zeros(classic.rewardPoolTokensOrder.length),
+        erc4626AdapterBalances: zeros(classic.erc4626AdapterTokensOrder.length),
+        erc4626AdapterVaultSharesBalances: zeros(classic.erc4626AdapterTokensOrder.length),
         totalBalance: BIG_ZERO,
     };
 

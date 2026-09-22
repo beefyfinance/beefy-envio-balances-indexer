@@ -96,7 +96,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452334n,
@@ -233,7 +233,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452334n,
@@ -474,7 +474,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452334n,
@@ -659,7 +659,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452334n,
@@ -806,7 +806,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452334n,
@@ -980,7 +980,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452334n,
@@ -1171,7 +1171,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452334n,
@@ -1424,7 +1424,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452460n,
@@ -1683,7 +1683,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17495891n,
@@ -1967,7 +1967,7 @@ describe('ClmManager Handlers', () => {
                       "sets": [
                         {
                           "address": "0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "clm_id": undefined,
+                          "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
                           "initializableStatus": "INITIALIZED",
                           "initializedBlock": 17452460n,
@@ -1983,7 +1983,7 @@ describe('ClmManager Handlers', () => {
                         {
                           "account_id": "0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "createdWithTrxHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                          "createdWithTrxHash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-0x94b32bdb9ff47f3239f04514bce862c7d95600ca",
                           "managerBalance": "-1",
                           "rewardPoolBalances": [],
@@ -1992,7 +1992,7 @@ describe('ClmManager Handlers', () => {
                         {
                           "account_id": "0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "clm_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
-                          "createdWithTrxHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                          "createdWithTrxHash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                           "id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7-0x515e02402b7a3f67551763206d12cbde2d98766f",
                           "managerBalance": "1",
                           "rewardPoolBalances": [],

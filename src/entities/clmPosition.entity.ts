@@ -1,4 +1,5 @@
 import type { Account, Clm, ClmPosition, EvmOnEventContext } from 'envio';
+import { zeros } from '../lib/array';
 import { BIG_ZERO, type BigDecimal } from '../lib/decimal';
 import { type Bytes, toHex, ZERO_HASH } from '../lib/hex';
 export const clmPositionId = ({ clmId, accountAddress }: { clmId: string; accountAddress: Bytes }) =>
@@ -21,10 +22,12 @@ export const getOrCreateClmPosition = async ({
     context,
     clm,
     account,
+    createdWithTrxHash,
 }: {
     context: EvmOnEventContext;
     clm: Clm;
     account: Account;
+    createdWithTrxHash?: Bytes;
 }): Promise<ClmPosition> => {
     const id = clmPositionId({ clmId: clm.id, accountAddress: account.address });
     const existing = await context.ClmPosition.get(id);
@@ -36,9 +39,9 @@ export const getOrCreateClmPosition = async ({
         id,
         clm_id: clm.id,
         account_id: account.id,
-        createdWithTrxHash: ZERO_HASH,
+        createdWithTrxHash: createdWithTrxHash ?? ZERO_HASH,
         managerBalance: BIG_ZERO,
-        rewardPoolBalances: [],
+        rewardPoolBalances: zeros(clm.rewardPoolTokensOrder.length),
         totalBalance: BIG_ZERO,
     };
 

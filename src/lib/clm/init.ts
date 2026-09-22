@@ -28,13 +28,20 @@ export const ensureClmAggregate = async ({
     manager: ClmManager;
     initializedBlock: Parameters<typeof getOrCreateClm>[0]['initializedBlock'];
 }) => {
-    return await getOrCreateClm({
+    const clm = await getOrCreateClm({
         context,
         chainId,
         managerAddress: manager.address,
         clmManager: manager,
         initializedBlock,
     });
+
+    context.ClmManager.set({
+        ...manager,
+        clm_id: clm.id,
+    });
+
+    return clm;
 };
 
 export const maybeLinkClmStrategyFromManager = async ({
