@@ -879,6 +879,27 @@ export const GRAPH_PROBES: Probe[] = [
         where: `${initialized} AND t.share_token_id != t.id`,
     },
     {
+        id: 'classicBoost.share-token-identity',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicBoost AS t',
+        where: `${initialized} AND t.share_token_id != t.id`,
+    },
+    {
+        id: 'lstVault.share-token-identity',
+        section: 'structure',
+        severity: 'error',
+        from: 'LstVault AS t',
+        where: `${initialized} AND t.share_token_id != t.id`,
+    },
+    {
+        id: 'erc4626Adapter.share-token-identity',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicErc4626Adapter AS t',
+        where: `${initialized} AND t.share_token_id != t.id`,
+    },
+    {
         id: 'erc4626Adapter.not-listed',
         section: 'structure',
         severity: 'error',
@@ -1022,6 +1043,26 @@ export const POSITION_PROBES: Probe[] = [
         severity: 'warning',
         from: 'ClassicPosition AS p INNER JOIN Classic AS c ON c.id = p.classic_id ARRAY JOIN arrayEnumerate(c.reward_pool_token_ids) AS idx LEFT JOIN TokenBalance AS tb ON tb.token_id = c.reward_pool_token_ids[idx] AND tb.account_id = p.account_id',
         where: `abs(${dec('p.reward_pool_balances[idx]')} - ${dec("ifNull(tb.amount, '0')")}) > 0`,
+    },
+    {
+        id: 'classicPosition.adapter-balance-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClassicPosition AS p INNER JOIN Classic AS c ON c.id = p.classic_id ARRAY JOIN arrayEnumerate(c.erc4626_adapter_token_ids) AS idx LEFT JOIN TokenBalance AS tb ON tb.token_id = c.erc4626_adapter_token_ids[idx] AND tb.account_id = p.account_id',
+        where: `abs(${dec('p.erc4626_adapter_balances[idx]')} - ${dec("ifNull(tb.amount, '0')")}) > 0`,
+    },
+    {
+        id: 'classicPosition.boost-balance-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: `ClassicPosition AS p LEFT JOIN (
+            SELECT b.classic_id AS classic_id, tb.account_id AS account_id, sum(${dec('tb.amount')}) AS boost_sum
+            FROM ClassicBoost AS b
+            INNER JOIN TokenBalance AS tb ON tb.token_id = b.share_token_id
+            WHERE NOT ${blank('classic_id', 'b')} AND b.initializable_status = 'INITIALIZED'
+            GROUP BY b.classic_id, tb.account_id
+        ) AS x ON x.classic_id = p.classic_id AND x.account_id = p.account_id`,
+        where: `abs(${dec('p.boost_balance')} - ifNull(x.boost_sum, 0)) > 0`,
     },
 ];
 

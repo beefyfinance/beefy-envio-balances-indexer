@@ -17,6 +17,7 @@ import {
 import {
     accountIdMismatchSql,
     arrayLengthMismatch,
+    CLM_LOCKED_MINIMUM_SHARES,
     CLOCK_TICK_PERIOD,
     catalogIdsByEntity,
     catalogPredicate,
@@ -35,6 +36,7 @@ import {
     SNAPSHOT_PERIODS,
     STRUCTURE_PROBES,
     sqlStringIn,
+    tokenIdMismatchSql,
     tokenIdsOrderMismatchSql,
     toScaled,
 } from './checks';
@@ -146,6 +148,54 @@ describe('integrity coverage diff', () => {
         expect(byCheck['Swapper.extra']).toBeUndefined();
         expect(byCheck['Swapper.summary']?.sample[0]).toContain('extra=1');
     });
+
+    it('treats paused as live and closed as eol, and truncates samples', () => {
+        const paused = product({ entity: 'RewardPool', id: '8453-0xpaused', status: 'paused', live: true });
+        const closed = product({
+            entity: 'RewardPool',
+            id: '8453-0xclosed',
+            status: 'eol',
+            live: false,
+            beefyId: 'retired',
+        });
+        const missing = Array.from({ length: 3 }, (_, index) =>
+            product({ entity: 'LstVault', id: `8453-0xmiss${index}`, beefyId: `lst-${index}` })
+        );
+        const findings = diffCoverage([paused, closed, ...missing], indexed({}), new Set(), 2);
+        const byCheck = Object.fromEntries(findings.map((item) => [item.check, item]));
+        expect(byCheck['RewardPool.missing-active']).toMatchObject({ severity: 'error', count: 1 });
+        expect(byCheck['RewardPool.missing-eol']).toMatchObject({ severity: 'warning', count: 1 });
+        expect(byCheck['LstVault.missing-active']).toMatchObject({ severity: 'error', count: 3 });
+        expect(byCheck['LstVault.missing-active']?.sample).toHaveLength(2);
+        expect(findings.filter((item) => item.check.endsWith('.extra'))).toEqual([]);
+    });
+
+    it('emits only per-entity summaries when the catalog is fully indexed', () => {
+        const rows = [
+            product({ entity: 'Classic', id: '8453-0xclassic' }),
+            product({ entity: 'Clm', id: '8453-0xclm' }),
+            product({ entity: 'RewardPool', id: '8453-0xpool' }),
+            product({ entity: 'ClassicBoost', id: '8453-0xboost' }),
+            product({ entity: 'LstVault', id: '8453-0xlst' }),
+            product({ entity: 'Swapper', id: '8453-0xswap' }),
+        ];
+        const findings = diffCoverage(
+            rows,
+            indexed({
+                Classic: ['8453-0xclassic'],
+                Clm: ['8453-0xclm'],
+                RewardPool: ['8453-0xpool'],
+                ClassicBoost: ['8453-0xboost'],
+                LstVault: ['8453-0xlst'],
+                Swapper: ['8453-0xswap'],
+            }),
+            new Set(),
+            20
+        );
+        expect(findings).toHaveLength(COVERAGE_ENTITIES.length);
+        expect(findings.every((item) => item.check.endsWith('.summary'))).toBe(true);
+        expect(findings.every((item) => item.severity === 'info')).toBe(true);
+    });
 });
 
 describe('catalog scope', () => {
@@ -161,6 +211,8 @@ describe('catalog scope', () => {
         expect(sqlStringIn('t.id', ids.get('Swapper') ?? [])).toBe(
             "t.id IN ('8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc')"
         );
+        expect(sqlStringIn('t.id', [])).toBe('0');
+        expect(() => sqlStringIn('t.id', ["8453-0xabc';drop"])).toThrow('Unexpected catalog id');
     });
 
     it('maps child tables onto catalog parent id columns', () => {
@@ -189,6 +241,27 @@ describe('catalog scope', () => {
             entity: 'RewardPool',
             column: 't.pool_share_token_id',
         });
+        expect(catalogScope('ClassicBoost AS t')).toEqual({ entity: 'ClassicBoost', column: 't.id' });
+        expect(catalogScope('RewardPool AS t')).toEqual({ entity: 'RewardPool', column: 't.id' });
+        expect(catalogScope('LstVault AS t')).toEqual({ entity: 'LstVault', column: 't.id' });
+        expect(catalogScope('Swapper AS t')).toEqual({ entity: 'Swapper', column: 't.id' });
+        expect(catalogScope('ClassicHarvestEvent AS t')).toEqual({ entity: 'Classic', column: 't.classic_id' });
+        expect(catalogScope('ClmHarvestEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
+        expect(catalogScope('ClassicPositionInteraction AS t')).toEqual({
+            entity: 'Classic',
+            column: 't.classic_id',
+        });
+        expect(catalogScope('ClassicErc4626Adapter AS t')).toEqual({ entity: 'Classic', column: 't.classic_id' });
+        expect(
+            catalogScope(
+                'ClassicPosition AS p LEFT JOIN (SELECT b.classic_id AS classic_id FROM ClassicBoost AS b) AS x ON x.classic_id = p.classic_id'
+            )
+        ).toEqual({ entity: 'Classic', column: 'p.classic_id' });
+    });
+
+    it('throws on tables that are scoped outside the catalog', () => {
+        expect(() => catalogScope('Token AS t')).toThrow('No catalog scope for Token AS t');
+        expect(() => catalogScope('ClockTick AS t')).toThrow(/No catalog scope/);
     });
 
     it('includes boost share tokens when scoping rewarded events', () => {
@@ -207,6 +280,11 @@ describe('integrity numeric helpers', () => {
         expect(toScaled('1.5')).toBe(1500000000000000000000000n);
         expect(toScaled('0.000000000000000000000000')).toBe(0n);
         expect(toScaled('-2')).toBe(-2000000000000000000000000n);
+        expect(toScaled(null)).toBe(0n);
+        expect(toScaled('')).toBe(0n);
+        expect(toScaled('1.5e2')).toBe(150n * 10n ** 24n);
+        expect(toScaled('-2.5E-1')).toBe(-25n * 10n ** 22n);
+        expect(toScaled('1e-30')).toBe(0n);
         expect(
             arrayLengthMismatch(
                 {
@@ -217,10 +295,19 @@ describe('integrity numeric helpers', () => {
                 [['rewardPoolToken_ids', 'rewardPoolTokensOrder', 'rewardPoolsTotalSupply']]
             )
         ).toEqual(['rewardPoolToken_ids=1 rewardPoolTokensOrder=2 rewardPoolsTotalSupply=1']);
+        expect(
+            arrayLengthMismatch({ rewardPoolToken_ids: ['a'], rewardPoolTokensOrder: ['a'] }, [
+                ['rewardPoolToken_ids', 'rewardPoolTokensOrder'],
+            ])
+        ).toEqual([]);
+        expect(arrayLengthMismatch({ rewardPoolToken_ids: ['a'] }, [['rewardPoolToken_ids', 'missing']])).toEqual([
+            'rewardPoolToken_ids=1 missing=-1',
+        ]);
     });
 
     it('ranks token balance changes by numeric block number', () => {
         expect(changeBlockSeq()).toBe('(toUInt64(t.block_number), t.trx_index, t.log_index)');
+        expect(changeBlockSeq('ch')).toBe('(toUInt64(ch.block_number), ch.trx_index, ch.log_index)');
     });
 });
 
@@ -275,8 +362,10 @@ describe('graph and event helper SQL', () => {
         );
         expect(SNAPSHOT_PERIODS).toEqual(['3600', '86400', '604800']);
         expect(CLOCK_TICK_PERIOD).toBe('3600');
+        expect(CLM_LOCKED_MINIMUM_SHARES).toBe(1000);
+        expect(tokenIdMismatchSql('share')).toBe(productIdMismatchSql('share'));
         expect(clmShareSupplyMismatchSql()).toContain('intExp10(toUInt8(token.decimals))');
-        expect(clmShareSupplyMismatchSql()).toContain('toDecimal256(1000, 24)');
+        expect(clmShareSupplyMismatchSql()).toContain(`toDecimal256(${CLM_LOCKED_MINIMUM_SHARES}, 24)`);
     });
 
     it('covers extra product, snapshot, position, and swapper probes', () => {
@@ -317,7 +406,31 @@ describe('graph and event helper SQL', () => {
                 'classicPosition.vault-balance-mismatch',
                 'clmPosition.manager-balance-mismatch',
                 'clmPosition.reward-pool-balance-mismatch',
+                'classicPosition.adapter-balance-mismatch',
+                'classicPosition.boost-balance-mismatch',
             ])
         );
+        expect(GRAPH_PROBES.map((probe) => probe.id)).toEqual(
+            expect.arrayContaining([
+                'classicBoost.share-token-identity',
+                'lstVault.share-token-identity',
+                'erc4626Adapter.share-token-identity',
+            ])
+        );
+    });
+
+    it('keeps probe ids unique and every probe catalog-scoped', () => {
+        const probes = [...STRUCTURE_PROBES, ...SANITY_PROBES, ...GRAPH_PROBES, ...POSITION_PROBES, ...EVENT_PROBES];
+        const ids = probes.map((probe) => probe.id);
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const probe of probes) {
+            expect(() => catalogScope(probe.from)).not.toThrow();
+            expect(probe.where.length).toBeGreaterThan(0);
+            expect(['structure', 'sanity']).toContain(probe.section);
+            expect(['error', 'warning', 'info']).toContain(probe.severity);
+        }
+        expect(STRUCTURE_PROBES.every((probe) => probe.section === 'structure')).toBe(true);
+        expect(SANITY_PROBES.every((probe) => probe.section === 'sanity')).toBe(true);
+        expect(GRAPH_PROBES.every((probe) => probe.section === 'structure' && probe.severity === 'error')).toBe(true);
     });
 });

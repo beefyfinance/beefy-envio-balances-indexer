@@ -3,16 +3,20 @@ pre-commit:
   commands:
     biome:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
+      env:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       run: pnpm run format
-      exclude: 
+      exclude:
         - "**/codegen/**"
       stage_fixed: true
-    
+
 pre-push:
   parallel: true
   commands:
     types:
       glob: "*.{ts,tsx}"
+      env:
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       run: pnpm run test:ts
     # test:
     #   glob: "*.{js,ts,jsx,tsx}"
