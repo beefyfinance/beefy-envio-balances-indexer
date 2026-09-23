@@ -27,6 +27,12 @@ const clmStateSchema = S.schema({
     rewardPoolsTotalSupply: S.array(S.bigint),
     totalUnderlyingAmount0: S.bigint,
     totalUnderlyingAmount1: S.bigint,
+    underlyingIdleAmount0: S.bigint,
+    underlyingIdleAmount1: S.bigint,
+    underlyingLockedAmount0: S.bigint,
+    underlyingLockedAmount1: S.bigint,
+    underlyingUnharvestedFees0: S.bigint,
+    underlyingUnharvestedFees1: S.bigint,
     underlyingMainAmount0: S.bigint,
     underlyingMainAmount1: S.bigint,
     underlyingAltAmount0: S.bigint,
@@ -47,6 +53,9 @@ export type ClmState = ToBigDecimal<ClmRawState>;
 type TotalSupplyResult = bigint;
 type ClmBalancesResult = readonly [bigint, bigint];
 type ClmBalancesOfPoolResult = readonly [bigint, bigint, bigint, bigint, bigint, bigint];
+type ClmBalancesOfThisResult = readonly [bigint, bigint];
+type ClmLockedProfitResult = readonly [bigint, bigint];
+type ClmFeeResult = bigint;
 type ClmPriceResult = bigint;
 type ClmRangeResult = readonly [bigint, bigint];
 
@@ -73,6 +82,12 @@ export const parseFetchedClmState = (raw: ClmRawState, tokens: ClmTokens): ClmSt
     ),
     totalUnderlyingAmount0: interpretAsDecimal(raw.totalUnderlyingAmount0, tokens.underlyingToken0.decimals),
     totalUnderlyingAmount1: interpretAsDecimal(raw.totalUnderlyingAmount1, tokens.underlyingToken1.decimals),
+    underlyingIdleAmount0: interpretAsDecimal(raw.underlyingIdleAmount0, tokens.underlyingToken0.decimals),
+    underlyingIdleAmount1: interpretAsDecimal(raw.underlyingIdleAmount1, tokens.underlyingToken1.decimals),
+    underlyingLockedAmount0: interpretAsDecimal(raw.underlyingLockedAmount0, tokens.underlyingToken0.decimals),
+    underlyingLockedAmount1: interpretAsDecimal(raw.underlyingLockedAmount1, tokens.underlyingToken1.decimals),
+    underlyingUnharvestedFees0: interpretAsDecimal(raw.underlyingUnharvestedFees0, tokens.underlyingToken0.decimals),
+    underlyingUnharvestedFees1: interpretAsDecimal(raw.underlyingUnharvestedFees1, tokens.underlyingToken1.decimals),
     underlyingMainAmount0: interpretAsDecimal(raw.underlyingMainAmount0, tokens.underlyingToken0.decimals),
     underlyingMainAmount1: interpretAsDecimal(raw.underlyingMainAmount1, tokens.underlyingToken1.decimals),
     underlyingAltAmount0: interpretAsDecimal(raw.underlyingAltAmount0, tokens.underlyingToken0.decimals),
@@ -179,6 +194,29 @@ const fetchClmStateRaw = async ({
         },
     ];
 
+    const accountingCalls = [
+        {
+            address: strategyAddressStr,
+            abi: clmStrategyAbi,
+            functionName: 'balancesOfThis' as const,
+        },
+        {
+            address: strategyAddressStr,
+            abi: clmStrategyAbi,
+            functionName: 'lockedProfit' as const,
+        },
+        {
+            address: strategyAddressStr,
+            abi: clmStrategyAbi,
+            functionName: 'fees0' as const,
+        },
+        {
+            address: strategyAddressStr,
+            abi: clmStrategyAbi,
+            functionName: 'fees1' as const,
+        },
+    ];
+
     const rewardPoolCalls = R.map(rewardPoolTokenAddresses, (address) => ({
         address: toHex(address),
         abi: ierc20Abi,
@@ -227,6 +265,7 @@ const fetchClmStateRaw = async ({
         blockNumber: BigInt(blockNumber),
         contracts: [
             ...coreCalls,
+            ...accountingCalls,
             ...rewardPoolCalls,
             ...oracleFreshCalls,
             ...swapperUnderlyingCalls,
@@ -239,6 +278,7 @@ const fetchClmStateRaw = async ({
 
     const [
         coreResults,
+        accountingResults,
         rewardPoolResults,
         _oracleFreshResults,
         swapperUnderlyingResults,
@@ -246,6 +286,7 @@ const fetchClmStateRaw = async ({
         swapperOutputResults,
     ] = splitBatchResults(rawResults, [
         coreCalls.length,
+        accountingCalls.length,
         rewardPoolCalls.length,
         oracleFreshCalls.length,
         swapperUnderlyingCalls.length,
@@ -259,6 +300,12 @@ const fetchClmStateRaw = async ({
             MulticallResult<ClmPriceResult>,
             MulticallResult<ClmRangeResult>,
         ],
+        [
+            MulticallResult<ClmBalancesOfThisResult>,
+            MulticallResult<ClmLockedProfitResult>,
+            MulticallResult<ClmFeeResult>,
+            MulticallResult<ClmFeeResult>,
+        ],
         MulticallResult<TotalSupplyResult>[],
         MulticallResult<FreshPriceResult>[],
         MulticallResult<SwapperAmountOutResult>[],
@@ -267,6 +314,7 @@ const fetchClmStateRaw = async ({
     ];
 
     const [totalSupplyRes, balanceRes, balanceOfPoolRes, priceRes, rangeRes] = coreResults;
+    const [balancesOfThisRes, lockedProfitRes, fees0Res, fees1Res] = accountingResults;
 
     let managerTotalSupply = 0n;
     if (totalSupplyRes?.status === 'success') {
@@ -293,6 +341,23 @@ const fetchClmStateRaw = async ({
     } else {
         context.log.error('Failed to fetch balancesOfPool for CLM', { managerAddress: managerAddressStr, chainId });
     }
+
+    let underlyingIdleAmount0 = 0n;
+    let underlyingIdleAmount1 = 0n;
+    if (balancesOfThisRes?.status === 'success') {
+        [underlyingIdleAmount0, underlyingIdleAmount1] = balancesOfThisRes.result as [bigint, bigint];
+    } else {
+        context.log.error('Failed to fetch balancesOfThis for CLM', { managerAddress: managerAddressStr, chainId });
+    }
+
+    let underlyingLockedAmount0 = 0n;
+    let underlyingLockedAmount1 = 0n;
+    if (lockedProfitRes?.status === 'success') {
+        [underlyingLockedAmount0, underlyingLockedAmount1] = lockedProfitRes.result as [bigint, bigint];
+    }
+
+    const underlyingUnharvestedFees0 = fees0Res?.status === 'success' ? (fees0Res.result as bigint) : 0n;
+    const underlyingUnharvestedFees1 = fees1Res?.status === 'success' ? (fees1Res.result as bigint) : 0n;
 
     let priceOfToken0InToken1 = 0n;
     if (priceRes?.status === 'success') {
@@ -366,6 +431,12 @@ const fetchClmStateRaw = async ({
         rewardPoolsTotalSupply,
         totalUnderlyingAmount0,
         totalUnderlyingAmount1,
+        underlyingIdleAmount0,
+        underlyingIdleAmount1,
+        underlyingLockedAmount0,
+        underlyingLockedAmount1,
+        underlyingUnharvestedFees0,
+        underlyingUnharvestedFees1,
         underlyingMainAmount0,
         underlyingMainAmount1,
         underlyingAltAmount0,

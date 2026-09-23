@@ -143,7 +143,10 @@ enum PausableStatus {
 ##### Infrastructure ###########
 ################################
 
-type ClockTick @internal @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] }) {
+type ClockTick
+  @internal
+  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] })
+{
   "chainId-period-roundedTimestamp"
   id: ID!
 
@@ -683,6 +686,18 @@ type Clm @index(fields: ["initializableStatus", "managerTotalSupply"]) {
   totalUnderlyingAmount0: BigDecimal! @config(precision: 100, scale: 24)
   "Total underlying token1 amount"
   totalUnderlyingAmount1: BigDecimal! @config(precision: 100, scale: 24)
+  "Idle token0 in the strategy (balancesOfThis)"
+  underlyingIdleAmount0: BigDecimal! @config(precision: 100, scale: 24)
+  "Idle token1 in the strategy (balancesOfThis)"
+  underlyingIdleAmount1: BigDecimal! @config(precision: 100, scale: 24)
+  "Locked token0 profit"
+  underlyingLockedAmount0: BigDecimal! @config(precision: 100, scale: 24)
+  "Locked token1 profit"
+  underlyingLockedAmount1: BigDecimal! @config(precision: 100, scale: 24)
+  "Unharvested token0 fees"
+  underlyingUnharvestedFees0: BigDecimal! @config(precision: 100, scale: 24)
+  "Unharvested token1 fees"
+  underlyingUnharvestedFees1: BigDecimal! @config(precision: 100, scale: 24)
   "Main position token0 amount"
   underlyingMainAmount0: BigDecimal! @config(precision: 100, scale: 24)
   "Main position token1 amount"
@@ -743,6 +758,18 @@ type ClmSnapshot
   totalUnderlyingAmount0: BigDecimal! @config(precision: 100, scale: 24)
   "Total underlying token1 amount"
   totalUnderlyingAmount1: BigDecimal! @config(precision: 100, scale: 24)
+  "Idle token0 in the strategy (balancesOfThis)"
+  underlyingIdleAmount0: BigDecimal! @config(precision: 100, scale: 24)
+  "Idle token1 in the strategy (balancesOfThis)"
+  underlyingIdleAmount1: BigDecimal! @config(precision: 100, scale: 24)
+  "Locked token0 profit"
+  underlyingLockedAmount0: BigDecimal! @config(precision: 100, scale: 24)
+  "Locked token1 profit"
+  underlyingLockedAmount1: BigDecimal! @config(precision: 100, scale: 24)
+  "Unharvested token0 fees"
+  underlyingUnharvestedFees0: BigDecimal! @config(precision: 100, scale: 24)
+  "Unharvested token1 fees"
+  underlyingUnharvestedFees1: BigDecimal! @config(precision: 100, scale: 24)
   "Main position token0 amount"
   underlyingMainAmount0: BigDecimal! @config(precision: 100, scale: 24)
   "Main position token1 amount"

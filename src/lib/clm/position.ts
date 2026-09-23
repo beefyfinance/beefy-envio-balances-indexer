@@ -12,7 +12,7 @@ import type { ClmState } from '../../effects/clm.effects';
 import { getOrCreateAccount } from '../../entities/account.entity';
 import { isClmInitialized } from '../../entities/clm.entity';
 import { getOrCreateClmPosition, updateClmPositionBalances } from '../../entities/clmPosition.entity';
-import { applyIndexedDeltas } from '../array';
+import { applyIndexedDeltas, padToLength } from '../array';
 import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
@@ -189,6 +189,9 @@ const updateClmPositionFromDeltas = async ({
         return;
     }
 
+    const paddedRewardPoolBalancesDelta = padToLength(rewardPoolBalancesDelta, clm.rewardPoolTokensOrder.length);
+    const paddedRewardBalancesDelta = padToLength(rewardBalancesDelta, clm.rewardTokensOrder.length);
+
     const account = await getOrCreateAccount({ context, chainId, accountAddress });
     if (!account) {
         return;
@@ -200,7 +203,7 @@ const updateClmPositionFromDeltas = async ({
         position,
         clm,
         managerBalanceDelta,
-        rewardPoolBalancesDelta,
+        rewardPoolBalancesDelta: paddedRewardPoolBalancesDelta,
     });
 
     await updateClmPositionBalances({
@@ -213,8 +216,8 @@ const updateClmPositionFromDeltas = async ({
     position = (await context.ClmPosition.get(position.id)) as ClmPosition;
 
     const isSharesTransfer = !managerBalanceDelta.eq(BIG_ZERO);
-    const isRewardPoolTransfer = rewardPoolBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
-    const isRewardClaim = rewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
+    const isRewardPoolTransfer = paddedRewardPoolBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
+    const isRewardClaim = paddedRewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
 
     let interactionSuffix = 0;
     if (isSharesTransfer) {
@@ -229,7 +232,7 @@ const updateClmPositionFromDeltas = async ({
     if (isSharesTransfer) {
         type = managerBalanceDelta.gt(BIG_ZERO) ? 'MANAGER_DEPOSIT' : 'MANAGER_WITHDRAW';
     } else if (isRewardPoolTransfer) {
-        type = rewardPoolBalancesDelta.some((delta) => delta.gt(BIG_ZERO))
+        type = paddedRewardPoolBalancesDelta.some((delta) => delta.gt(BIG_ZERO))
             ? 'CLM_REWARD_POOL_STAKE'
             : 'CLM_REWARD_POOL_UNSTAKE';
     } else if (isRewardClaim) {
@@ -245,8 +248,8 @@ const updateClmPositionFromDeltas = async ({
         interactionSuffix,
         type,
         managerBalanceDelta,
-        rewardPoolBalancesDelta,
-        rewardBalancesDelta,
+        rewardPoolBalancesDelta: paddedRewardPoolBalancesDelta,
+        rewardBalancesDelta: paddedRewardBalancesDelta,
         state,
         totalBalance: balances.totalBalance,
         event,

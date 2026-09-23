@@ -20,6 +20,28 @@ export const clmStrategyAbi = [
         stateMutability: 'view',
         type: 'function',
     },
+    {
+        inputs: [],
+        name: 'balancesOfThis',
+        outputs: [
+            { name: 'token0Bal', type: 'uint256' },
+            { name: 'token1Bal', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'lockedProfit',
+        outputs: [
+            { name: 'locked0', type: 'uint256' },
+            { name: 'locked1', type: 'uint256' },
+        ],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    { inputs: [], name: 'fees0', outputs: [{ type: 'uint256' }], stateMutability: 'view', type: 'function' },
+    { inputs: [], name: 'fees1', outputs: [{ type: 'uint256' }], stateMutability: 'view', type: 'function' },
     { inputs: [], name: 'price', outputs: [{ type: 'uint256' }], stateMutability: 'view', type: 'function' },
     {
         inputs: [],

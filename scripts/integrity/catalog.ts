@@ -3,11 +3,20 @@
  *
  * `/vaults` is the classic vault list (including CLM wrappers). Managers come from
  * `/cow-vaults`, gov/reward pools from `/gov-vaults`, and launchpool boosts from `/boosts`.
- * LST contracts are not a separate API type; the expected set is the uncommented
- * `LstVault` addresses in config.yaml.
+ * LST contracts and swappers are not separate API types; the expected sets are
+ * the uncommented `LstVault` and `BeefySwapper` addresses in config.yaml.
  */
 
-export type IndexedEntity = 'Classic' | 'Clm' | 'RewardPool' | 'ClassicBoost' | 'LstVault';
+export type IndexedEntity = 'Classic' | 'Clm' | 'RewardPool' | 'ClassicBoost' | 'LstVault' | 'Swapper';
+
+export const COVERAGE_ENTITIES: IndexedEntity[] = [
+    'Classic',
+    'Clm',
+    'RewardPool',
+    'ClassicBoost',
+    'LstVault',
+    'Swapper',
+];
 
 export type CatalogProduct = {
     entity: IndexedEntity;
@@ -108,13 +117,17 @@ export const loadVaultBlacklist = (source: string): Array<{ chainId: number; add
 };
 
 /**
- * Uncommented LstVault contract addresses, associated with the enclosing chain id.
+ * Uncommented contract addresses for `contractName`, associated with the enclosing chain id.
  * Commented chains and commented address lines are ignored.
  */
-export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: number; address: string }> => {
+export const loadConfiguredContracts = (
+    configYaml: string,
+    contractName: string
+): Array<{ chainId: number; address: string }> => {
+    const namePattern = new RegExp(`\\s-\\sname:\\s+${contractName}\\b`);
     const entries: Array<{ chainId: number; address: string }> = [];
     let chainId: number | null = null;
-    let inLst = false;
+    let inContract = false;
 
     for (const line of configYaml.split('\n')) {
         if (/^\s*#/.test(line)) {
@@ -123,17 +136,17 @@ export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: nu
         const chainMatch = line.match(/^ {2}- id: (\d+)\b/);
         if (chainMatch?.[1]) {
             chainId = Number(chainMatch[1]);
-            inLst = false;
+            inContract = false;
             continue;
         }
         if (chainId == null) {
             continue;
         }
         if (/\s-\sname:\s+\S+/.test(line)) {
-            inLst = /\s-\sname:\s+LstVault\b/.test(line);
+            inContract = namePattern.test(line);
             continue;
         }
-        if (!inLst) {
+        if (!inContract) {
             continue;
         }
         const addressMatch = line.match(/-\s*(0x[a-fA-F0-9]{40})\b/);
@@ -143,6 +156,14 @@ export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: nu
     }
     return entries;
 };
+
+/** Uncommented LstVault contract addresses, associated with the enclosing chain id. */
+export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: number; address: string }> =>
+    loadConfiguredContracts(configYaml, 'LstVault');
+
+/** Uncommented BeefySwapper contract addresses, associated with the enclosing chain id. */
+export const loadConfiguredSwappers = (configYaml: string): Array<{ chainId: number; address: string }> =>
+    loadConfiguredContracts(configYaml, 'BeefySwapper');
 
 type BeefyVault = {
     id?: string;
@@ -223,17 +244,28 @@ export const fetchCatalog = async (chainIds: number[], apiUrl = BEEFY_API_URL): 
     return [...products.values()];
 };
 
-export const configuredLstProducts = (configYaml: string, chainIds: number[]): CatalogProduct[] => {
+const configuredProducts = (
+    entries: Array<{ chainId: number; address: string }>,
+    chainIds: number[],
+    entity: IndexedEntity,
+    beefyId: string
+): CatalogProduct[] => {
     const selected = new Set(chainIds);
-    return loadConfiguredLstVaults(configYaml)
+    return entries
         .filter((entry) => selected.has(entry.chainId))
         .map((entry) => ({
-            entity: 'LstVault' as const,
+            entity,
             id: productId(entry.chainId, entry.address),
             chainId: entry.chainId,
             address: entry.address,
-            beefyId: 'config.yaml LstVault',
+            beefyId,
             status: 'configured',
             live: true,
         }));
 };
+
+export const configuredLstProducts = (configYaml: string, chainIds: number[]): CatalogProduct[] =>
+    configuredProducts(loadConfiguredLstVaults(configYaml), chainIds, 'LstVault', 'config.yaml LstVault');
+
+export const configuredSwapperProducts = (configYaml: string, chainIds: number[]): CatalogProduct[] =>
+    configuredProducts(loadConfiguredSwappers(configYaml), chainIds, 'Swapper', 'config.yaml BeefySwapper');

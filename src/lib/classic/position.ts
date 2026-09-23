@@ -12,7 +12,7 @@ import type { ClassicState } from '../../effects/classic.effects';
 import { getOrCreateAccount } from '../../entities/account.entity';
 import { isClassicInitialized } from '../../entities/classic.entity';
 import { getOrCreateClassicPosition, updateClassicPositionBalances } from '../../entities/classicPosition.entity';
-import { applyIndexedDeltas } from '../array';
+import { applyIndexedDeltas, padToLength } from '../array';
 import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
@@ -224,6 +224,14 @@ const updateClassicPositionFromDeltas = async ({
         return;
     }
 
+    const paddedBoostRewardBalancesDelta = padToLength(boostRewardBalancesDelta, classic.boostRewardTokensOrder.length);
+    const paddedRewardPoolBalancesDelta = padToLength(rewardPoolBalancesDelta, classic.rewardPoolTokensOrder.length);
+    const paddedRewardBalancesDelta = padToLength(rewardBalancesDelta, classic.rewardTokensOrder.length);
+    const paddedErc4626AdapterBalancesDelta = padToLength(
+        erc4626AdapterBalancesDelta,
+        classic.erc4626AdapterTokensOrder.length
+    );
+
     const account = await getOrCreateAccount({ context, chainId, accountAddress });
     if (!account) {
         return;
@@ -241,8 +249,8 @@ const updateClassicPositionFromDeltas = async ({
         classic,
         vaultBalanceDelta,
         boostBalanceDelta,
-        rewardPoolBalancesDelta,
-        erc4626AdapterBalancesDelta,
+        rewardPoolBalancesDelta: paddedRewardPoolBalancesDelta,
+        erc4626AdapterBalancesDelta: paddedErc4626AdapterBalancesDelta,
         state,
     });
 
@@ -260,10 +268,10 @@ const updateClassicPositionFromDeltas = async ({
 
     const isSharesTransfer = !vaultBalanceDelta.eq(BIG_ZERO);
     const isBoostTransfer = !boostBalanceDelta.eq(BIG_ZERO);
-    const isBoostRewardTransfer = boostRewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
-    const isRewardPoolTransfer = rewardPoolBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
-    const isRewardClaim = rewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
-    const isErc4626AdapterTransfer = erc4626AdapterBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
+    const isBoostRewardTransfer = paddedBoostRewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
+    const isRewardPoolTransfer = paddedRewardPoolBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
+    const isRewardClaim = paddedRewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
+    const isErc4626AdapterTransfer = paddedErc4626AdapterBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
 
     let interactionSuffix = 0;
     if (isSharesTransfer) interactionSuffix = 0;
@@ -281,13 +289,13 @@ const updateClassicPositionFromDeltas = async ({
     } else if (isBoostRewardTransfer) {
         type = 'BOOST_REWARD_CLAIM';
     } else if (isRewardPoolTransfer) {
-        type = rewardPoolBalancesDelta.some((delta) => delta.gt(BIG_ZERO))
+        type = paddedRewardPoolBalancesDelta.some((delta) => delta.gt(BIG_ZERO))
             ? 'CLASSIC_REWARD_POOL_STAKE'
             : 'CLASSIC_REWARD_POOL_UNSTAKE';
     } else if (isRewardClaim) {
         type = 'CLASSIC_REWARD_POOL_CLAIM';
     } else if (isErc4626AdapterTransfer) {
-        type = erc4626AdapterBalancesDelta.some((delta) => delta.gt(BIG_ZERO))
+        type = paddedErc4626AdapterBalancesDelta.some((delta) => delta.gt(BIG_ZERO))
             ? 'CLASSIC_ERC4626_ADAPTER_STAKE'
             : 'CLASSIC_ERC4626_ADAPTER_UNSTAKE';
     }
@@ -302,10 +310,10 @@ const updateClassicPositionFromDeltas = async ({
         type,
         vaultBalanceDelta,
         boostBalanceDelta,
-        boostRewardBalancesDelta,
-        rewardPoolBalancesDelta,
-        rewardBalancesDelta,
-        erc4626AdapterBalancesDelta,
+        boostRewardBalancesDelta: paddedBoostRewardBalancesDelta,
+        rewardPoolBalancesDelta: paddedRewardPoolBalancesDelta,
+        rewardBalancesDelta: paddedRewardBalancesDelta,
+        erc4626AdapterBalancesDelta: paddedErc4626AdapterBalancesDelta,
         erc4626AdapterVaultSharesBalancesDelta: balances.erc4626AdapterVaultSharesBalancesDelta,
         state,
         event,

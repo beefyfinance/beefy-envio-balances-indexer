@@ -54,6 +54,10 @@ export function zipSameLength<A, B>(a: readonly A[], b: readonly B[]): Array<[A,
 /** Zero-filled BigDecimal vector of the given length. */
 export const zeros = (length: number): BigDecimal[] => Array.from({ length }, () => BIG_ZERO);
 
+/** Copy `values` into a vector of `length`, padding with zero or truncating. */
+export const padToLength = (values: readonly BigDecimal[], length: number): BigDecimal[] =>
+    Array.from({ length }, (_, index) => values[index] ?? BIG_ZERO);
+
 /**
  * Apply sparse deltas onto `previous`, padded or truncated to `length`.
  * Empty deltas keep prior values (and pad with zero) instead of shrinking the vector.

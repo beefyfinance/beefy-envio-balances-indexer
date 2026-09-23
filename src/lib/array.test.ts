@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyIndexedDeltas, zeros } from './array';
+import { applyIndexedDeltas, padToLength, zeros } from './array';
 import { BIG_ONE, BIG_ZERO, BigDecimal } from './decimal';
 
 describe('applyIndexedDeltas', () => {
@@ -29,5 +29,13 @@ describe('zeros', () => {
         expect(zeros(0)).toEqual([]);
         expect(zeros(3).every((value) => value.eq(BIG_ZERO))).toBe(true);
         expect(zeros(3)).toHaveLength(3);
+    });
+});
+
+describe('padToLength', () => {
+    it('Should pad empty values and truncate extras', () => {
+        expect(padToLength([], 0)).toEqual([]);
+        expect(padToLength([], 2).map(String)).toEqual(['0', '0']);
+        expect(padToLength([BIG_ONE, new BigDecimal(2)], 1).map(String)).toEqual(['1']);
     });
 });

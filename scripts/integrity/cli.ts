@@ -6,14 +6,22 @@
  *
  * Reads indexed rows from ClickHouse (ENVIO_CLICKHOUSE_HOST, default http://localhost:8123).
  * Hard failures (missing active products, broken graphs, array mismatches) exit 1.
- * EOL gaps, zero prices, and unknown platforms are reported as warnings.
+ * EOL gaps, missing configured swappers, zero prices, and unknown platforms are warnings.
  * Indexed products that the Beefy API does not list are ignored.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { IndexedEntity } from './catalog';
-import { configuredLstProducts, fetchCatalog, loadActiveChainIds, loadVaultBlacklist, productId } from './catalog';
+import {
+    COVERAGE_ENTITIES,
+    configuredLstProducts,
+    configuredSwapperProducts,
+    fetchCatalog,
+    type IndexedEntity,
+    loadActiveChainIds,
+    loadVaultBlacklist,
+    productId,
+} from './catalog';
 import { type Finding, runIntegrityChecks, type Section, type Severity } from './checks';
 import { clickHouseConfigFromEnv, createClickHouseClient, fetchIds } from './clickhouse';
 
@@ -28,8 +36,6 @@ Env:
   ENVIO_CLICKHOUSE_PASSWORD      Password (default empty)
   BEEFY_API_URL                  Catalog base URL (default https://api.beefy.finance)
 `;
-
-const COVERAGE_ENTITIES: IndexedEntity[] = ['Classic', 'Clm', 'RewardPool', 'ClassicBoost', 'LstVault'];
 
 type CliOptions = {
     chainIds: number[];
@@ -135,7 +141,11 @@ const main = async () => {
         fetchCatalog(chainIds, process.env.BEEFY_API_URL),
         loadIndexed(client, chainIds),
     ]);
-    const catalog = [...apiProducts, ...configuredLstProducts(configYaml, chainIds)];
+    const catalog = [
+        ...apiProducts,
+        ...configuredLstProducts(configYaml, chainIds),
+        ...configuredSwapperProducts(configYaml, chainIds),
+    ];
     const blacklist = new Set(
         loadVaultBlacklist(blacklistSource).map((entry) => productId(entry.chainId, entry.address))
     );
