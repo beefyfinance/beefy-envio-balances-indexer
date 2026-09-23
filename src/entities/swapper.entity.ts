@@ -34,6 +34,32 @@ export const getOrCreateSwapper = async ({
     return swapper;
 };
 
+export const applyInitializedConfig = async ({
+    context,
+    chainId,
+    swapperAddress,
+    oracle,
+    slippage,
+    event,
+}: {
+    context: EvmOnEventContext;
+    chainId: ChainId;
+    swapperAddress: Bytes;
+    oracle: Bytes;
+    slippage: bigint;
+    event: EventMetadata;
+}) => {
+    const fields = getEventFields({ chainId, event });
+    const swapper = await getOrCreateSwapper({ context, chainId, address: swapperAddress });
+    context.Swapper.set({
+        ...swapper,
+        oracle,
+        oracleTrxHash: fields.trxHash,
+        slippage,
+        slippageTrxHash: fields.trxHash,
+    });
+};
+
 export const applySetOracle = async ({
     context,
     chainId,

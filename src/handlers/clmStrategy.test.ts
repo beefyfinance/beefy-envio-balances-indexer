@@ -1389,7 +1389,7 @@ describe('ClmStrategy Handlers', () => {
         const pauseBlockNum = initBlockNum + 1;
         const pauseTimestampSec = initTimestampSec + 12;
 
-        it('Should update Clm pausableStatus when Paused then Unpaused events are emitted', async () => {
+        it('Should update Clm and ClmStrategy pausableStatus when Paused then Unpaused events are emitted', async () => {
             const indexer = createTestIndexer();
             const initBlock = { number: initBlockNum, timestamp: initTimestampSec };
             const pauseBlock = { number: pauseBlockNum, timestamp: pauseTimestampSec };
@@ -1424,7 +1424,10 @@ describe('ClmStrategy Handlers', () => {
                 },
             });
             expect(trace.changes.length).toBeGreaterThan(0);
-            expect(trace, 'Should set Clm pausableStatus to PAUSED then back to RUNNING').toMatchInlineSnapshot(`
+            expect(
+                trace,
+                'Should set Clm and ClmStrategy pausableStatus to PAUSED then back to RUNNING'
+            ).toMatchInlineSnapshot(`
               {
                 "changes": [
                   {
@@ -1705,6 +1708,19 @@ describe('ClmStrategy Handlers', () => {
                         },
                       ],
                     },
+                    "ClmStrategy": {
+                      "sets": [
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 17452460n,
+                          "initializedTimestamp": 2024-07-23T00:24:27.000Z,
+                          "pausableStatus": "PAUSED",
+                        },
+                      ],
+                    },
                     "block": 17452461,
                     "chainId": 8453,
                     "eventsProcessed": 1,
@@ -1756,6 +1772,19 @@ describe('ClmStrategy Handlers', () => {
                           "underlyingToken1_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
                           "underlyingUnharvestedFees0": "0",
                           "underlyingUnharvestedFees1": "0",
+                        },
+                      ],
+                    },
+                    "ClmStrategy": {
+                      "sets": [
+                        {
+                          "address": "0x51582dcef28aea484dd87933324a55482882ce17",
+                          "clmManager_id": "8453-0x603492ff8943f5ac69aa69cf09fc96fda2606ee7",
+                          "id": "8453-0x51582dcef28aea484dd87933324a55482882ce17",
+                          "initializableStatus": "INITIALIZED",
+                          "initializedBlock": 17452460n,
+                          "initializedTimestamp": 2024-07-23T00:24:27.000Z,
+                          "pausableStatus": "RUNNING",
                         },
                       ],
                     },

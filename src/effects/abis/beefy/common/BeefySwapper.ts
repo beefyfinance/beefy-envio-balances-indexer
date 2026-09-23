@@ -10,4 +10,18 @@ export const beefySwapperAbi = [
         stateMutability: 'view',
         type: 'function',
     },
+    {
+        inputs: [],
+        name: 'oracle',
+        outputs: [{ name: '', type: 'address' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
+    {
+        inputs: [],
+        name: 'slippage',
+        outputs: [{ name: '', type: 'uint256' }],
+        stateMutability: 'view',
+        type: 'function',
+    },
 ] as const;

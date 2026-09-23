@@ -1,10 +1,55 @@
 import { indexer } from 'envio';
-import { applySetOracle, applySetSlippage, applySetSwapInfo, getOrCreateSwapper } from '../entities/swapper.entity';
+import { getSwapperConfig } from '../effects/beefySwapper.effects';
+import {
+    applyInitializedConfig,
+    applySetOracle,
+    applySetSlippage,
+    applySetSwapInfo,
+    getOrCreateSwapper,
+} from '../entities/swapper.entity';
 import { getOrCreateToken } from '../entities/token.entity';
 import { toChainId } from '../lib/chain';
-import { toBytes } from '../lib/hex';
+import { isZeroAddress, toBytes, toHex } from '../lib/hex';
 
 const eventFields = { transaction: ['hash', 'transactionIndex'], block: ['timestamp'] } as const;
+
+indexer.onEvent(
+    {
+        contract: 'BeefySwapper',
+        event: 'Initialized',
+        fields: eventFields,
+    },
+    async ({ event, context }) => {
+        context.log.debug('BeefySwapper.Initialized', { event });
+
+        const chainId = toChainId(context.chain.id);
+        const swapperAddress = toBytes(event.srcAddress);
+        const config = await context.effect(getSwapperConfig, {
+            swapperAddress: toHex(swapperAddress),
+            chainId,
+            blockNumber: event.block.number,
+        });
+        const oracle = toBytes(config.oracle);
+        if (isZeroAddress(oracle)) {
+            context.log.error('BeefySwapper.Initialized has no oracle', { swapperAddress, chainId });
+            return;
+        }
+
+        await applyInitializedConfig({
+            context,
+            chainId,
+            swapperAddress,
+            oracle,
+            slippage: config.slippage,
+            event: {
+                block: event.block,
+                trxIndex: event.transaction.transactionIndex,
+                logIndex: event.logIndex,
+                trxHash: toBytes(event.transaction.hash),
+            },
+        });
+    }
+);
 
 indexer.onEvent(
     {

@@ -15,18 +15,27 @@ import {
     productId,
 } from './catalog';
 import {
+    accountIdMismatchSql,
     arrayLengthMismatch,
+    CLOCK_TICK_PERIOD,
     catalogIdsByEntity,
+    catalogPredicate,
     catalogScope,
     changeBlockSeq,
     clmAmountIdentitySql,
+    clmShareSupplyMismatchSql,
     diffCoverage,
     EVENT_PROBES,
     GRAPH_PROBES,
     lengthMismatchSql,
+    POSITION_PROBES,
+    productIdMismatchSql,
     rewardPoolListedSql,
     SANITY_PROBES,
+    SNAPSHOT_PERIODS,
+    STRUCTURE_PROBES,
     sqlStringIn,
+    tokenIdsOrderMismatchSql,
     toScaled,
 } from './checks';
 
@@ -170,6 +179,26 @@ describe('catalog scope', () => {
             entity: 'Classic',
             column: 'p.classic_id',
         });
+        expect(catalogScope('ClassicSnapshot AS t')).toEqual({ entity: 'Classic', column: 't.classic_id' });
+        expect(catalogScope('ClmSnapshot AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
+        expect(catalogScope('ClmManagerCollectionEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
+        expect(catalogScope('ClmDepositEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
+        expect(catalogScope('ClmWithdrawEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
+        expect(catalogScope('ClmStrategyTvlEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
+        expect(catalogScope('RewardPoolRewardedEvent AS t')).toEqual({
+            entity: 'RewardPool',
+            column: 't.pool_share_token_id',
+        });
+    });
+
+    it('includes boost share tokens when scoping rewarded events', () => {
+        const ids = catalogIdsByEntity([
+            product({ entity: 'RewardPool', id: '8453-0xpool' }),
+            product({ entity: 'ClassicBoost', id: '8453-0xboost' }),
+        ]);
+        expect(catalogPredicate('RewardPoolRewardedEvent AS t', ids)).toBe(
+            "t.pool_share_token_id IN ('8453-0xpool','8453-0xboost')"
+        );
     });
 });
 
@@ -205,6 +234,10 @@ describe('clm amount identity', () => {
         expect(clmAmountIdentitySql('0')).toContain('underlying_locked_amount0');
         expect(clmAmountIdentitySql('0')).toContain('underlying_unharvested_fees0');
         expect(clmAmountIdentitySql('0')).not.toContain('underlying_pool_amount0');
+        expect(SANITY_PROBES.find((probe) => probe.id === 'clmSnapshot.amount0-identity')?.where).toBe(
+            clmAmountIdentitySql('0')
+        );
+        expect(clmAmountIdentitySql('1', 's')).toContain('s.total_underlying_amount1');
     });
 });
 
@@ -224,6 +257,66 @@ describe('graph and event helper SQL', () => {
                 'classicHarvest.missing-classic',
                 'classicHarvest.array-alignment',
                 'clmInteraction.total-balance',
+                'clmCollection.array-alignment',
+                'clmDeposit.missing-clm',
+                'clmWithdraw.missing-account',
+                'clmTvl.missing-strategy',
+                'rewarded.missing-reward-token',
+                'clmInteraction.type-delta',
+            ])
+        );
+    });
+
+    it('builds product id, account id, and parallel token-id predicates', () => {
+        expect(productIdMismatchSql()).toBe("t.id != concat(toString(t.chain_id), '-0x', lower(hex(t.address)))");
+        expect(accountIdMismatchSql()).toBe("t.id != concat('0x', lower(hex(t.address)))");
+        expect(tokenIdsOrderMismatchSql('reward_pool_token_ids', 'reward_pool_tokens_order')).toBe(
+            "arrayExists((id, addr) -> id != concat(toString(t.chain_id), '-', addr), t.reward_pool_token_ids, t.reward_pool_tokens_order)"
+        );
+        expect(SNAPSHOT_PERIODS).toEqual(['3600', '86400', '604800']);
+        expect(CLOCK_TICK_PERIOD).toBe('3600');
+        expect(clmShareSupplyMismatchSql()).toContain('intExp10(toUInt8(token.decimals))');
+        expect(clmShareSupplyMismatchSql()).toContain('toDecimal256(1000, 24)');
+    });
+
+    it('covers extra product, snapshot, position, and swapper probes', () => {
+        expect(STRUCTURE_PROBES.map((probe) => probe.id)).toEqual(
+            expect.arrayContaining([
+                'classic.id-address',
+                'clmPosition.missing-account',
+                'classicSnapshot.missing-classic',
+                'clmSnapshot.unknown-period',
+                'swapperRoute.missing-router',
+                'erc4626Adapter.underlying-token-metadata',
+                'rewardPool.underlying-token-metadata',
+            ])
+        );
+        expect(SANITY_PROBES.map((probe) => probe.id)).toEqual(
+            expect.arrayContaining([
+                'classic.underlying-balance-identity',
+                'clm.negative-amounts',
+                'clmSnapshot.amount1-identity',
+                'clm.share-supply-mismatch',
+                'swapper.missing-oracle',
+                'swapperRoute.same-token',
+                'rewardPool.share-token-decimals',
+            ])
+        );
+        expect(GRAPH_PROBES.map((probe) => probe.id)).toEqual(
+            expect.arrayContaining([
+                'rewardPool.dual-parent',
+                'erc4626Adapter.not-listed',
+                'classic.strategy-vault-mismatch',
+                'clm.pausable-mismatch',
+                'classic.token-ids-order',
+                'clm.manager-token-id-address',
+            ])
+        );
+        expect(POSITION_PROBES.map((probe) => probe.id)).toEqual(
+            expect.arrayContaining([
+                'classicPosition.vault-balance-mismatch',
+                'clmPosition.manager-balance-mismatch',
+                'clmPosition.reward-pool-balance-mismatch',
             ])
         );
     });

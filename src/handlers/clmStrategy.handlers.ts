@@ -4,7 +4,12 @@ import { fetchClmState, getClmStrategyInitData, parseFetchedClmState } from '../
 import { getClmStrategyManager } from '../effects/clmStrategy.effects';
 import { getClmOrThrow, isClmInitialized, linkClmStrategy, setClmPausableStatus } from '../entities/clm.entity';
 import { createClmHarvestEvent } from '../entities/clmHarvestEvent.entity';
-import { createClmStrategy, getClmManager, getClmStrategy } from '../entities/clmManager.entity';
+import {
+    createClmStrategy,
+    getClmManager,
+    getClmStrategy,
+    setClmStrategyPausableStatus,
+} from '../entities/clmManager.entity';
 import { createClmManagerCollectionEvent } from '../entities/clmManagerCollectionEvent.entity';
 import { createClmStrategyTvlEvent } from '../entities/clmStrategyTvlEvent.entity';
 import { toChainId } from '../lib/chain';
@@ -421,6 +426,8 @@ const updateClmPauseStatus = async ({
     const chainId = toChainId(context.chain.id);
     const strategy = await getClmStrategy(context, chainId, toBytes(event.srcAddress));
     if (!strategy) return;
+
+    await setClmStrategyPausableStatus({ context, strategy, pausableStatus });
 
     const clm = await getClmForStrategy({ context, strategy });
     await setClmPausableStatus({ context, clm, pausableStatus });

@@ -203,6 +203,55 @@ describe('BeefySwapper handlers', () => {
         `);
     });
 
+    it('stores oracle and slippage from Initialized when initialize did not emit SetOracle', async () => {
+        const indexer = createTestIndexer();
+        const initBlock = {
+            number: 15_683_455,
+            timestamp: Math.floor(Date.parse('2024-07-15T12:00:00.000Z') / 1000),
+        };
+        const trace = await indexer.process({
+            chains: {
+                8453: {
+                    simulate: [
+                        {
+                            contract: 'BeefySwapper' as const,
+                            event: 'Initialized' as const,
+                            block: initBlock,
+                            logIndex: 0,
+                            srcAddress: SWAPPER,
+                            transaction: { hash: trxHash, transactionIndex: 0 },
+                            params: { version: 1n },
+                        },
+                    ],
+                },
+            },
+        });
+
+        expect(trace, 'Initialized reads on-chain oracle and slippage').toMatchInlineSnapshot(`
+          {
+            "changes": [
+              {
+                "Swapper": {
+                  "sets": [
+                    {
+                      "address": "0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
+                      "id": "8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
+                      "oracle": "0x1bfa205114678c7d17b97db7a71819d3e6718eb4",
+                      "oracleTrxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "slippage": 950000000000000000n,
+                      "slippageTrxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    },
+                  ],
+                },
+                "block": 15683455,
+                "chainId": 8453,
+                "eventsProcessed": 1,
+              },
+            ],
+          }
+        `);
+    });
+
     it('stores oracle and slippage on the same Swapper without clearing each other', async () => {
         const indexer = createTestIndexer();
         const trace = await indexer.process({

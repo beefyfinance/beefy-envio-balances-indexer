@@ -237,6 +237,9 @@ contracts:
       - event: "SetSlippage(uint256 slippage)"
         field_selection:
           transaction_fields: [hash, transactionIndex]
+      - event: "Initialized(uint8 version)"
+        field_selection:
+          transaction_fields: [hash, transactionIndex]
 
 chains:
   # - id: 1313161554 # aurora

@@ -5,8 +5,8 @@
  *   pnpm integrity --chains 4326,4663,8453,9745,42161,43114
  *
  * Reads indexed rows from ClickHouse (ENVIO_CLICKHOUSE_HOST, default http://localhost:8123).
- * Hard failures (missing active products, broken graphs, array mismatches) exit 1.
- * EOL gaps, missing configured swappers, zero prices, and unknown platforms are warnings.
+ * Hard failures (missing active products, broken graphs, array mismatches, id/address drift) exit 1.
+ * EOL gaps, missing configured swappers, zero prices, unknown platforms, and ledger drift are warnings.
  * Indexed products that the Beefy API does not list are ignored.
  */
 import { readFileSync } from 'node:fs';

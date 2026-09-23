@@ -81,3 +81,18 @@ export const createClmStrategy = async ({
     context.ClmStrategy.set(strategy);
     return strategy;
 };
+
+export const setClmStrategyPausableStatus = async ({
+    context,
+    strategy,
+    pausableStatus,
+}: {
+    context: EvmOnEventContext;
+    strategy: ClmStrategy;
+    pausableStatus: ClmStrategy['pausableStatus'];
+}) => {
+    context.ClmStrategy.set({
+        ...strategy,
+        pausableStatus,
+    });
+};

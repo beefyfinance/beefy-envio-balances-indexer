@@ -47,17 +47,47 @@ const dec = (column: string) => `toDecimal256OrZero(${column}, 24)`;
  * Uniswap ConcLiq: balances() = idle + main + alt - locked - min(fees, max(gross, 0)).
  * Velodrome has no fees0/lockedProfit; those calls store 0 and idle is already net of fees.
  */
-export const clmAmountIdentitySql = (side: '0' | '1') => {
-    const total = dec(`t.total_underlying_amount${side}`);
-    const idle = dec(`t.underlying_idle_amount${side}`);
-    const main = dec(`t.underlying_main_amount${side}`);
-    const alt = dec(`t.underlying_alt_amount${side}`);
-    const locked = dec(`t.underlying_locked_amount${side}`);
-    const fees = dec(`t.underlying_unharvested_fees${side}`);
+export const clmAmountIdentitySql = (side: '0' | '1', alias = 't') => {
+    const total = dec(`${alias}.total_underlying_amount${side}`);
+    const idle = dec(`${alias}.underlying_idle_amount${side}`);
+    const main = dec(`${alias}.underlying_main_amount${side}`);
+    const alt = dec(`${alias}.underlying_alt_amount${side}`);
+    const locked = dec(`${alias}.underlying_locked_amount${side}`);
+    const fees = dec(`${alias}.underlying_unharvested_fees${side}`);
     const gross = `(${idle} + ${main} + ${alt} - ${locked})`;
     const expected = `(${gross} - least(${fees}, greatest(${gross}, 0)))`;
     return `abs(${total} - ${expected}) > 0`;
 };
+
+/**
+ * BeefyVaultConcLiq mints MINIMUM_SHARES (1000 wei) to 0xdead on first deposit.
+ * Token.totalSupply treats mint-to-dead as circulating-supply wash, so allow that dust.
+ */
+export const CLM_LOCKED_MINIMUM_SHARES = 1000;
+
+export const clmShareSupplyMismatchSql = (alias = 't', tokenAlias = 'token') =>
+    `abs(${dec(`${alias}.manager_total_supply`)} - ${dec(`${tokenAlias}.total_supply`)}) > toDecimal256(${CLM_LOCKED_MINIMUM_SHARES}, ${DECIMAL_SCALE}) / toDecimal256(intExp10(toUInt8(${tokenAlias}.decimals)), ${DECIMAL_SCALE})`;
+
+/** Product ids are `${chainId}-0x${lowercaseHex(address)}`. Address columns are raw bytes. */
+export const productIdMismatchSql = (alias = 't') =>
+    `${alias}.id != concat(toString(${alias}.chain_id), '-0x', lower(hex(${alias}.address)))`;
+
+export const tokenIdMismatchSql = (alias = 'token') => productIdMismatchSql(alias);
+
+export const accountIdMismatchSql = (alias = 't') => `${alias}.id != concat('0x', lower(hex(${alias}.address)))`;
+
+/** Parallel `*_token_ids` should be `chainId-` + the matching `*_tokens_order` address. */
+export const tokenIdsOrderMismatchSql = (idsColumn: string, orderColumn: string, alias = 't') =>
+    `arrayExists((id, addr) -> id != concat(toString(${alias}.chain_id), '-', addr), ${alias}.${idsColumn}, ${alias}.${orderColumn})`;
+
+const negativeCol = (column: string, alias = 't') => `${dec(`${alias}.${column}`)} < 0`;
+const arrayHasNegative = (column: string, alias = 't') =>
+    `arrayExists(x -> toDecimal256OrZero(x, 24) < 0, ${alias}.${column})`;
+const zeroAddress = (column: string, alias = 't') =>
+    `hex(${alias}.${column}) IN ('', '0000000000000000000000000000000000000000')`;
+
+export const SNAPSHOT_PERIODS = ['3600', '86400', '604800'] as const;
+export const CLOCK_TICK_PERIOD = '3600';
 
 const missingField = (table: string, column: string, id: string): Probe => ({
     id,
@@ -141,6 +171,8 @@ export const STRUCTURE_PROBES: Probe[] = [
     blankField('SwapperRoute', 'swapper_id', 'swapperRoute.missing-swapper'),
     blankField('SwapperRoute', 'from_token_id', 'swapperRoute.missing-from-token'),
     blankField('SwapperRoute', 'to_token_id', 'swapperRoute.missing-to-token'),
+    blankField('SwapperRoute', 'router', 'swapperRoute.missing-router'),
+    blankField('SwapperRoute', 'data', 'swapperRoute.missing-data'),
     nullMetadata('Classic', 'vault_token_id', 'classic.vault-token-metadata'),
     nullMetadata('Classic', 'underlying_token_id', 'classic.underlying-token-metadata'),
     nullMetadata('Clm', 'manager_token_id', 'clm.manager-token-metadata'),
@@ -155,7 +187,9 @@ export const STRUCTURE_PROBES: Probe[] = [
     nullMetadata('ClassicBoost', 'underlying_token_id', 'classicBoost.underlying-token-metadata'),
     nullMetadata('ClassicBoost', 'reward_token_id', 'classicBoost.reward-token-metadata'),
     nullMetadata('ClassicErc4626Adapter', 'share_token_id', 'erc4626Adapter.share-token-metadata'),
+    nullMetadata('ClassicErc4626Adapter', 'underlying_token_id', 'erc4626Adapter.underlying-token-metadata'),
     nullMetadata('RewardPool', 'share_token_id', 'rewardPool.share-token-metadata'),
+    nullMetadata('RewardPool', 'underlying_token_id', 'rewardPool.underlying-token-metadata'),
     nullMetadata('LstVault', 'share_token_id', 'lstVault.share-token-metadata'),
     nullMetadata('LstVault', 'underlying_token_id', 'lstVault.underlying-token-metadata'),
     virtualFlag('ClassicBoost', 'share_token_id', true, 'classicBoost.share-token-not-virtual'),
@@ -164,6 +198,103 @@ export const STRUCTURE_PROBES: Probe[] = [
     virtualFlag('LstVault', 'share_token_id', false, 'lstVault.share-token-virtual'),
     virtualFlag('ClassicErc4626Adapter', 'share_token_id', false, 'erc4626Adapter.share-token-virtual'),
     virtualFlag('RewardPool', 'share_token_id', false, 'rewardPool.share-token-virtual'),
+    {
+        id: 'classic.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'Classic AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'clm.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'Clm AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'classicVault.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicVault AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'clmManager.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClmManager AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'classicBoost.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicBoost AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'erc4626Adapter.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicErc4626Adapter AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'rewardPool.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'RewardPool AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'lstVault.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'LstVault AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'swapper.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'Swapper AS t',
+        where: productIdMismatchSql(),
+    },
+    {
+        id: 'classicVaultStrategy.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicVaultStrategy AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    {
+        id: 'clmStrategy.id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClmStrategy AS t',
+        where: `${initialized} AND ${productIdMismatchSql()}`,
+    },
+    blankField('ClassicPosition', 'classic_id', 'classicPosition.missing-classic'),
+    blankField('ClassicPosition', 'account_id', 'classicPosition.missing-account'),
+    blankField('ClmPosition', 'clm_id', 'clmPosition.missing-clm'),
+    blankField('ClmPosition', 'account_id', 'clmPosition.missing-account'),
+    blankField('ClassicSnapshot', 'classic_id', 'classicSnapshot.missing-classic'),
+    blankField('ClmSnapshot', 'clm_id', 'clmSnapshot.missing-clm'),
+    {
+        id: 'classicSnapshot.unknown-period',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicSnapshot AS t',
+        where: `t.period NOT IN (${SNAPSHOT_PERIODS.map((period) => `'${period}'`).join(', ')})`,
+    },
+    {
+        id: 'clmSnapshot.unknown-period',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClmSnapshot AS t',
+        where: `t.period NOT IN (${SNAPSHOT_PERIODS.map((period) => `'${period}'`).join(', ')})`,
+    },
 ];
 
 const positiveSupply = (column: string) => `${dec(`t.${column}`)} > 0`;
@@ -248,7 +379,91 @@ export const SANITY_PROBES: Probe[] = [
     zeroDecimals('Clm', 'underlying_token0_id', 'clm.token0-decimals'),
     zeroDecimals('Clm', 'underlying_token1_id', 'clm.token1-decimals'),
     zeroDecimals('LstVault', 'share_token_id', 'lstVault.share-token-decimals'),
+    zeroDecimals('LstVault', 'underlying_token_id', 'lstVault.underlying-token-decimals'),
     zeroDecimals('ClassicBoost', 'share_token_id', 'classicBoost.share-token-decimals'),
+    zeroDecimals('ClassicBoost', 'underlying_token_id', 'classicBoost.underlying-token-decimals'),
+    zeroDecimals('ClassicBoost', 'reward_token_id', 'classicBoost.reward-token-decimals'),
+    zeroDecimals('RewardPool', 'share_token_id', 'rewardPool.share-token-decimals'),
+    zeroDecimals('RewardPool', 'underlying_token_id', 'rewardPool.underlying-token-decimals'),
+    zeroDecimals('ClassicErc4626Adapter', 'share_token_id', 'erc4626Adapter.share-token-decimals'),
+    zeroDecimals('ClassicErc4626Adapter', 'underlying_token_id', 'erc4626Adapter.underlying-token-decimals'),
+    {
+        id: 'classic.underlying-balance-identity',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'Classic AS t',
+        where: `${initialized} AND abs(${dec('t.underlying_amount')} - ${dec('t.vault_underlying_balance')}) > 0`,
+    },
+    {
+        id: 'classic.negative-supply',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'Classic AS t',
+        where: `${initialized} AND (${negativeCol('vault_token_total_supply')} OR ${negativeCol('underlying_amount')} OR ${negativeCol('vault_underlying_total_supply')} OR ${negativeCol('vault_underlying_balance')} OR ${negativeCol('total_call_fees')} OR ${negativeCol('total_beefy_fees')} OR ${negativeCol('total_strategist_fees')})`,
+    },
+    {
+        id: 'clm.negative-amounts',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'Clm AS t',
+        where: `${initialized} AND (${negativeCol('manager_total_supply')} OR ${negativeCol('total_underlying_amount0')} OR ${negativeCol('total_underlying_amount1')} OR ${negativeCol('underlying_idle_amount0')} OR ${negativeCol('underlying_idle_amount1')} OR ${negativeCol('underlying_locked_amount0')} OR ${negativeCol('underlying_locked_amount1')} OR ${negativeCol('underlying_unharvested_fees0')} OR ${negativeCol('underlying_unharvested_fees1')} OR ${negativeCol('underlying_main_amount0')} OR ${negativeCol('underlying_main_amount1')} OR ${negativeCol('underlying_alt_amount0')} OR ${negativeCol('underlying_alt_amount1')} OR ${negativeCol('total_call_fees')} OR ${negativeCol('total_beefy_fees')} OR ${negativeCol('total_strategist_fees')})`,
+    },
+    {
+        id: 'clmSnapshot.amount0-identity',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmSnapshot AS t',
+        where: clmAmountIdentitySql('0'),
+    },
+    {
+        id: 'clmSnapshot.amount1-identity',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmSnapshot AS t',
+        where: clmAmountIdentitySql('1'),
+    },
+    {
+        id: 'classic.share-supply-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'Classic AS t INNER JOIN Token AS token ON token.id = t.vault_token_id',
+        where: `${initialized} AND abs(${dec('t.vault_token_total_supply')} - ${dec('token.total_supply')}) > 0`,
+    },
+    {
+        id: 'clm.share-supply-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'Clm AS t INNER JOIN Token AS token ON token.id = t.manager_token_id',
+        where: `${initialized} AND ${clmShareSupplyMismatchSql()}`,
+    },
+    {
+        id: 'swapper.missing-oracle',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'Swapper AS t',
+        where: `t.oracle IS NULL OR ${zeroAddress('oracle')}`,
+    },
+    {
+        id: 'swapper.missing-slippage',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'Swapper AS t',
+        where: 't.slippage IS NULL',
+    },
+    {
+        id: 'swapperRoute.same-token',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'SwapperRoute AS t',
+        where: 't.from_token_id = t.to_token_id',
+    },
+    {
+        id: 'swapperRoute.invalid-min-sign',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'SwapperRoute AS t',
+        where: 't.min_amount_sign NOT IN (-1, 0, 1)',
+    },
 ];
 
 const CLASSIC_ARRAY_GROUPS = [
@@ -310,11 +525,19 @@ export const catalogScope = (from: string): { entity: IndexedEntity; column: str
         case 'ClassicPosition':
         case 'ClassicHarvestEvent':
         case 'ClassicPositionInteraction':
+        case 'ClassicSnapshot':
             return { entity: 'Classic', column: `${alias}.classic_id` };
         case 'ClmPosition':
         case 'ClmHarvestEvent':
         case 'ClmPositionInteraction':
+        case 'ClmSnapshot':
+        case 'ClmManagerCollectionEvent':
+        case 'ClmDepositEvent':
+        case 'ClmWithdrawEvent':
+        case 'ClmStrategyTvlEvent':
             return { entity: 'Clm', column: `${alias}.clm_id` };
+        case 'RewardPoolRewardedEvent':
+            return { entity: 'RewardPool', column: `${alias}.pool_share_token_id` };
         default:
             throw new Error(`No catalog scope for ${from}`);
     }
@@ -341,7 +564,13 @@ export const catalogIdsByEntity = (catalog: CatalogProduct[]): Map<IndexedEntity
     return ids;
 };
 
-const catalogPredicate = (from: string, idsByEntity: Map<IndexedEntity, readonly string[]>) => {
+export const catalogPredicate = (from: string, idsByEntity: Map<IndexedEntity, readonly string[]>) => {
+    const table = from.split(' ')[0];
+    if (table === 'RewardPoolRewardedEvent') {
+        const alias = firstAlias(from);
+        const poolIds = [...(idsByEntity.get('RewardPool') ?? []), ...(idsByEntity.get('ClassicBoost') ?? [])];
+        return sqlStringIn(`${alias}.pool_share_token_id`, poolIds);
+    }
     const scope = catalogScope(from);
     return sqlStringIn(scope.column, idsByEntity.get(scope.entity) ?? []);
 };
@@ -635,11 +864,88 @@ export const GRAPH_PROBES: Probe[] = [
         from: 'RewardPool AS t INNER JOIN Clm AS c ON c.id = t.clm_id',
         where: `${initialized} AND ${rewardPoolListedSql('c')}`,
     },
+    {
+        id: 'rewardPool.dual-parent',
+        section: 'structure',
+        severity: 'error',
+        from: 'RewardPool AS t',
+        where: `${initialized} AND NOT ${blank('classic_id')} AND NOT ${blank('clm_id')}`,
+    },
+    {
+        id: 'rewardPool.share-token-identity',
+        section: 'structure',
+        severity: 'error',
+        from: 'RewardPool AS t',
+        where: `${initialized} AND t.share_token_id != t.id`,
+    },
+    {
+        id: 'erc4626Adapter.not-listed',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClassicErc4626Adapter AS t INNER JOIN Classic AS c ON c.id = t.classic_id',
+        where: `${initialized} AND NOT has(c.erc4626_adapter_token_ids, t.share_token_id)`,
+    },
+    {
+        id: 'classic.strategy-vault-mismatch',
+        section: 'structure',
+        severity: 'error',
+        from: 'Classic AS t INNER JOIN ClassicVaultStrategy AS s ON s.id = t.classic_vault_strategy_id',
+        where: `${initialized} AND s.classic_vault_id != t.id`,
+    },
+    {
+        id: 'clm.strategy-manager-mismatch',
+        section: 'structure',
+        severity: 'error',
+        from: 'Clm AS t INNER JOIN ClmStrategy AS s ON s.id = t.clm_strategy_id',
+        where: `${initialized} AND s.clm_manager_id != t.id`,
+    },
+    {
+        id: 'classic.pausable-mismatch',
+        section: 'structure',
+        severity: 'error',
+        from: 'Classic AS t INNER JOIN ClassicVaultStrategy AS s ON s.id = t.classic_vault_strategy_id',
+        where: `${initialized} AND t.pausable_status != s.pausable_status`,
+    },
+    {
+        id: 'clm.pausable-mismatch',
+        section: 'structure',
+        severity: 'error',
+        from: 'Clm AS t INNER JOIN ClmStrategy AS s ON s.id = t.clm_strategy_id',
+        where: `${initialized} AND t.pausable_status != s.pausable_status`,
+    },
+    {
+        id: 'classic.token-ids-order',
+        section: 'structure',
+        severity: 'error',
+        from: 'Classic AS t',
+        where: `${initialized} AND (${tokenIdsOrderMismatchSql('underlying_breakdown_token_ids', 'underlying_breakdown_tokens_order')} OR ${tokenIdsOrderMismatchSql('reward_pool_token_ids', 'reward_pool_tokens_order')} OR ${tokenIdsOrderMismatchSql('boost_reward_token_ids', 'boost_reward_tokens_order')} OR ${tokenIdsOrderMismatchSql('reward_token_ids', 'reward_tokens_order')} OR ${tokenIdsOrderMismatchSql('erc4626_adapter_token_ids', 'erc4626_adapter_tokens_order')})`,
+    },
+    {
+        id: 'clm.token-ids-order',
+        section: 'structure',
+        severity: 'error',
+        from: 'Clm AS t',
+        where: `${initialized} AND (${tokenIdsOrderMismatchSql('reward_pool_token_ids', 'reward_pool_tokens_order')} OR ${tokenIdsOrderMismatchSql('output_token_ids', 'output_tokens_order')} OR ${tokenIdsOrderMismatchSql('reward_token_ids', 'reward_tokens_order')})`,
+    },
+    {
+        id: 'classic.vault-token-id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'Classic AS t INNER JOIN Token AS token ON token.id = t.vault_token_id',
+        where: `${initialized} AND ${tokenIdMismatchSql('token')}`,
+    },
+    {
+        id: 'clm.manager-token-id-address',
+        section: 'structure',
+        severity: 'error',
+        from: 'Clm AS t INNER JOIN Token AS token ON token.id = t.manager_token_id',
+        where: `${initialized} AND ${tokenIdMismatchSql('token')}`,
+    },
 ];
 
 const arraySum = (column: string) => `arraySum(arrayMap(x -> toDecimal256OrZero(x, 24), ${column}))`;
 
-const POSITION_PROBES: Probe[] = [
+export const POSITION_PROBES: Probe[] = [
     {
         id: 'classicPosition.reward-pool-alignment',
         section: 'structure',
@@ -666,7 +972,14 @@ const POSITION_PROBES: Probe[] = [
         section: 'sanity',
         severity: 'warning',
         from: 'ClassicPosition AS p',
-        where: `${dec('p.total_balance')} < 0`,
+        where: `${dec('p.total_balance')} < 0 OR ${dec('p.vault_balance')} < 0 OR ${dec('p.boost_balance')} < 0 OR ${arrayHasNegative('reward_pool_balances', 'p')} OR ${arrayHasNegative('erc4626_adapter_balances', 'p')} OR ${arrayHasNegative('erc4626_adapter_vault_shares_balances', 'p')}`,
+    },
+    {
+        id: 'classicPosition.vault-balance-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClassicPosition AS p INNER JOIN Classic AS c ON c.id = p.classic_id LEFT JOIN TokenBalance AS tb ON tb.token_id = c.vault_token_id AND tb.account_id = p.account_id',
+        where: `abs(${dec('p.vault_balance')} - ${dec("ifNull(tb.amount, '0')")}) > 0`,
     },
     {
         id: 'clmPosition.reward-pool-alignment',
@@ -687,7 +1000,28 @@ const POSITION_PROBES: Probe[] = [
         section: 'sanity',
         severity: 'warning',
         from: 'ClmPosition AS p',
-        where: `${dec('p.total_balance')} < 0`,
+        where: `${dec('p.total_balance')} < 0 OR ${dec('p.manager_balance')} < 0 OR ${arrayHasNegative('reward_pool_balances', 'p')}`,
+    },
+    {
+        id: 'clmPosition.manager-balance-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmPosition AS p INNER JOIN Clm AS c ON c.id = p.clm_id LEFT JOIN TokenBalance AS tb ON tb.token_id = c.manager_token_id AND tb.account_id = p.account_id',
+        where: `abs(${dec('p.manager_balance')} - ${dec("ifNull(tb.amount, '0')")}) > 0`,
+    },
+    {
+        id: 'clmPosition.reward-pool-balance-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmPosition AS p INNER JOIN Clm AS c ON c.id = p.clm_id ARRAY JOIN arrayEnumerate(c.reward_pool_token_ids) AS idx LEFT JOIN TokenBalance AS tb ON tb.token_id = c.reward_pool_token_ids[idx] AND tb.account_id = p.account_id',
+        where: `abs(${dec('p.reward_pool_balances[idx]')} - ${dec("ifNull(tb.amount, '0')")}) > 0`,
+    },
+    {
+        id: 'classicPosition.reward-pool-balance-mismatch',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClassicPosition AS p INNER JOIN Classic AS c ON c.id = p.classic_id ARRAY JOIN arrayEnumerate(c.reward_pool_token_ids) AS idx LEFT JOIN TokenBalance AS tb ON tb.token_id = c.reward_pool_token_ids[idx] AND tb.account_id = p.account_id',
+        where: `abs(${dec('p.reward_pool_balances[idx]')} - ${dec("ifNull(tb.amount, '0')")}) > 0`,
     },
 ];
 
@@ -730,6 +1064,12 @@ const CLM_INTERACTION_PAIRS = [
     ['t.reward_to_native_prices', 'c.reward_tokens_order'],
 ] as const;
 
+const CLM_COLLECTION_PAIRS = [
+    ['t.collected_output_amounts', 'c.output_tokens_order'],
+    ['t.output_to_native_prices', 'c.output_tokens_order'],
+    ['t.reward_to_native_prices', 'c.reward_tokens_order'],
+] as const;
+
 export const EVENT_PROBES: Probe[] = [
     blankField('ClassicHarvestEvent', 'classic_id', 'classicHarvest.missing-classic'),
     blankField('ClassicHarvestEvent', 'classic_vault_strategy_id', 'classicHarvest.missing-strategy'),
@@ -741,6 +1081,16 @@ export const EVENT_PROBES: Probe[] = [
     blankField('ClmPositionInteraction', 'clm_id', 'clmInteraction.missing-clm'),
     blankField('ClmPositionInteraction', 'account_id', 'clmInteraction.missing-account'),
     blankField('ClmPositionInteraction', 'clm_position_id', 'clmInteraction.missing-position'),
+    blankField('ClmManagerCollectionEvent', 'clm_id', 'clmCollection.missing-clm'),
+    blankField('ClmManagerCollectionEvent', 'clm_strategy_id', 'clmCollection.missing-strategy'),
+    blankField('ClmDepositEvent', 'clm_id', 'clmDeposit.missing-clm'),
+    blankField('ClmDepositEvent', 'account_id', 'clmDeposit.missing-account'),
+    blankField('ClmWithdrawEvent', 'clm_id', 'clmWithdraw.missing-clm'),
+    blankField('ClmWithdrawEvent', 'account_id', 'clmWithdraw.missing-account'),
+    blankField('ClmStrategyTvlEvent', 'clm_id', 'clmTvl.missing-clm'),
+    blankField('ClmStrategyTvlEvent', 'clm_strategy_id', 'clmTvl.missing-strategy'),
+    blankField('RewardPoolRewardedEvent', 'pool_share_token_id', 'rewarded.missing-pool-token'),
+    blankField('RewardPoolRewardedEvent', 'reward_token_id', 'rewarded.missing-reward-token'),
     {
         id: 'classicHarvest.array-alignment',
         section: 'structure',
@@ -782,6 +1132,69 @@ export const EVENT_PROBES: Probe[] = [
         severity: 'warning',
         from: 'ClmPositionInteraction AS t',
         where: `abs(${dec('t.total_balance')} - (${dec('t.manager_balance')} + ${arraySum('t.reward_pool_balances')})) > 0`,
+    },
+    {
+        id: 'clmCollection.array-alignment',
+        section: 'structure',
+        severity: 'error',
+        from: 'ClmManagerCollectionEvent AS t INNER JOIN Clm AS c ON c.id = t.clm_id',
+        where: pairMismatch(CLM_COLLECTION_PAIRS),
+    },
+    {
+        id: 'classicInteraction.type-delta',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClassicPositionInteraction AS t',
+        where: `(t.type = 'VAULT_DEPOSIT' AND ${dec('t.vault_balance_delta')} < 0) OR (t.type = 'VAULT_WITHDRAW' AND ${dec('t.vault_balance_delta')} > 0) OR (t.type = 'BOOST_STAKE' AND ${dec('t.boost_balance_delta')} < 0) OR (t.type = 'BOOST_UNSTAKE' AND ${dec('t.boost_balance_delta')} > 0) OR (t.type = 'CLASSIC_REWARD_POOL_STAKE' AND ${arraySum('t.reward_pool_balances_delta')} < 0) OR (t.type = 'CLASSIC_REWARD_POOL_UNSTAKE' AND ${arraySum('t.reward_pool_balances_delta')} > 0) OR (t.type = 'CLASSIC_ERC4626_ADAPTER_STAKE' AND ${arraySum('t.erc4626_adapter_balances_delta')} < 0) OR (t.type = 'CLASSIC_ERC4626_ADAPTER_UNSTAKE' AND ${arraySum('t.erc4626_adapter_balances_delta')} > 0)`,
+    },
+    {
+        id: 'clmInteraction.type-delta',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmPositionInteraction AS t',
+        where: `(t.type = 'MANAGER_DEPOSIT' AND ${dec('t.manager_balance_delta')} < 0) OR (t.type = 'MANAGER_WITHDRAW' AND ${dec('t.manager_balance_delta')} > 0) OR (t.type = 'CLM_REWARD_POOL_STAKE' AND ${arraySum('t.reward_pool_balances_delta')} < 0) OR (t.type = 'CLM_REWARD_POOL_UNSTAKE' AND ${arraySum('t.reward_pool_balances_delta')} > 0) OR (t.type = 'CLM_REWARD_POOL_CLAIM' AND ${blank('claimed_reward_pool_id')}) OR (t.type != 'CLM_REWARD_POOL_CLAIM' AND NOT ${blank('claimed_reward_pool_id')})`,
+    },
+    {
+        id: 'clmDeposit.negative-amounts',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmDepositEvent AS t',
+        where: `${negativeCol('shares')} OR ${negativeCol('amount0')} OR ${negativeCol('amount1')} OR ${negativeCol('fee0')} OR ${negativeCol('fee1')}`,
+    },
+    {
+        id: 'clmWithdraw.negative-amounts',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmWithdrawEvent AS t',
+        where: `${negativeCol('shares')} OR ${negativeCol('amount0')} OR ${negativeCol('amount1')}`,
+    },
+    {
+        id: 'clmTvl.negative-amounts',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmStrategyTvlEvent AS t',
+        where: `${negativeCol('underlying_amount0')} OR ${negativeCol('underlying_amount1')}`,
+    },
+    {
+        id: 'classicHarvest.negative-compounded',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClassicHarvestEvent AS t',
+        where: `${negativeCol('compounded_amount')} OR ${negativeCol('underlying_amount')} OR ${negativeCol('vault_token_total_supply')}`,
+    },
+    {
+        id: 'clmHarvest.negative-compounded',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'ClmHarvestEvent AS t',
+        where: `${negativeCol('compounded_amount0')} OR ${negativeCol('compounded_amount1')} OR ${negativeCol('underlying_amount0')} OR ${negativeCol('underlying_amount1')} OR ${negativeCol('manager_total_supply')}`,
+    },
+    {
+        id: 'rewarded.negative-amount',
+        section: 'sanity',
+        severity: 'warning',
+        from: 'RewardPoolRewardedEvent AS t',
+        where: `${negativeCol('reward_amount')} OR toInt64OrZero(t.reward_vesting_seconds) < 0`,
     },
 ];
 
@@ -897,7 +1310,7 @@ const auditClockTicks = async (
     const stale: string[] = [];
     for (const chainId of chainIds) {
         const latest = await client.query<{ latest: string }>(
-            `SELECT toString(max(rounded_timestamp)) AS latest FROM ClockTick WHERE chain_id = ${chainId} AND period = '3600'`
+            `SELECT toString(max(rounded_timestamp)) AS latest FROM ClockTick WHERE chain_id = ${chainId} AND period = '${CLOCK_TICK_PERIOD}'`
         );
         const latestAt = latest[0]?.latest;
         if (!latestAt || latestAt.startsWith('1970-')) {
@@ -905,16 +1318,34 @@ const auditClockTicks = async (
             continue;
         }
         const fresh = await client.query<{ count: string }>(
-            `SELECT count() AS count FROM ClockTick WHERE chain_id = ${chainId} AND period = '3600' AND rounded_timestamp >= now64(3) - INTERVAL 2 HOUR`
+            `SELECT count() AS count FROM ClockTick WHERE chain_id = ${chainId} AND period = '${CLOCK_TICK_PERIOD}' AND rounded_timestamp >= now64(3) - INTERVAL 2 HOUR`
         );
         if (Number(fresh[0]?.count ?? 0) === 0) {
             stale.push(`${chainId} last=${latestAt}`);
         }
     }
+    const unexpected = await Promise.all([
+        client.query<{ count: string }>(
+            `SELECT count() AS count FROM ClockTick WHERE ${chainIn('chain_id', chainIds)} AND period != '${CLOCK_TICK_PERIOD}'`
+        ),
+        client.query<{ id: string }>(
+            `SELECT id FROM ClockTick WHERE ${chainIn('chain_id', chainIds)} AND period != '${CLOCK_TICK_PERIOD}' ORDER BY id LIMIT ${sampleSize}`
+        ),
+    ]);
     const findings: Finding[] = [];
     pushIfAny(
         findings,
         finding('sanity', 'warning', 'clockTick.stale-hourly', stale.length, stale.slice(0, sampleSize))
+    );
+    pushIfAny(
+        findings,
+        finding(
+            'structure',
+            'error',
+            'clockTick.unexpected-period',
+            Number(unexpected[0][0]?.count ?? 0),
+            unexpected[1].map((row) => row.id)
+        )
     );
     return findings;
 };
@@ -1015,6 +1446,146 @@ const auditLedger = async (
             'tokenBalanceChange.missing-fk',
             Number(fks[0][0]?.count ?? 0),
             fks[1].map((row) => row.id)
+        )
+    );
+
+    const balanceFkWhere = `${chains} AND ${tokens} AND (${blank('account_id', 'tb')} OR ${blank('token_id', 'tb')})`;
+    const balanceFks = await Promise.all([
+        client.query<{ count: string }>(`SELECT count() AS count FROM TokenBalance AS tb WHERE ${balanceFkWhere}`),
+        client.query<{ id: string }>(
+            `SELECT tb.id AS id FROM TokenBalance AS tb WHERE ${balanceFkWhere} ORDER BY tb.id LIMIT ${sampleSize}`
+        ),
+    ]);
+    pushIfAny(
+        findings,
+        finding(
+            'structure',
+            'error',
+            'tokenBalance.missing-fk',
+            Number(balanceFks[0][0]?.count ?? 0),
+            balanceFks[1].map((row) => row.id)
+        )
+    );
+
+    const tokenIdsSql = sqlStringIn('t.id', tokenIds);
+    const tokenChains = chainIn('t.chain_id', chainIds);
+    const holderWhere = `${tokenChains} AND ${tokenIdsSql} AND t.holder_count != toInt32(ifNull(h.holders, 0))`;
+    const holderFrom = `Token AS t LEFT JOIN (SELECT token_id, countIf(${dec('tb.amount')} != 0) AS holders FROM TokenBalance AS tb WHERE ${chains} AND ${tokens} GROUP BY token_id) AS h ON h.token_id = t.id`;
+    const holders = await Promise.all([
+        client.query<{ count: string }>(`SELECT count() AS count FROM ${holderFrom} WHERE ${holderWhere}`),
+        client.query<{ id: string }>(
+            `SELECT t.id AS id FROM ${holderFrom} WHERE ${holderWhere} ORDER BY t.id LIMIT ${sampleSize}`
+        ),
+    ]);
+    pushIfAny(
+        findings,
+        finding(
+            'sanity',
+            'warning',
+            'token.holder-count-mismatch',
+            Number(holders[0][0]?.count ?? 0),
+            holders[1].map((row) => row.id)
+        )
+    );
+
+    const circulating = `tb.account_id NOT IN ('0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead')`;
+    const supplyWhere = `${tokenChains} AND ${tokenIdsSql} AND abs(${dec('t.total_supply')} - ifNull(s.balance_sum, 0)) > 0`;
+    const supplyFrom = `Token AS t LEFT JOIN (SELECT token_id, sum(${dec('tb.amount')}) AS balance_sum FROM TokenBalance AS tb WHERE ${chains} AND ${tokens} AND ${circulating} GROUP BY token_id) AS s ON s.token_id = t.id`;
+    const supplies = await Promise.all([
+        client.query<{ count: string }>(`SELECT count() AS count FROM ${supplyFrom} WHERE ${supplyWhere}`),
+        client.query<{ id: string }>(
+            `SELECT t.id AS id FROM ${supplyFrom} WHERE ${supplyWhere} ORDER BY t.id LIMIT ${sampleSize}`
+        ),
+    ]);
+    pushIfAny(
+        findings,
+        finding(
+            'sanity',
+            'warning',
+            'token.supply-sum-mismatch',
+            Number(supplies[0][0]?.count ?? 0),
+            supplies[1].map((row) => row.id)
+        )
+    );
+
+    const tokenNegWhere = `${tokenChains} AND ${tokenIdsSql} AND (t.holder_count < 0 OR ${dec('t.total_supply')} < 0)`;
+    const tokenNeg = await Promise.all([
+        client.query<{ count: string }>(`SELECT count() AS count FROM Token AS t WHERE ${tokenNegWhere}`),
+        client.query<{ id: string }>(
+            `SELECT t.id AS id FROM Token AS t WHERE ${tokenNegWhere} ORDER BY t.id LIMIT ${sampleSize}`
+        ),
+    ]);
+    pushIfAny(
+        findings,
+        finding(
+            'sanity',
+            'warning',
+            'token.negative-metrics',
+            Number(tokenNeg[0][0]?.count ?? 0),
+            tokenNeg[1].map((row) => row.id)
+        )
+    );
+
+    const tokenIdWhere = `${tokenChains} AND ${tokenIdsSql} AND ${tokenIdMismatchSql('t')}`;
+    const tokenIdsBad = await Promise.all([
+        client.query<{ count: string }>(`SELECT count() AS count FROM Token AS t WHERE ${tokenIdWhere}`),
+        client.query<{ id: string }>(
+            `SELECT t.id AS id FROM Token AS t WHERE ${tokenIdWhere} ORDER BY t.id LIMIT ${sampleSize}`
+        ),
+    ]);
+    pushIfAny(
+        findings,
+        finding(
+            'structure',
+            'error',
+            'token.id-address',
+            Number(tokenIdsBad[0][0]?.count ?? 0),
+            tokenIdsBad[1].map((row) => row.id)
+        )
+    );
+
+    const accountWhere = `${chainIn('t.chain_id', chainIds)} AND ${accountIdMismatchSql('t')}`;
+    const accounts = await Promise.all([
+        client.query<{ count: string }>(`SELECT count() AS count FROM Account AS t WHERE ${accountWhere}`),
+        client.query<{ id: string }>(
+            `SELECT t.id AS id FROM Account AS t WHERE ${accountWhere} ORDER BY t.id LIMIT ${sampleSize}`
+        ),
+    ]);
+    pushIfAny(
+        findings,
+        finding(
+            'structure',
+            'error',
+            'account.id-address',
+            Number(accounts[0][0]?.count ?? 0),
+            accounts[1].map((row) => row.id)
+        )
+    );
+
+    const continuityFrom = `(
+        SELECT
+            t.id AS id,
+            ${dec('t.balance_before')} AS before,
+            lagInFrame(${dec('t.balance_after')}) OVER (PARTITION BY t.token_balance_id ORDER BY ${changeBlockSeq('t')}) AS prev_after,
+            row_number() OVER (PARTITION BY t.token_balance_id ORDER BY ${changeBlockSeq('t')}) AS rn
+        FROM TokenBalanceChange AS t
+        WHERE ${chainIn('t.chain_id', chainIds)} AND ${changeTokens}
+    ) AS x`;
+    const continuityWhere = 'rn > 1 AND before != prev_after';
+    const continuity = await Promise.all([
+        client.query<{ count: string }>(`SELECT count() AS count FROM ${continuityFrom} WHERE ${continuityWhere}`),
+        client.query<{ id: string }>(
+            `SELECT x.id AS id FROM ${continuityFrom} WHERE ${continuityWhere} ORDER BY x.id LIMIT ${sampleSize}`
+        ),
+    ]);
+    pushIfAny(
+        findings,
+        finding(
+            'sanity',
+            'warning',
+            'tokenBalanceChange.continuity',
+            Number(continuity[0][0]?.count ?? 0),
+            continuity[1].map((row) => row.id)
         )
     );
     return findings;
