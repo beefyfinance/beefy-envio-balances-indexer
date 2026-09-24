@@ -9,7 +9,7 @@ import type {
 } from 'envio';
 import type { ClassicState } from '../effects/classic.effects';
 import { BIG_ZERO, type BigDecimal } from '../lib/decimal';
-import { type Bytes, toHex } from '../lib/hex';
+import { asHex, type Bytes, toHex } from '../lib/hex';
 export const classicId = ({ chainId, vaultAddress }: { chainId: EvmChainId; vaultAddress: Bytes }) =>
     `${chainId}-${toHex(vaultAddress)}`;
 
@@ -197,23 +197,30 @@ export const addClassicRewardToken = async ({
     context: EvmOnEventContext;
     classic: Classic;
     rewardToken: Token;
-}) => {
+}): Promise<Classic> => {
     const rewardToken_ids = [...classic.rewardToken_ids];
     const rewardTokensOrder = [...classic.rewardTokensOrder];
-    const rewardAddressStr = toHex(rewardToken.address);
+    const rewardToNativePrices = [...classic.rewardToNativePrices];
+    const rewardAddressStr = asHex(toHex(rewardToken.address));
 
-    if (rewardTokensOrder.includes(rewardAddressStr)) {
-        return;
+    if (rewardTokensOrder.some((address) => asHex(address) === rewardAddressStr)) {
+        return classic;
     }
 
     rewardToken_ids.push(rewardToken.id);
     rewardTokensOrder.push(rewardAddressStr);
+    while (rewardToNativePrices.length < rewardTokensOrder.length) {
+        rewardToNativePrices.push(BIG_ZERO);
+    }
 
-    context.Classic.set({
+    const updated = {
         ...classic,
         rewardToken_ids,
         rewardTokensOrder,
-    });
+        rewardToNativePrices,
+    };
+    context.Classic.set(updated);
+    return updated;
 };
 
 export const linkClassicErc4626Adapter = async ({

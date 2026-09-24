@@ -1,10 +1,11 @@
-import type { Clm, ClmManager, ClmStrategy, EvmChainId, EvmOnEventContext } from 'envio';
+import type { Clm, ClmManager, ClmStrategy, EvmBlock, EvmChainId, EvmOnEventContext } from 'envio';
 import {
     fetchClmState,
     getClmManagerStrategy,
     getClmStrategyInitData,
     parseFetchedClmState,
 } from '../../effects/clm.effects';
+import { getClmManagerTokens } from '../../effects/clmManager.effects';
 import {
     finalizeClmInitialization,
     getClm,
@@ -12,10 +13,99 @@ import {
     isClmInitialized,
     linkClmStrategy,
 } from '../../entities/clm.entity';
+import { createClmManager, getClmManager } from '../../entities/clmManager.entity';
 import { getOrCreateToken } from '../../entities/token.entity';
-import { type Bytes, toBytes, toHex, ZERO_ADDRESS_HEX } from '../../lib/hex';
+import { logBlacklistStatus } from '../blacklist';
+import { type Bytes, toBytes, toHex, ZERO_ADDRESS_HEX } from '../hex';
 import { refreshClm } from './refresh';
 import { buildClmFetchInput, loadClmTokens } from './tokens';
+
+export const initializeClmManager = async ({
+    context,
+    chainId,
+    managerAddress,
+    initializedBlock,
+}: {
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
+    managerAddress: Bytes;
+    initializedBlock: EvmBlock;
+}): Promise<ClmManager | null> => {
+    const existingManager = await getClmManager(context, chainId, managerAddress);
+    if (existingManager) {
+        return existingManager;
+    }
+
+    context.log.info('Initializing ClmManager', { managerAddress, chainId });
+
+    const {
+        shareTokenAddress: shareTokenAddressStr,
+        underlyingToken0Address: underlyingToken0AddressStr,
+        underlyingToken1Address: underlyingToken1AddressStr,
+        blacklistStatus,
+    } = await context.effect(getClmManagerTokens, {
+        managerAddress: toHex(managerAddress),
+        chainId,
+    });
+    const shareTokenAddress = toBytes(shareTokenAddressStr);
+    const underlyingToken0Address = toBytes(underlyingToken0AddressStr);
+    const underlyingToken1Address = toBytes(underlyingToken1AddressStr);
+
+    if (blacklistStatus !== 'ok') {
+        logBlacklistStatus(context.log, blacklistStatus, 'ClmManager', {
+            contractAddress: managerAddress,
+            shareTokenAddress,
+            underlyingToken0Address,
+            underlyingToken1Address,
+        });
+        return null;
+    }
+
+    const [shareToken, underlyingToken0, underlyingToken1] = await Promise.all([
+        getOrCreateToken({
+            context,
+            chainId,
+            tokenAddress: shareTokenAddress,
+            virtual: false,
+        }),
+        getOrCreateToken({
+            context,
+            chainId,
+            tokenAddress: underlyingToken0Address,
+            virtual: false,
+        }),
+        getOrCreateToken({
+            context,
+            chainId,
+            tokenAddress: underlyingToken1Address,
+            virtual: false,
+        }),
+    ]);
+
+    if (!shareToken || !underlyingToken0 || !underlyingToken1) {
+        logBlacklistStatus(context.log, 'maybe_blacklisted', 'ClmManager', {
+            contractAddress: managerAddress,
+            shareTokenAddress,
+            underlyingToken0Address,
+            underlyingToken1Address,
+            reason: 'invalid_token_metadata',
+        });
+        return null;
+    }
+
+    const manager = await createClmManager({
+        context,
+        chainId,
+        managerAddress,
+        shareToken,
+        underlyingToken0,
+        underlyingToken1,
+        initializedBlock,
+    });
+
+    await ensureClmAggregate({ context, chainId, manager, initializedBlock });
+    return manager;
+};
 
 export const ensureClmAggregate = async ({
     context,

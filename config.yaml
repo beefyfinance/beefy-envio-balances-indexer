@@ -1944,10 +1944,13 @@ chains:
       - name: RewardPoolFactory
         address:
           - 0xf8a577A29C85Bb379Ef9CEf2eAe5AB11c3965C1b
+          - 0xbdE5D2e961fCdfaA7BfEae62E1a510703cF64767
       - name: ClmManagerFactory
-        address: []
+        address:
+          - 0x2BD7d9e64Fc136F13203dd7070fD2D5A90D693FE
       - name: ClmStrategyFactory
-        address: []
+        address:
+          - 0xE296007Fd2224651A463667c53CaD1e3E182C294
       - name: ContractFactory
         address: []
       - name: Erc4626AdapterFactory
@@ -2956,7 +2959,8 @@ chains:
       - name: ContractFactory
         address: []
       - name: Erc4626AdapterFactory
-        address: []
+        address:
+          - 0x6ac884842C58bfd7B8a0E3Ab383cf879E36cc956
       - name: ClassicVault
         address: []
       - name: ClassicBoost
@@ -3128,7 +3132,8 @@ chains:
       - name: ContractFactory
         address: []
       - name: Erc4626AdapterFactory
-        address: []
+        address:
+          - 0x3D498F3A444cE89086d37A5f803058E6E8b45FAD
       - name: ClassicVault
         address: []
       - name: ClassicBoost
@@ -4205,7 +4210,11 @@ chains:
       - name: ClassicVault
         address: []
       - name: ClassicBoost
-        address: []
+        address:
+          - 0x13ec60CcFFD2cf989912CCBC038D618d3F56a30E
+          - 0xC5ff71a8754c9A9FC0c27EE297025Ea7eEbDD19d
+          - 0x83a074A41c06c07631e284463ea2bfc3d2f674c5
+          - 0xcdDa7830A6F034d66a46919f3D132f53A56a356d
       - name: ClassicStrategy
         address: []
       - name: ClassicStrategyStratHarvest0

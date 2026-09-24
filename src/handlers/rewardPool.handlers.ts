@@ -1,4 +1,4 @@
-import type { EvmBlock, EvmChainId, EvmOnEventContext, RewardPool } from 'envio';
+import type { Classic, Clm, EvmBlock, EvmChainId, EvmOnEventContext, RewardPool } from 'envio';
 import { indexer } from 'envio';
 import { fetchClassicState, parseFetchedClassicState } from '../effects/classic.effects';
 import { fetchClmState, parseFetchedClmState } from '../effects/clm.effects';
@@ -151,6 +151,8 @@ indexer.onEvent(
                 trxHash: toBytes(event.transaction.hash),
             },
         });
+
+        await addRewardTokenToParent({ context, chainId, rewardPool, rewardToken });
     }
 );
 
@@ -174,24 +176,19 @@ indexer.onEvent(
         });
         if (!rewardPool) return;
 
-        const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
-        const isClmPool = await isClmManagerRewardPool({
+        const rewardToken = await getOrCreateToken({
             context,
             chainId,
-            stakedTokenAddress: underlyingToken.address,
+            tokenAddress: toBytes(event.params.reward),
+            virtual: false,
         });
+        if (!rewardToken) return;
 
-        if (isClmPool) {
-            const clm = await getClm(context, chainId, underlyingToken.address);
-            if (!clm || clm.initializableStatus !== 'INITIALIZED') return;
+        const parent = await addRewardTokenToParent({ context, chainId, rewardPool, rewardToken });
 
-            const rewardToken = await getOrCreateToken({
-                context,
-                chainId,
-                tokenAddress: toBytes(event.params.reward),
-                virtual: false,
-            });
-            if (!rewardToken) return;
+        if (parent.clm) {
+            const clm = parent.clm;
+            if (clm.initializableStatus !== 'INITIALIZED') return;
 
             const tokenContext = await loadClmTokens({ context, clm });
             const rawState = await context.effect(
@@ -219,24 +216,9 @@ indexer.onEvent(
             return;
         }
 
-        const isClassicPool = await isClassicVaultStakedToken({
-            context,
-            chainId,
-            stakedTokenAddress: underlyingToken.address,
-        });
-        if (!isClassicPool) return;
+        if (!parent.classic || parent.classic.initializableStatus !== 'INITIALIZED') return;
 
-        const classic = await getClassic(context, chainId, underlyingToken.address);
-        if (!classic || classic.initializableStatus !== 'INITIALIZED') return;
-
-        const rewardToken = await getOrCreateToken({
-            context,
-            chainId,
-            tokenAddress: toBytes(event.params.reward),
-            virtual: false,
-        });
-        if (!rewardToken) return;
-
+        const classic = parent.classic;
         const tokenContext = await loadClassicTokens({ context, classic });
         const fetchInput = await buildClassicFetchInput({
             context,
@@ -285,39 +267,6 @@ indexer.onEvent(
         });
         if (!rewardPool) return;
 
-        const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
-        const isClmPool = await isClmManagerRewardPool({
-            context,
-            chainId,
-            stakedTokenAddress: underlyingToken.address,
-        });
-
-        if (isClmPool) {
-            const clm = await getClm(context, chainId, underlyingToken.address);
-            if (!clm) return;
-
-            const rewardToken = await getOrCreateToken({
-                context,
-                chainId,
-                tokenAddress: toBytes(event.params.reward),
-                virtual: false,
-            });
-            if (!rewardToken) return;
-
-            await addClmRewardToken({ context, clm, rewardToken });
-            return;
-        }
-
-        const isClassicPool = await isClassicVaultStakedToken({
-            context,
-            chainId,
-            stakedTokenAddress: underlyingToken.address,
-        });
-        if (!isClassicPool) return;
-
-        const classic = await getClassic(context, chainId, underlyingToken.address);
-        if (!classic) return;
-
         const rewardToken = await getOrCreateToken({
             context,
             chainId,
@@ -326,9 +275,39 @@ indexer.onEvent(
         });
         if (!rewardToken) return;
 
-        await addClassicRewardToken({ context, classic, rewardToken });
+        await addRewardTokenToParent({ context, chainId, rewardPool, rewardToken });
     }
 );
+
+const addRewardTokenToParent = async ({
+    context,
+    chainId,
+    rewardPool,
+    rewardToken,
+}: {
+    context: EvmOnEventContext;
+    chainId: EvmChainId;
+    rewardPool: RewardPool;
+    rewardToken: NonNullable<Awaited<ReturnType<typeof getOrCreateToken>>>;
+}): Promise<{ clm?: Clm; classic?: Classic }> => {
+    const underlyingToken = await getTokenOrThrow({ context, id: rewardPool.underlyingToken_id });
+    if (await isClmManagerRewardPool({ context, chainId, stakedTokenAddress: underlyingToken.address })) {
+        const clm = await getClm(context, chainId, underlyingToken.address);
+        if (clm) {
+            return { clm: await addClmRewardToken({ context, clm, rewardToken }) };
+        }
+        return {};
+    }
+
+    if (await isClassicVaultStakedToken({ context, chainId, stakedTokenAddress: underlyingToken.address })) {
+        const classic = await getClassic(context, chainId, underlyingToken.address);
+        if (classic) {
+            return { classic: await addClassicRewardToken({ context, classic, rewardToken }) };
+        }
+    }
+
+    return {};
+};
 
 const maybeHandleClmRewardPoolTransfer = async ({
     context,

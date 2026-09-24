@@ -17,7 +17,7 @@ import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
 import { type EventMetadata, eventId } from '../event';
-import { type Bytes, bytesEqual, toHex } from '../hex';
+import { asHex, type Bytes, bytesEqual, toHex } from '../hex';
 
 const isRewardPoolAddress = (clm: Clm, address: Bytes): boolean => clm.rewardPoolTokensOrder.includes(toHex(address));
 
@@ -217,7 +217,7 @@ const updateClmPositionFromDeltas = async ({
 
     const isSharesTransfer = !managerBalanceDelta.eq(BIG_ZERO);
     const isRewardPoolTransfer = paddedRewardPoolBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
-    const isRewardClaim = paddedRewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
+    const isRewardClaim = Boolean(claimedRewardPool) || paddedRewardBalancesDelta.some((delta) => !delta.eq(BIG_ZERO));
 
     let interactionSuffix = 0;
     if (isSharesTransfer) {
@@ -229,7 +229,9 @@ const updateClmPositionFromDeltas = async ({
     }
 
     let type: ClmPositionInteraction['type'] = 'MANAGER_DEPOSIT';
-    if (isSharesTransfer) {
+    if (claimedRewardPool) {
+        type = 'CLM_REWARD_POOL_CLAIM';
+    } else if (isSharesTransfer) {
         type = managerBalanceDelta.gt(BIG_ZERO) ? 'MANAGER_DEPOSIT' : 'MANAGER_WITHDRAW';
     } else if (isRewardPoolTransfer) {
         type = paddedRewardPoolBalancesDelta.some((delta) => delta.gt(BIG_ZERO))
@@ -390,9 +392,9 @@ export const handleClmRewardPoolRewardPaid = async ({
     state: ClmState;
     event: EventMetadata;
 }) => {
-    const rewardTokenAddressStr = toHex(rewardToken.address);
+    const rewardTokenAddressStr = asHex(toHex(rewardToken.address));
     const rewardBalancesDelta = clm.rewardTokensOrder.map((addressStr) =>
-        addressStr === rewardTokenAddressStr ? rewardAmount : BIG_ZERO
+        asHex(addressStr) === rewardTokenAddressStr ? rewardAmount : BIG_ZERO
     );
 
     await updateClmPositionFromDeltas({

@@ -1,12 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { addressBookByChainId } from '@beefyfinance/blockchain-addressbook';
 import { describe, expect, it } from 'vitest';
 import {
+    ADDRESSBOOK_CONFIG_FACTORIES,
     BEEFY_NETWORK_TO_CHAIN_ID,
     type CatalogProduct,
     COVERAGE_ENTITIES,
     type IndexedEntity,
+    isConfiguredAddress,
     loadActiveChainIds,
     loadConfiguredContracts,
     loadConfiguredLstVaults,
@@ -96,6 +99,30 @@ describe('integrity catalog parsers', () => {
             expect.arrayContaining([{ chainId: 80094, address: '0xbc4a342b0c057501e081484a2d24e576e854f823' }])
         );
         expect(loadConfiguredContracts(configYaml, 'BeefySwapper')).toEqual(swappers);
+    });
+
+    it('includes every addressbook factory for active chains', () => {
+        const missing: string[] = [];
+        for (const chainId of loadActiveChainIds(configYaml)) {
+            const beefy =
+                addressBookByChainId[String(chainId) as keyof typeof addressBookByChainId]?.platforms?.beefyfinance;
+            if (!beefy) {
+                continue;
+            }
+            for (const { contract, field } of ADDRESSBOOK_CONFIG_FACTORIES) {
+                const address = beefy[field];
+                if (!isConfiguredAddress(address)) {
+                    continue;
+                }
+                const configured = loadConfiguredContracts(configYaml, contract)
+                    .filter((entry) => entry.chainId === chainId)
+                    .map((entry) => entry.address);
+                if (!configured.includes(address.toLowerCase())) {
+                    missing.push(`${chainId} ${contract} ${address.toLowerCase()}`);
+                }
+            }
+        }
+        expect(missing).toEqual([]);
     });
 });
 

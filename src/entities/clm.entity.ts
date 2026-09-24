@@ -1,7 +1,7 @@
 import type { Clm, ClmManager, ClmStrategy, EvmBlock, EvmChainId, EvmOnEventContext, Token } from 'envio';
 import type { ClmState } from '../effects/clm.effects';
 import { BIG_ZERO, type BigDecimal } from '../lib/decimal';
-import { type Bytes, toHex, ZERO_ADDRESS } from '../lib/hex';
+import { asHex, type Bytes, toHex, ZERO_ADDRESS } from '../lib/hex';
 export const clmId = ({ chainId, managerAddress }: { chainId: EvmChainId; managerAddress: Bytes }) =>
     `${chainId}-${toHex(managerAddress)}`;
 
@@ -176,23 +176,30 @@ export const addClmRewardToken = async ({
     context: EvmOnEventContext;
     clm: Clm;
     rewardToken: Token;
-}) => {
+}): Promise<Clm> => {
     const rewardToken_ids = [...clm.rewardToken_ids];
     const rewardTokensOrder = [...clm.rewardTokensOrder];
-    const rewardAddressStr = toHex(rewardToken.address);
+    const rewardToNativePrices = [...clm.rewardToNativePrices];
+    const rewardAddressStr = asHex(toHex(rewardToken.address));
 
-    if (rewardTokensOrder.includes(rewardAddressStr)) {
-        return;
+    if (rewardTokensOrder.some((address) => asHex(address) === rewardAddressStr)) {
+        return clm;
     }
 
     rewardToken_ids.push(rewardToken.id);
     rewardTokensOrder.push(rewardAddressStr);
+    while (rewardToNativePrices.length < rewardTokensOrder.length) {
+        rewardToNativePrices.push(BIG_ZERO);
+    }
 
-    context.Clm.set({
+    const updated = {
         ...clm,
         rewardToken_ids,
         rewardTokensOrder,
-    });
+        rewardToNativePrices,
+    };
+    context.Clm.set(updated);
+    return updated;
 };
 
 export const setClmPausableStatus = async ({

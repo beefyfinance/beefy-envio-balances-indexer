@@ -16,6 +16,7 @@ import { logBlacklistStatus } from '../lib/blacklist';
 import { toChainId } from '../lib/chain';
 import { ensureClassicAggregate, maybeFinalizeClassic, maybeLinkClassicStrategy } from '../lib/classic/init';
 import { handleClassicVaultTransfer } from '../lib/classic/position';
+import { refreshClassic } from '../lib/classic/refresh';
 import { buildClassicFetchInput, loadClassicTokens } from '../lib/classic/tokens';
 import { interpretAsDecimal } from '../lib/decimal';
 import { type Bytes, toBytes, toHex } from '../lib/hex';
@@ -160,6 +161,13 @@ indexer.onEvent(
         });
         const rawState = await context.effect(fetchClassicState, fetchInput);
         const state = parseFetchedClassicState(rawState, tokenContext);
+
+        await refreshClassic({
+            context,
+            classic,
+            state,
+            timestamp: event.block.timestamp,
+        });
 
         await handleClassicVaultTransfer({
             context,

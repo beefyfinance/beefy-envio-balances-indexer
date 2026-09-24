@@ -157,6 +157,21 @@ export const loadConfiguredContracts = (
     return entries;
 };
 
+export const ADDRESSBOOK_CONFIG_FACTORIES = [
+    { contract: 'ClassicVaultFactory', field: 'vaultFactory' },
+    { contract: 'ClassicStrategyFactory', field: 'strategyFactory' },
+    { contract: 'ClmManagerFactory', field: 'clmFactory' },
+    { contract: 'ClmStrategyFactory', field: 'clmStrategyFactory' },
+    { contract: 'RewardPoolFactory', field: 'clmRewardPoolFactory' },
+    { contract: 'Erc4626AdapterFactory', field: 'wrapperFactory' },
+    { contract: 'BeefySwapper', field: 'beefySwapper' },
+] as const;
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+export const isConfiguredAddress = (address: string | undefined): address is string =>
+    Boolean(address && address.toLowerCase() !== ZERO_ADDRESS);
+
 /** Uncommented LstVault contract addresses, associated with the enclosing chain id. */
 export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: number; address: string }> =>
     loadConfiguredContracts(configYaml, 'LstVault');

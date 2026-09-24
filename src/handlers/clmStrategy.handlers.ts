@@ -4,16 +4,11 @@ import { fetchClmState, getClmStrategyInitData, parseFetchedClmState } from '../
 import { getClmStrategyManager } from '../effects/clmStrategy.effects';
 import { getClmOrThrow, isClmInitialized, linkClmStrategy, setClmPausableStatus } from '../entities/clm.entity';
 import { createClmHarvestEvent } from '../entities/clmHarvestEvent.entity';
-import {
-    createClmStrategy,
-    getClmManager,
-    getClmStrategy,
-    setClmStrategyPausableStatus,
-} from '../entities/clmManager.entity';
+import { createClmStrategy, getClmStrategy, setClmStrategyPausableStatus } from '../entities/clmManager.entity';
 import { createClmManagerCollectionEvent } from '../entities/clmManagerCollectionEvent.entity';
 import { createClmStrategyTvlEvent } from '../entities/clmStrategyTvlEvent.entity';
 import { toChainId } from '../lib/chain';
-import { ensureClmAggregate, maybeFinalizeClm } from '../lib/clm/init';
+import { ensureClmAggregate, initializeClmManager, maybeFinalizeClm } from '../lib/clm/init';
 import { refreshClm, refreshClmFees } from '../lib/clm/refresh';
 import { buildClmFetchInput, loadClmTokens } from '../lib/clm/tokens';
 import { interpretAsDecimal } from '../lib/decimal';
@@ -235,7 +230,12 @@ const initializeClmStrategy = async ({
 
     const managerAddress = toBytes(managerAddressStr);
 
-    const clmManager = await getClmManager(context, chainId, managerAddress);
+    const clmManager = await initializeClmManager({
+        context,
+        chainId,
+        managerAddress,
+        initializedBlock,
+    });
     if (!clmManager) {
         context.log.warn('ClmManager not found for ClmStrategy', { strategyAddress, managerAddress, chainId });
         return null;

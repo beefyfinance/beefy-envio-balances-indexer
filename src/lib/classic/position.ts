@@ -17,7 +17,7 @@ import { config } from '../config';
 import type { BigDecimal } from '../decimal';
 import { BIG_ZERO } from '../decimal';
 import { type EventMetadata, eventId } from '../event';
-import { type Bytes, bytesEqual, toHex } from '../hex';
+import { asHex, type Bytes, bytesEqual, toHex } from '../hex';
 
 const isRewardPoolAddress = (classic: Classic, address: Bytes): boolean =>
     classic.rewardPoolTokensOrder.includes(toHex(address));
@@ -569,9 +569,9 @@ export const handleClassicRewardPoolRewardPaid = async ({
     state: ClassicState;
     event: EventMetadata;
 }) => {
-    const rewardTokenAddressStr = toHex(rewardTokenAddress);
+    const rewardTokenAddressStr = asHex(toHex(rewardTokenAddress));
     const rewardBalancesDelta = classic.rewardTokensOrder.map((addressStr) =>
-        addressStr === rewardTokenAddressStr ? amount : BIG_ZERO
+        asHex(addressStr) === rewardTokenAddressStr ? amount : BIG_ZERO
     );
 
     await updateClassicPositionFromDeltas({
