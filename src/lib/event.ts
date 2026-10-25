@@ -1,35 +1,27 @@
-import type { ChainId } from '@beefyfinance/blockchain-addressbook';
-import type { EvmBlock } from 'envio';
-import { type Bytes, toHex } from './hex';
-export const eventId = ({
-    chainId,
-    trxHash,
-    trxIndex,
-    logIndex,
-}: {
-    chainId: ChainId;
-    trxHash: Bytes;
-    trxIndex: number;
-    logIndex: number;
-}) => `${chainId}-${toHex(trxHash)}-${trxIndex.toString()}-${logIndex.toString()}`;
+import { asHex } from './hex';
 
-export type EventMetadata = {
-    block: EvmBlock;
-    trxIndex: number;
+/** The subset of an Envio event every row writer needs (config `field_selection`: transaction hash + from). */
+export type RawEvent = {
+    chainId: number;
+    srcAddress: string;
     logIndex: number;
-    trxHash: Bytes;
+    block: { number: number; timestamp: number };
+    transaction: { hash: string; from?: string | undefined };
 };
 
-export const getEventFields = ({ chainId, event }: { chainId: ChainId; event: EventMetadata }) => ({
-    id: eventId({
-        chainId,
-        trxHash: event.trxHash,
-        trxIndex: event.trxIndex,
-        logIndex: event.logIndex,
-    }),
-    trxHash: event.trxHash,
-    trxIndex: event.trxIndex,
-    logIndex: event.logIndex,
+export const contractId = (chainId: number, address: string) => `${chainId}-${asHex(address)}`;
+
+/** Deterministic event id: `chainId-trxHash-logIndex`. */
+export const eventId = (event: RawEvent) => `${event.chainId}-${asHex(event.transaction.hash)}-${event.logIndex}`;
+
+export const blockTimestamp = (event: Pick<RawEvent, 'block'>) => new Date(event.block.timestamp * 1000);
+
+/** Columns shared by every event row. */
+export const eventColumns = (event: RawEvent) => ({
+    id: eventId(event),
     blockNumber: BigInt(event.block.number),
-    blockTimestamp: new Date(event.block.timestamp * 1000),
+    blockTimestamp: blockTimestamp(event),
+    trxHash: asHex(event.transaction.hash),
+    trxFrom: event.transaction.from === undefined ? undefined : asHex(event.transaction.from),
+    logIndex: event.logIndex,
 });

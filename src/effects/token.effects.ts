@@ -1,51 +1,31 @@
-import { createEffect, S } from 'envio';
+import { createEffect, type EvmChainId, S } from 'envio';
 import { erc20Abi } from 'viem';
-import { chainIdSchema } from '../lib/chain';
-import { decodeEffectInput } from '../lib/effect';
-import { hexSchema, toHex } from '../lib/hex';
+import { asHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
+/**
+ * ERC-20 metadata, once per token (chain-scoped cache keyed on the lowercase address), read at `latest`:
+ * decimals / name / symbol do not change. On-chain reverts return `invalid` (cached); transport errors throw.
+ */
 export const getTokenMetadata = createEffect(
     {
         name: 'getTokenMetadata',
-        input: {
-            tokenAddress: hexSchema,
-            chainId: chainIdSchema,
-        },
-        // Discriminated output:
-        // - `status: 'ok'`  -> name/symbol/decimals are populated from the contract.
-        // - `status: 'invalid'` -> the multicall succeeded (RPC responded) but one or
-        //   more of `decimals()` / `name()` / `symbol()` reverted on chain.
-        // We never return `'invalid'` for transport-level failures: those throw so
-        // envio can retry the batch and so the operator sees the crash.
+        input: { address: S.string },
         output: S.schema({
             status: S.union(['ok', 'invalid']),
-            name: S.string,
-            symbol: S.string,
-            decimals: S.number,
+            name: S.optional(S.string),
+            symbol: S.optional(S.string),
+            decimals: S.optional(S.number),
         }),
         rateLimit: false,
         cache: true,
         crossChain: false,
     },
     async ({ input, context }) => {
-        const { tokenAddress, chainId } = decodeEffectInput(input);
-        const tokenAddressStr = toHex(tokenAddress);
-
-        const client = getViemClient(chainId, context.log);
-
-        context.log.debug('Fetching token metadata', { tokenAddress: tokenAddressStr, chainId });
-
-        const erc20 = {
-            address: tokenAddressStr,
-            abi: erc20Abi,
-        } as const;
-
-        // Intentionally use `allowFailure: true` so that on-chain reverts surface as
-        // per-call `{ status: 'failure' }` instead of throwing. Transport-level
-        // failures (RPC down, timeout) still throw from `multicall(...)` and propagate
-        // up — the indexer will crash, envio will retry, and nothing is cached.
-        const [decimalsResult, nameResult, symbolResult] = await client.multicall({
+        const address = asHex(input.address);
+        const client = getViemClient(context.chain.id as EvmChainId, context.log);
+        const erc20 = { address, abi: erc20Abi } as const;
+        const [decimals, name, symbol] = await client.multicall({
             allowFailure: true,
             contracts: [
                 { ...erc20, functionName: 'decimals', args: [] },
@@ -53,42 +33,20 @@ export const getTokenMetadata = createEffect(
                 { ...erc20, functionName: 'symbol', args: [] },
             ],
         });
-
-        if (
-            decimalsResult.status === 'failure' ||
-            nameResult.status === 'failure' ||
-            symbolResult.status === 'failure'
-        ) {
-            context.log.error('[INVALID_TOKEN] token metadata calls reverted', {
-                tokenAddress: tokenAddressStr,
-                chainId,
-                decimals: decimalsResult.status,
-                name: nameResult.status,
-                symbol: symbolResult.status,
-                decimalsError: decimalsResult.status === 'failure' ? decimalsResult.error?.message : undefined,
-                nameError: nameResult.status === 'failure' ? nameResult.error?.message : undefined,
-                symbolError: symbolResult.status === 'failure' ? symbolResult.error?.message : undefined,
+        const ok = decimals.status === 'success' && name.status === 'success' && symbol.status === 'success';
+        if (!ok) {
+            context.log.warn('[INVALID_TOKEN] token metadata calls reverted', {
+                address,
+                decimals: decimals.status,
+                name: name.status,
+                symbol: symbol.status,
             });
-            return {
-                status: 'invalid' as const,
-                name: '',
-                symbol: '',
-                decimals: 0,
-            };
         }
-
-        context.log.info('Got token details', {
-            tokenAddress: tokenAddressStr,
-            name: nameResult.result,
-            symbol: symbolResult.result,
-            decimals: decimalsResult.result,
-        });
-
         return {
-            status: 'ok' as const,
-            name: nameResult.result,
-            symbol: symbolResult.result,
-            decimals: decimalsResult.result,
+            status: ok ? ('ok' as const) : ('invalid' as const),
+            decimals: decimals.status === 'success' ? decimals.result : undefined,
+            name: name.status === 'success' ? name.result : undefined,
+            symbol: symbol.status === 'success' ? symbol.result : undefined,
         };
     }
 );

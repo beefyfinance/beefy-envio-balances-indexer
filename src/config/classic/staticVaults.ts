@@ -1,5 +1,5 @@
 import * as R from 'remeda';
-import { type Bytes, type Hex, toBytes, toHex } from '../../lib/hex';
+import { asHex, type Hex } from '../../lib/hex';
 /** Legacy vaults whose on-chain `want`/`token` reads return wrong hardcoded values. */
 export const staticVaults = [
     // very old vault https://bscscan.com/address/0x83dfD1C2F553E8026eA8626399fe26Ce419dFDaC
@@ -68,32 +68,22 @@ export const staticVaults = [
     },
 ] as const;
 
-const normalizedStaticVaults = R.pipe(
-    staticVaults,
-    R.map(({ chainId, vaultAddress, underlyingTokenAddress, strategyAddress }) => ({
-        chainId,
-        vaultAddress: toBytes(vaultAddress),
-        underlyingTokenAddress: toBytes(underlyingTokenAddress),
-        strategyAddress: toBytes(strategyAddress),
-    }))
+const byChain = R.groupBy(staticVaults, R.prop('chainId'));
+
+/** chainId -> vault address -> static facts (lowercase hex). */
+export const staticVaultsMap: Partial<Record<number, Record<Hex, { want: Hex }>>> = R.mapValues(byChain, (vaults) =>
+    R.pipe(
+        vaults,
+        R.map((vault) => [asHex(vault.vaultAddress), { want: asHex(vault.underlyingTokenAddress) }] as const),
+        R.fromEntries()
+    )
 );
 
-type StaticVault = (typeof normalizedStaticVaults)[number];
-
-export const staticVaultsMap: Partial<Record<number, Record<Hex, StaticVault>>> = R.pipe(
-    normalizedStaticVaults,
-    R.groupBy(R.prop('chainId')),
-    R.mapValues((vaults) => R.indexBy(vaults, (vault) => toHex(vault.vaultAddress)))
-);
-
-export const staticStrategyVaultMap: Partial<Record<number, Record<Hex, Bytes>>> = R.pipe(
-    normalizedStaticVaults,
-    R.groupBy(R.prop('chainId')),
-    R.mapValues((vaults) =>
-        R.pipe(
-            vaults,
-            R.indexBy((vault) => toHex(vault.strategyAddress)),
-            R.mapValues((vault) => vault.vaultAddress)
-        )
+/** chainId -> strategy address -> vault address (lowercase hex). */
+export const staticStrategyVaultMap: Partial<Record<number, Record<Hex, Hex>>> = R.mapValues(byChain, (vaults) =>
+    R.pipe(
+        vaults,
+        R.map((vault) => [asHex(vault.strategyAddress), asHex(vault.vaultAddress)] as const),
+        R.fromEntries()
     )
 );

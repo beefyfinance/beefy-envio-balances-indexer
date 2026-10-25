@@ -1,30 +1,10 @@
-import { indexer, S } from 'envio';
+import type { EvmChainId } from 'envio';
+import { indexer } from 'envio';
 import * as R from 'remeda';
-import { bytesSchema } from './hex';
 
-const configSchema = S.schema({
-    ADDRESS_ZERO: bytesSchema,
-    BURN_ADDRESS: bytesSchema,
-    MINT_ADDRESS: bytesSchema,
-    RPC_URL: S.schema(
-        R.pipe(
-            indexer.chainIds,
-            R.map((chainId) => [chainId, S.string] as const),
-            R.fromEntries()
-        )
-    ),
-});
-
-export const config = S.parseOrThrow(
-    {
-        ADDRESS_ZERO: '0x0000000000000000000000000000000000000000',
-        BURN_ADDRESS: '0x000000000000000000000000000000000000dead',
-        MINT_ADDRESS: '0x0000000000000000000000000000000000000000',
-        RPC_URL: R.pipe(
-            indexer.chainIds,
-            R.map((chainId) => [chainId, process.env[`ENVIO_RPC_URL_${chainId}`] ?? null] as const),
-            R.fromEntries()
-        ),
-    },
-    configSchema
-);
+/** RPC endpoint per chain, used by the cached effects (`ENVIO_RPC_URL_<chainId>`). */
+export const RPC_URL = R.pipe(
+    indexer.chainIds,
+    R.map((chainId) => [chainId, process.env[`ENVIO_RPC_URL_${chainId}`]] as const),
+    R.fromEntries()
+) as Record<EvmChainId, string | undefined>;

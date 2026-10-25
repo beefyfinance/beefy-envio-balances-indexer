@@ -2,12 +2,14 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addressBookByChainId } from '@beefyfinance/blockchain-addressbook';
+import * as R from 'remeda';
 import { describe, expect, it } from 'vitest';
 import {
     ADDRESSBOOK_CONFIG_FACTORIES,
     BEEFY_NETWORK_TO_CHAIN_ID,
     type CatalogProduct,
     COVERAGE_ENTITIES,
+    ENTITY_KINDS,
     type IndexedEntity,
     isConfiguredAddress,
     loadActiveChainIds,
@@ -18,31 +20,18 @@ import {
     productId,
 } from './catalog';
 import {
-    accountIdMismatchSql,
-    arrayLengthMismatch,
-    CLM_LOCKED_MINIMUM_SHARES,
-    CLOCK_TICK_PERIOD,
-    catalogIdsByEntity,
-    catalogPredicate,
-    catalogScope,
-    changeBlockSeq,
-    clmAmountIdentitySql,
-    clmShareSupplyMismatchSql,
+    ALL_PROBES,
     diffCoverage,
-    EVENT_PROBES,
-    GRAPH_PROBES,
-    lengthMismatchSql,
-    POSITION_PROBES,
-    productIdMismatchSql,
-    rewardPoolListedSql,
+    int,
+    probeWhere,
+    REQUIRED_LINKS,
     SANITY_PROBES,
-    SNAPSHOT_PERIODS,
+    SHARE_TOKEN_KINDS,
     STRUCTURE_PROBES,
-    sqlStringIn,
-    tokenIdMismatchSql,
-    tokenIdsOrderMismatchSql,
-    toScaled,
+    scopePredicate,
+    tokenKey,
 } from './checks';
+import { sqlStringIn } from './clickhouse';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -65,7 +54,7 @@ describe('integrity catalog parsers', () => {
         expect(chainIds).toContain(4663);
         expect(chainIds).not.toContain(250);
         for (const chainId of chainIds) {
-            expect(Object.values(BEEFY_NETWORK_TO_CHAIN_ID)).toContain(chainId);
+            expect(R.values(BEEFY_NETWORK_TO_CHAIN_ID)).toContain(chainId);
         }
     });
 
@@ -95,10 +84,24 @@ describe('integrity catalog parsers', () => {
                 { chainId: 42161, address: '0xcee843cd04e3758ddc5bcff08647dddb117151d0' },
             ])
         );
-        expect(swappers).not.toEqual(
-            expect.arrayContaining([{ chainId: 80094, address: '0xbc4a342b0c057501e081484a2d24e576e854f823' }])
-        );
         expect(loadConfiguredContracts(configYaml, 'BeefySwapper')).toEqual(swappers);
+
+        const withCommentedChain = [
+            'chains:',
+            '  - id: 1 # ethereum',
+            '    contracts:',
+            '      - name: BeefySwapper',
+            '        address:',
+            '          - 0x0000830df56616d58976a12d19d283b40e25beef',
+            '  # - id: 80094 # berachain',
+            '  #   contracts:',
+            '  #     - name: BeefySwapper',
+            '  #       address:',
+            '  #         - 0xbc4a342b0c057501e081484a2d24e576e854f823',
+        ].join('\n');
+        expect(loadConfiguredSwappers(withCommentedChain)).toEqual([
+            { chainId: 1, address: '0x0000830df56616d58976a12d19d283b40e25beef' },
+        ]);
     });
 
     it('includes every addressbook factory for active chains', () => {
@@ -146,7 +149,7 @@ describe('integrity coverage diff', () => {
             20
         );
 
-        const byCheck = Object.fromEntries(findings.map((item) => [item.check, item]));
+        const byCheck = R.indexBy(findings, (item) => item.check);
         expect(byCheck['Classic.missing-active']).toMatchObject({ severity: 'error', count: 1 });
         expect(byCheck['Classic.missing-eol']).toMatchObject({ severity: 'warning', count: 1 });
         expect(byCheck['Classic.blacklisted']).toMatchObject({ severity: 'info', count: 1 });
@@ -169,7 +172,7 @@ describe('integrity coverage diff', () => {
             status: 'configured',
         });
         const findings = diffCoverage([configured], indexed({ Swapper: ['8453-0xextra'] }), new Set(), 20);
-        const byCheck = Object.fromEntries(findings.map((item) => [item.check, item]));
+        const byCheck = R.indexBy(findings, (item) => item.check);
         expect(byCheck['Swapper.missing-configured']).toMatchObject({ severity: 'warning', count: 1 });
         expect(byCheck['Swapper.missing-active']).toBeUndefined();
         expect(byCheck['Swapper.extra']).toBeUndefined();
@@ -189,7 +192,7 @@ describe('integrity coverage diff', () => {
             product({ entity: 'LstVault', id: `8453-0xmiss${index}`, beefyId: `lst-${index}` })
         );
         const findings = diffCoverage([paused, closed, ...missing], indexed({}), new Set(), 2);
-        const byCheck = Object.fromEntries(findings.map((item) => [item.check, item]));
+        const byCheck = R.indexBy(findings, (item) => item.check);
         expect(byCheck['RewardPool.missing-active']).toMatchObject({ severity: 'error', count: 1 });
         expect(byCheck['RewardPool.missing-eol']).toMatchObject({ severity: 'warning', count: 1 });
         expect(byCheck['LstVault.missing-active']).toMatchObject({ severity: 'error', count: 3 });
@@ -225,239 +228,58 @@ describe('integrity coverage diff', () => {
     });
 });
 
-describe('catalog scope', () => {
-    it('keeps only catalog ids in the SQL predicate', () => {
-        const ids = catalogIdsByEntity([
-            product({ entity: 'Clm', id: '4326-0x3808e89223f26ddbacbf3cf36f99e37e537fb3de' }),
-            product({ entity: 'Swapper', id: '8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc' }),
-        ]);
-        expect(sqlStringIn('t.id', ids.get('Clm') ?? [])).toBe(
-            "t.id IN ('4326-0x3808e89223f26ddbacbf3cf36f99e37e537fb3de')"
+describe('probe scoping', () => {
+    const ids = ['8453-0xaaa', '8453-0xbbb'];
+
+    it('scopes contract probes on ids and ledger probes on chainId-token', () => {
+        const contractProbe = STRUCTURE_PROBES.find((probe) => probe.id === 'Contract.facts-partial');
+        const ledgerProbe = SANITY_PROBES.find((probe) => probe.id === 'Balance.negative');
+        if (!contractProbe || !ledgerProbe) throw new Error('missing probe');
+        expect(scopePredicate(contractProbe, ids)).toBe("t.id IN ('8453-0xaaa','8453-0xbbb')");
+        expect(scopePredicate(ledgerProbe, ids)).toBe(`${tokenKey('t')} IN ('8453-0xaaa','8453-0xbbb')`);
+        expect(probeWhere(ledgerProbe, [8453, 10], [])).toBe(
+            `t.chain_id IN (8453,10) AND 0 AND (${ledgerProbe.where})`
         );
-        expect(sqlStringIn('t.id', ids.get('Classic') ?? [])).toBe('0');
-        expect(sqlStringIn('t.id', ids.get('Swapper') ?? [])).toBe(
-            "t.id IN ('8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc')"
-        );
+    });
+
+    it('rejects literals that would need escaping', () => {
         expect(sqlStringIn('t.id', [])).toBe('0');
-        expect(() => sqlStringIn('t.id', ["8453-0xabc';drop"])).toThrow('Unexpected catalog id');
-    });
-
-    it('maps child tables onto catalog parent id columns', () => {
-        expect(catalogScope('ClassicVaultStrategy AS t')).toEqual({
-            entity: 'Classic',
-            column: 't.classic_vault_id',
-        });
-        expect(catalogScope('ClmStrategy AS t')).toEqual({ entity: 'Clm', column: 't.clm_manager_id' });
-        expect(catalogScope('ClassicHarvestEvent AS t INNER JOIN Classic AS c ON c.id = t.classic_id')).toEqual({
-            entity: 'Classic',
-            column: 't.classic_id',
-        });
-        expect(catalogScope('ClmPositionInteraction AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
-        expect(catalogScope('SwapperRoute AS t')).toEqual({ entity: 'Swapper', column: 't.swapper_id' });
-        expect(catalogScope('ClassicPosition AS p INNER JOIN Classic AS c ON c.id = p.classic_id')).toEqual({
-            entity: 'Classic',
-            column: 'p.classic_id',
-        });
-        expect(catalogScope('ClassicSnapshot AS t')).toEqual({ entity: 'Classic', column: 't.classic_id' });
-        expect(catalogScope('ClmSnapshot AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
-        expect(catalogScope('ClmManagerCollectionEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
-        expect(catalogScope('ClmDepositEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
-        expect(catalogScope('ClmWithdrawEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
-        expect(catalogScope('ClmStrategyTvlEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
-        expect(catalogScope('RewardPoolRewardedEvent AS t')).toEqual({
-            entity: 'RewardPool',
-            column: 't.pool_share_token_id',
-        });
-        expect(catalogScope('ClassicBoost AS t')).toEqual({ entity: 'ClassicBoost', column: 't.id' });
-        expect(catalogScope('RewardPool AS t')).toEqual({ entity: 'RewardPool', column: 't.id' });
-        expect(catalogScope('LstVault AS t')).toEqual({ entity: 'LstVault', column: 't.id' });
-        expect(catalogScope('Swapper AS t')).toEqual({ entity: 'Swapper', column: 't.id' });
-        expect(catalogScope('ClassicHarvestEvent AS t')).toEqual({ entity: 'Classic', column: 't.classic_id' });
-        expect(catalogScope('ClmHarvestEvent AS t')).toEqual({ entity: 'Clm', column: 't.clm_id' });
-        expect(catalogScope('ClassicPositionInteraction AS t')).toEqual({
-            entity: 'Classic',
-            column: 't.classic_id',
-        });
-        expect(catalogScope('ClassicErc4626Adapter AS t')).toEqual({ entity: 'Classic', column: 't.classic_id' });
-        expect(
-            catalogScope(
-                'ClassicPosition AS p LEFT JOIN (SELECT b.classic_id AS classic_id FROM ClassicBoost AS b) AS x ON x.classic_id = p.classic_id'
-            )
-        ).toEqual({ entity: 'Classic', column: 'p.classic_id' });
-    });
-
-    it('throws on tables that are scoped outside the catalog', () => {
-        expect(() => catalogScope('Token AS t')).toThrow('No catalog scope for Token AS t');
-        expect(() => catalogScope('ClockTick AS t')).toThrow(/No catalog scope/);
-    });
-
-    it('includes boost share tokens when scoping rewarded events', () => {
-        const ids = catalogIdsByEntity([
-            product({ entity: 'RewardPool', id: '8453-0xpool' }),
-            product({ entity: 'ClassicBoost', id: '8453-0xboost' }),
-        ]);
-        expect(catalogPredicate('RewardPoolRewardedEvent AS t', ids)).toBe(
-            "t.pool_share_token_id IN ('8453-0xpool','8453-0xboost')"
-        );
+        expect(() => sqlStringIn('t.id', ["8453-0x'; DROP"])).toThrow('Unexpected SQL literal');
     });
 });
 
-describe('integrity numeric helpers', () => {
-    it('scales decimals and detects parallel array mismatches', () => {
-        expect(toScaled('1.5')).toBe(1500000000000000000000000n);
-        expect(toScaled('0.000000000000000000000000')).toBe(0n);
-        expect(toScaled('-2')).toBe(-2000000000000000000000000n);
-        expect(toScaled(null)).toBe(0n);
-        expect(toScaled('')).toBe(0n);
-        expect(toScaled('1.5e2')).toBe(150n * 10n ** 24n);
-        expect(toScaled('-2.5E-1')).toBe(-25n * 10n ** 22n);
-        expect(toScaled('1e-30')).toBe(0n);
-        expect(
-            arrayLengthMismatch(
-                {
-                    rewardPoolToken_ids: ['a'],
-                    rewardPoolTokensOrder: ['a', 'b'],
-                    rewardPoolsTotalSupply: ['1'],
-                },
-                [['rewardPoolToken_ids', 'rewardPoolTokensOrder', 'rewardPoolsTotalSupply']]
-            )
-        ).toEqual(['rewardPoolToken_ids=1 rewardPoolTokensOrder=2 rewardPoolsTotalSupply=1']);
-        expect(
-            arrayLengthMismatch({ rewardPoolToken_ids: ['a'], rewardPoolTokensOrder: ['a'] }, [
-                ['rewardPoolToken_ids', 'rewardPoolTokensOrder'],
-            ])
-        ).toEqual([]);
-        expect(arrayLengthMismatch({ rewardPoolToken_ids: ['a'] }, [['rewardPoolToken_ids', 'missing']])).toEqual([
-            'rewardPoolToken_ids=1 missing=-1',
-        ]);
-    });
-
-    it('ranks token balance changes by numeric block number', () => {
-        expect(changeBlockSeq()).toBe('(toUInt64(t.block_number), t.trx_index, t.log_index)');
-        expect(changeBlockSeq('ch')).toBe('(toUInt64(ch.block_number), ch.trx_index, ch.log_index)');
-    });
-});
-
-describe('clm amount identity', () => {
-    it('reconstructs balances() from idle, main, alt, locked profit, and unharvested fees', () => {
-        const amount0 = SANITY_PROBES.find((probe) => probe.id === 'clm.amount0-identity');
-        const amount1 = SANITY_PROBES.find((probe) => probe.id === 'clm.amount1-identity');
-        expect(amount0?.where).toBe(`t.initializable_status = 'INITIALIZED' AND ${clmAmountIdentitySql('0')}`);
-        expect(amount1?.where).toBe(`t.initializable_status = 'INITIALIZED' AND ${clmAmountIdentitySql('1')}`);
-        expect(clmAmountIdentitySql('0')).toContain('underlying_idle_amount0');
-        expect(clmAmountIdentitySql('0')).toContain('underlying_locked_amount0');
-        expect(clmAmountIdentitySql('0')).toContain('underlying_unharvested_fees0');
-        expect(clmAmountIdentitySql('0')).not.toContain('underlying_pool_amount0');
-        expect(SANITY_PROBES.find((probe) => probe.id === 'clmSnapshot.amount0-identity')?.where).toBe(
-            clmAmountIdentitySql('0')
-        );
-        expect(clmAmountIdentitySql('1', 's')).toContain('s.total_underlying_amount1');
-    });
-});
-
-describe('graph and event helper SQL', () => {
-    it('builds length-mismatch and reward-pool has() predicates', () => {
-        expect(
-            lengthMismatchSql([['reward_pool_token_ids', 'reward_pool_tokens_order', 'reward_pools_total_supply']])
-        ).toBe(
-            'length(t.reward_pool_token_ids) != length(t.reward_pool_tokens_order) OR length(t.reward_pool_token_ids) != length(t.reward_pools_total_supply)'
-        );
-        expect(rewardPoolListedSql('c')).toBe('NOT has(c.reward_pool_token_ids, t.share_token_id)');
-        expect(GRAPH_PROBES.find((probe) => probe.id === 'rewardPool.classic-not-listed')?.where).toContain(
-            'NOT has(c.reward_pool_token_ids, t.share_token_id)'
-        );
-        expect(EVENT_PROBES.map((probe) => probe.id)).toEqual(
-            expect.arrayContaining([
-                'classicHarvest.missing-classic',
-                'classicHarvest.array-alignment',
-                'clmInteraction.total-balance',
-                'clmCollection.array-alignment',
-                'clmDeposit.missing-clm',
-                'clmWithdraw.missing-account',
-                'clmTvl.missing-strategy',
-                'rewarded.missing-reward-token',
-                'clmInteraction.type-delta',
-            ])
-        );
-    });
-
-    it('builds product id, account id, and parallel token-id predicates', () => {
-        expect(productIdMismatchSql()).toBe("t.id != concat(toString(t.chain_id), '-0x', lower(hex(t.address)))");
-        expect(accountIdMismatchSql()).toBe("t.id != concat('0x', lower(hex(t.address)))");
-        expect(tokenIdsOrderMismatchSql('reward_pool_token_ids', 'reward_pool_tokens_order')).toBe(
-            "arrayExists((id, addr) -> id != concat(toString(t.chain_id), '-', addr), t.reward_pool_token_ids, t.reward_pool_tokens_order)"
-        );
-        expect(SNAPSHOT_PERIODS).toEqual(['3600', '86400', '604800']);
-        expect(CLOCK_TICK_PERIOD).toBe('3600');
-        expect(CLM_LOCKED_MINIMUM_SHARES).toBe(1000);
-        expect(tokenIdMismatchSql('share')).toBe(productIdMismatchSql('share'));
-        expect(clmShareSupplyMismatchSql()).toContain('intExp10(toUInt8(token.decimals))');
-        expect(clmShareSupplyMismatchSql()).toContain(`toDecimal256(${CLM_LOCKED_MINIMUM_SHARES}, 24)`);
-    });
-
-    it('covers extra product, snapshot, position, and swapper probes', () => {
-        expect(STRUCTURE_PROBES.map((probe) => probe.id)).toEqual(
-            expect.arrayContaining([
-                'classic.id-address',
-                'clmPosition.missing-account',
-                'classicSnapshot.missing-classic',
-                'clmSnapshot.unknown-period',
-                'swapperRoute.missing-router',
-                'erc4626Adapter.underlying-token-metadata',
-                'rewardPool.underlying-token-metadata',
-            ])
-        );
-        expect(SANITY_PROBES.map((probe) => probe.id)).toEqual(
-            expect.arrayContaining([
-                'classic.underlying-balance-identity',
-                'clm.negative-amounts',
-                'clmSnapshot.amount1-identity',
-                'clm.share-supply-mismatch',
-                'swapper.missing-oracle',
-                'swapperRoute.same-token',
-                'rewardPool.share-token-decimals',
-            ])
-        );
-        expect(GRAPH_PROBES.map((probe) => probe.id)).toEqual(
-            expect.arrayContaining([
-                'rewardPool.dual-parent',
-                'erc4626Adapter.not-listed',
-                'classic.strategy-vault-mismatch',
-                'clm.pausable-mismatch',
-                'classic.token-ids-order',
-                'clm.manager-token-id-address',
-            ])
-        );
-        expect(POSITION_PROBES.map((probe) => probe.id)).toEqual(
-            expect.arrayContaining([
-                'classicPosition.vault-balance-mismatch',
-                'clmPosition.manager-balance-mismatch',
-                'clmPosition.reward-pool-balance-mismatch',
-                'classicPosition.adapter-balance-mismatch',
-                'classicPosition.boost-balance-mismatch',
-            ])
-        );
-        expect(GRAPH_PROBES.map((probe) => probe.id)).toEqual(
-            expect.arrayContaining([
-                'classicBoost.share-token-identity',
-                'lstVault.share-token-identity',
-                'erc4626Adapter.share-token-identity',
-            ])
-        );
-    });
-
-    it('keeps probe ids unique and every probe catalog-scoped', () => {
-        const probes = [...STRUCTURE_PROBES, ...SANITY_PROBES, ...GRAPH_PROBES, ...POSITION_PROBES, ...EVENT_PROBES];
-        const ids = probes.map((probe) => probe.id);
+describe('probe catalog', () => {
+    it('keeps probe ids unique and every probe on the aliased main table', () => {
+        const ids = ALL_PROBES.map((probe) => probe.id);
         expect(new Set(ids).size).toBe(ids.length);
-        for (const probe of probes) {
-            expect(() => catalogScope(probe.from)).not.toThrow();
-            expect(probe.where.length).toBeGreaterThan(0);
-            expect(['structure', 'sanity']).toContain(probe.section);
-            expect(['error', 'warning', 'info']).toContain(probe.severity);
+        for (const probe of ALL_PROBES) {
+            expect(probe.from).toMatch(/\bAS t\b/);
         }
-        expect(STRUCTURE_PROBES.every((probe) => probe.section === 'structure')).toBe(true);
-        expect(SANITY_PROBES.every((probe) => probe.section === 'sanity')).toBe(true);
-        expect(GRAPH_PROBES.every((probe) => probe.section === 'structure' && probe.severity === 'error')).toBe(true);
+    });
+
+    it('checks every required registry link and share token kind', () => {
+        for (const { kind, relation } of REQUIRED_LINKS) {
+            const probe = STRUCTURE_PROBES.find((item) => item.id === `${kind}.missing-${relation}`);
+            expect(probe?.where).toContain(`relation = '${relation}'`);
+        }
+        const shareProbe = STRUCTURE_PROBES.find((probe) => probe.id === 'Token.missing-share-token');
+        for (const kind of SHARE_TOKEN_KINDS) {
+            expect(shareProbe?.where).toContain(`'${kind}'`);
+        }
+        // the coverage kinds are all registry kinds
+        for (const kinds of R.values(ENTITY_KINDS)) {
+            for (const kind of kinds) {
+                expect(['VAULT', 'CLM_MANAGER', 'REWARD_POOL', 'BOOST', 'LST_VAULT', 'SWAPPER']).toContain(kind);
+            }
+        }
+    });
+
+    it('compares raw amounts as Int256 and orders changes on-chain', () => {
+        expect(int('t.balance')).toBe('toInt256OrZero(toString(t.balance))');
+        const continuity = SANITY_PROBES.find((probe) => probe.id === 'BalanceChange.discontinuity');
+        expect(continuity?.from).toContain('ORDER BY block_number, log_index');
+        expect(continuity?.where).toContain('ifNull');
+        const drift = SANITY_PROBES.find((probe) => probe.id === 'Balance.drift-from-last-change');
+        expect(drift?.from).toContain('argMax(balance_after, (c.block_number, c.log_index))');
     });
 });

@@ -1,112 +1,84 @@
-# Beefy Finance Balance Indexer
+# Beefy raw-events indexer
 
-A HyperIndex indexer that tracks ERC20 token balances across multiple blockchain networks for Beefy Finance protocols.
+An [Envio HyperIndex](https://docs.envio.dev) 3.14 indexer that records raw on-chain facts about Beefy products on
+22 EVM chains: share transfers and running balances, boost stakes, CLM deposits / withdrawals and pool state, rewards,
+harvests, fees, pauses and swapper routes, plus a registry of Beefy contracts with their on-chain links and token
+metadata. Amounts are raw integers; prices, positions and PnL are computed by a separate wrapper service.
 
-## Migration from TheGraph Subgraph
+- [docs/architecture.md](docs/architecture.md): principles, entity model, allowed eth_calls, deployment modes, wrapper
+  responsibilities, API coverage and known gaps.
+- [docs/envio-3.14-notes.md](docs/envio-3.14-notes.md): Envio 3.14.1 reference (config, handlers, effects, testing,
+  running, RPC cost model).
+- `schema.graphql`: the tables.
 
-This indexer was migrated from a TheGraph subgraph to Envio HyperIndex. Key changes include:
+## Quick start
 
-### Schema Changes
-- Converted GraphQL schema from TheGraph format to HyperIndex format
-- Removed `@entity` decorators and `@derivedFrom` relationships
-- Added `BalanceSnapshot` entity to enable time-travel queries (since HyperIndex doesn't natively support them)
-- Used `_id` fields for entity relationships instead of direct object references
+Requirements: Node 26, pnpm 11, Docker for `envio dev` (or external Postgres / ClickHouse, see the Envio notes).
 
-### Architecture Changes
-- **Dynamic Contract Discovery**: TheGraph subgraphs used templates to dynamically track new ERC20 contracts. HyperIndex requires static contract configuration, so tokens must be added to `config.yaml` explicitly.
-- **Balance Snapshots**: Created `BalanceSnapshot` entities for each transfer to enable historical balance queries at specific block numbers.
-- **TypeScript Implementation**: Converted from AssemblyScript to TypeScript event handlers.
-
-### Key Features
-- **Multi-chain Support**: Tracks balances across multiple EVM chains
-- **Factory Contract Tracking**: Monitors Beefy vault and boost factories for new contract deployments
-- **Ignored Contracts**: Supports ignoring specific contracts to handle non-standard ERC20 behaviors
-- **Balance History**: Maintains complete balance history via snapshots
-- **Token Statistics**: Tracks total supply and holder counts
-
-## Configuration
-
-### Networks Supported
-Currently configured for Base network with plans to expand to:
-- Ethereum Mainnet
-- BSC (Binance Smart Chain)
-- Polygon
-- Arbitrum
-- Optimism
-- And other EVM-compatible chains
-
-### Contract Types Tracked
-1. **Factory Contracts**: Create new vaults and boost contracts
-   - ClmManagerFactory
-   - ClassicVaultFactory
-   - ClassicBoostFactory
-   - RewardPoolFactory
-
-2. **ERC20 Tokens**: Track transfer events and balance changes
-   - Configurable list of token addresses
-   - Automatic token discovery through factory events
-
-3. **Contract Deployers**: Track contract deployments
-
-## Development
-
-### Prerequisites
-- Node.js v20
-- pnpm package manager
-- Docker (for running the indexer)
-
-### Commands
 ```bash
-# Generate types from schema and config
-pnpm codegen
-
-# Type check
-pnpm tsc --noEmit
-
-# Run indexer (requires Docker)
-ENVIO_TUI=false pnpm dev
-
-# Run tests
-pnpm test
+pnpm install
+cp .env.example .env      # ENVIO_API_TOKEN (HyperSync) and ENVIO_RPC_URL_<chainId> per chain
+pnpm codegen              # .envio/types.d.ts from config.yaml + schema.graphql
+pnpm dev                  # production config: HyperSync, Postgres + ClickHouse
 ```
 
-### Schema Entities
+## Configs
 
-#### Core Entities
-- `Token`: ERC20 token information (symbol, name, decimals)
-- `Account`: Wallet or contract addresses
-- `TokenBalance`: Current balance of each token for each account
-- `TokenStatistic`: Aggregate statistics (total supply, holder count)
+`config.yaml` is the hand-edited source. `config.rpc.yaml`, `config.local.yaml` and `schema.local.graphql` are
+generated from it: run `pnpm config:generate` after any change to config.yaml or schema.graphql (a unit test fails
+when they are stale). The `# generated` address blocks inside config.yaml are written by `pnpm known-contracts`.
 
-#### Balance Tracking
-- `BalanceSnapshot`: Historical balance records for time-travel queries
-- `Contract`: Contract discovery tracking
-- `IgnoredContract`: Contracts to ignore for balance calculations
+| config | sync | storage | run | codegen |
+|---|---|---|---|---|
+| `config.yaml` | HyperSync, RPC fallback (hyperevm, metis: RPC) | Postgres + ClickHouse | `pnpm dev`, `pnpm start` | `pnpm codegen` |
+| `config.rpc.yaml` | RPC only | Postgres + ClickHouse | `pnpm start:rpc` | `pnpm codegen:rpc` |
+| `config.local.yaml` | RPC only | Postgres only | `pnpm dev:local` | `pnpm codegen:local` |
 
-## Migration Notes
+The RPC scripts set `MAX_PARTITION_SIZE=250` (override with the env var) and need no `ENVIO_API_TOKEN`. `dev` and
+`start` run codegen for their config; the type check (`pnpm test:ts`) uses whichever codegen ran last, so finish with
+`pnpm codegen`. Switching configs on one Postgres schema requires `-r` (or a separate `ENVIO_PG_SCHEMA`).
 
-### From TheGraph to HyperIndex
+## Known contracts
 
-1. **Static vs Dynamic Configuration**: Unlike TheGraph's dynamic templates, all contracts must be predefined in `config.yaml`. This means new tokens need to be added manually.
+Known Beefy contracts are listed statically in config.yaml so a fresh index starts each chain with a few address
+partitions. The lists come from the Beefy API and every entry is verified on chain at `latest` (details in
+docs/architecture.md); the factory handlers still register anything missing.
 
-2. **Entity Relationships**: HyperIndex uses `_id` fields instead of direct entity references. For example:
-   ```typescript
-   // TheGraph style
-   tokenBalance.token = token.id
-   
-   // HyperIndex style  
-   tokenBalance.token_id = token.id
-   ```
+Regenerating changes static addresses, which changes the stored config and **requires a reindex**: run it only when
+planning one, then commit config.yaml and the variants.
 
-3. **Balance Snapshots**: Since HyperIndex doesn't support time-travel queries, we create a `BalanceSnapshot` for every transfer event to maintain historical data.
+```bash
+pnpm known-contracts             # all chains (or chain ids as arguments); needs ENVIO_RPC_URL_<chainId> in .env
+pnpm codegen
+```
 
-4. **BigInt Handling**: Careful handling of BigInt arithmetic to ensure type safety.
+It takes about 20 seconds for the 22 chains and rewrites config.yaml's `# generated` blocks and the variants.
 
-5. **Preload Handlers**: With `preload_handlers: true`, handlers run twice. External calls must use the Effect API.
+## Tests
 
-## Deployment Considerations
+```bash
+pnpm test                               # biome ci + tsc --noEmit + vitest run
+RPC_FIXTURES=replay pnpm test:unit      # offline: fail on any missing RPC fixture (CI)
+```
 
-- **Token Configuration**: New important tokens must be added to `config.yaml` manually
-- **Start Blocks**: Each network has optimized start blocks to reduce indexing time
-- **Historical Data**: Balance snapshots provide complete historical balance data
-- **Performance**: Multichain indexing with optimizations for real-time processing
+Handler tests simulate events with `createTestIndexer`. Under vitest, every RPC state read goes through
+`src/lib/rpcFixtures.ts`: answered from `test/fixtures/rpc/<chainId>/`, or fetched live once and recorded (needs the
+chain's `ENVIO_RPC_URL_<chainId>`). Commit new fixtures. `RPC_FIXTURES=off` uses live RPC only.
+
+## Integrity audit
+
+After a sync, check the ClickHouse tables against the Beefy API catalog and the internal invariants:
+
+```bash
+pnpm integrity --chains 8453,42161 [--sample 20]
+```
+
+It reads `ENVIO_CLICKHOUSE_*` (defaults: local ClickHouse) and `BEEFY_API_URL` (default https://api.beefy.finance),
+and exits 1 on errors (missing active products, missing links or share tokens, ledger drift).
+
+## Other scripts
+
+- `pnpm format`: biome check with fixes. `pnpm watch`: type check in watch mode.
+- `pnpm db:console`, `pnpm db:console:clickhouse`: database shells for the local Docker setup.
+- `pnpm stop`: delete the local Docker environment (including the effect cache, unless dumped).
+- `pnpm run deploy`: fast-forward the `prod` branch to `origin/main` and push it.

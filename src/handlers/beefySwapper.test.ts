@@ -1,308 +1,194 @@
 import { createTestIndexer } from 'envio';
 import { describe, expect, it } from 'vitest';
+import { latestById, rowsOf, tx } from '../../test/helpers/simulate';
+import { FACTS_RETRY_BLOCKS } from '../lib/registry';
 
-/** Base BeefySwapper from config.yaml */
+// Base swapper listed in config.yaml
 const SWAPPER = '0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc' as const;
-const FROM_TOKEN = '0x4200000000000000000000000000000000000006' as const;
-const TO_TOKEN = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913' as const;
+const WETH = '0x4200000000000000000000000000000000000006' as const;
+const USDC = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913' as const;
 const ROUTER = '0xba12222222228d8ba445958a75a0704d566bf2c8' as const;
 const ORACLE = '0xdd27227dba7ea8f5869466a10a8e36bb2d709b35' as const;
+const at = (offset: number) => ({ number: 20_000_000 + offset, timestamp: 1_725_000_000 + offset * 2 });
 
-const block = { number: 12_000_000, timestamp: Math.floor(Date.parse('2024-06-01T00:00:00.000Z') / 1000) };
-const trxHash = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as const;
-
-const setSwapInfo = ({
-    logIndex,
-    router = ROUTER,
-    data = '0x1234',
-    minAmountSign = 1n,
-}: {
-    logIndex: number;
-    router?: `0x${string}`;
-    data?: `0x${string}`;
-    minAmountSign?: bigint;
-}) => ({
+const setSwapInfo = (logIndex: number, offset: number, data: `0x${string}`, amountIndex: bigint) => ({
     contract: 'BeefySwapper' as const,
     event: 'SetSwapInfo' as const,
-    block,
-    logIndex,
     srcAddress: SWAPPER,
-    transaction: { hash: trxHash, transactionIndex: 1 },
+    logIndex,
+    block: at(offset),
+    transaction: tx(logIndex + offset * 10),
     params: {
-        fromToken: FROM_TOKEN,
-        toToken: TO_TOKEN,
-        swapInfo: {
-            router,
-            data,
-            amountIndex: 4n,
-            minIndex: 36n,
-            minAmountSign,
-        },
+        fromToken: WETH,
+        toToken: USDC,
+        swapInfo: { router: ROUTER, data, amountIndex, minIndex: 4n, minAmountSign: -1n },
     },
 });
 
-describe('BeefySwapper handlers', () => {
-    it('creates a Swapper and SwapperRoute from SetSwapInfo before any oracle event', async () => {
+describe('BeefySwapper', () => {
+    it('keeps the current route and its change history', async () => {
         const indexer = createTestIndexer();
-        const trace = await indexer.process({
-            chains: {
-                8453: {
-                    simulate: [setSwapInfo({ logIndex: 0 })],
-                },
-            },
+        const result = await indexer.process({
+            chains: { 8453: { simulate: [setSwapInfo(1, 0, '0xabcd', 36n), setSwapInfo(1, 1, '0xef01', 68n)] } },
         });
 
-        expect(trace, 'SetSwapInfo creates the parent Swapper and the route').toMatchInlineSnapshot(`
-          {
-            "changes": [
-              {
-                "Swapper": {
-                  "sets": [
-                    {
-                      "address": "0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "id": "8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "oracle": undefined,
-                      "oracleTrxHash": undefined,
-                      "slippage": undefined,
-                      "slippageTrxHash": undefined,
-                    },
-                  ],
-                },
-                "SwapperRoute": {
-                  "sets": [
-                    {
-                      "amountIndex": 4n,
-                      "blockNumber": 12000000n,
-                      "blockTimestamp": 2024-06-01T00:00:00.000Z,
-                      "data": "0x1234",
-                      "fromToken_id": "8453-0x4200000000000000000000000000000000000006",
-                      "id": "8453-0x4200000000000000000000000000000000000006-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "minAmountSign": 1,
-                      "minIndex": 36n,
-                      "router": "0xba12222222228d8ba445958a75a0704d566bf2c8",
-                      "swapper_id": "8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "toToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "trxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    },
-                  ],
-                },
-                "Token": {
-                  "sets": [
-                    {
-                      "address": "0x4200000000000000000000000000000000000006",
-                      "decimals": 18,
-                      "holderCount": 0,
-                      "id": "8453-0x4200000000000000000000000000000000000006",
-                      "isVirtual": false,
-                      "name": "Wrapped Ether",
-                      "symbol": "WETH",
-                      "totalSupply": "0",
-                    },
-                    {
-                      "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "decimals": 6,
-                      "holderCount": 0,
-                      "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "isVirtual": false,
-                      "name": "USD Coin",
-                      "symbol": "USDC",
-                      "totalSupply": "0",
-                    },
-                  ],
-                },
-                "block": 12000000,
-                "chainId": 8453,
-                "eventsProcessed": 1,
-              },
-            ],
-          }
-        `);
-    });
-
-    it('updates the route when SetSwapInfo is emitted again for the same pair', async () => {
-        const indexer = createTestIndexer();
-        const trace = await indexer.process({
-            chains: {
-                8453: {
-                    simulate: [
-                        setSwapInfo({ logIndex: 0 }),
-                        setSwapInfo({
-                            logIndex: 1,
-                            router: '0x1111111111111111111111111111111111111111',
-                            data: '0xabcd',
-                        }),
-                    ],
-                },
-            },
+        expect(rowsOf(result, 'SwapperRouteChange')).toEqual([
+            expect.objectContaining({
+                swapper: SWAPPER,
+                fromToken: WETH,
+                toToken: USDC,
+                data: '0xabcd',
+                amountIndex: 36n,
+            }),
+            expect.objectContaining({
+                data: '0xef01',
+                amountIndex: 68n,
+                minIndex: 4n,
+                minAmountSign: -1,
+                router: ROUTER,
+            }),
+        ]);
+        expect(latestById(result, 'SwapperRoute').get(`8453-${SWAPPER}-${WETH}-${USDC}`)).toEqual({
+            id: `8453-${SWAPPER}-${WETH}-${USDC}`,
+            swapper: SWAPPER,
+            fromToken: WETH,
+            toToken: USDC,
+            router: ROUTER,
+            data: '0xef01',
+            amountIndex: 68n,
+            minIndex: 4n,
+            minAmountSign: -1,
+            updatedBlock: BigInt(at(1).number),
+            updatedTimestamp: new Date(at(1).timestamp * 1000),
+            updatedTrxHash: tx(11).hash,
         });
-
-        expect(trace, 'second SetSwapInfo overwrites the route').toMatchInlineSnapshot(`
-          {
-            "changes": [
-              {
-                "Swapper": {
-                  "sets": [
-                    {
-                      "address": "0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "id": "8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "oracle": undefined,
-                      "oracleTrxHash": undefined,
-                      "slippage": undefined,
-                      "slippageTrxHash": undefined,
-                    },
-                  ],
-                },
-                "SwapperRoute": {
-                  "sets": [
-                    {
-                      "amountIndex": 4n,
-                      "blockNumber": 12000000n,
-                      "blockTimestamp": 2024-06-01T00:00:00.000Z,
-                      "data": "0xabcd",
-                      "fromToken_id": "8453-0x4200000000000000000000000000000000000006",
-                      "id": "8453-0x4200000000000000000000000000000000000006-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "minAmountSign": 1,
-                      "minIndex": 36n,
-                      "router": "0x1111111111111111111111111111111111111111",
-                      "swapper_id": "8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "toToken_id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "trxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    },
-                  ],
-                },
-                "Token": {
-                  "sets": [
-                    {
-                      "address": "0x4200000000000000000000000000000000000006",
-                      "decimals": 18,
-                      "holderCount": 0,
-                      "id": "8453-0x4200000000000000000000000000000000000006",
-                      "isVirtual": false,
-                      "name": "Wrapped Ether",
-                      "symbol": "WETH",
-                      "totalSupply": "0",
-                    },
-                    {
-                      "address": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "decimals": 6,
-                      "holderCount": 0,
-                      "id": "8453-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
-                      "isVirtual": false,
-                      "name": "USD Coin",
-                      "symbol": "USDC",
-                      "totalSupply": "0",
-                    },
-                  ],
-                },
-                "block": 12000000,
-                "chainId": 8453,
-                "eventsProcessed": 2,
-              },
-            ],
-          }
-        `);
+        expect(rowsOf<{ symbol: string }>(result, 'Token').map(({ symbol }) => symbol)).toEqual(['WETH', 'USDC']);
+        expect(rowsOf(result, 'Contract')).toEqual([expect.objectContaining({ kind: 'SWAPPER', factsStatus: 'OK' })]);
     });
 
-    it('stores oracle and slippage from Initialized when initialize did not emit SetOracle', async () => {
+    it('records configuration changes from events only', async () => {
         const indexer = createTestIndexer();
-        const initBlock = {
-            number: 15_683_455,
-            timestamp: Math.floor(Date.parse('2024-07-15T12:00:00.000Z') / 1000),
-        };
-        const trace = await indexer.process({
+        const event = { srcAddress: SWAPPER, block: at(0), transaction: tx(1) };
+        const result = await indexer.process({
             chains: {
                 8453: {
                     simulate: [
                         {
-                            contract: 'BeefySwapper' as const,
-                            event: 'Initialized' as const,
-                            block: initBlock,
-                            logIndex: 0,
-                            srcAddress: SWAPPER,
-                            transaction: { hash: trxHash, transactionIndex: 0 },
+                            ...event,
+                            contract: 'BeefySwapper',
+                            event: 'Initialized',
+                            logIndex: 1,
                             params: { version: 1n },
                         },
-                    ],
-                },
-            },
-        });
-
-        expect(trace, 'Initialized reads on-chain oracle and slippage').toMatchInlineSnapshot(`
-          {
-            "changes": [
-              {
-                "Swapper": {
-                  "sets": [
-                    {
-                      "address": "0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "id": "8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "oracle": "0x1bfa205114678c7d17b97db7a71819d3e6718eb4",
-                      "oracleTrxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                      "slippage": 950000000000000000n,
-                      "slippageTrxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    },
-                  ],
-                },
-                "block": 15683455,
-                "chainId": 8453,
-                "eventsProcessed": 1,
-              },
-            ],
-          }
-        `);
-    });
-
-    it('stores oracle and slippage on the same Swapper without clearing each other', async () => {
-        const indexer = createTestIndexer();
-        const trace = await indexer.process({
-            chains: {
-                8453: {
-                    simulate: [
                         {
-                            contract: 'BeefySwapper' as const,
-                            event: 'SetOracle' as const,
-                            block,
+                            ...event,
+                            contract: 'BeefySwapper',
+                            event: 'SetOracle',
                             logIndex: 2,
-                            srcAddress: SWAPPER,
-                            transaction: { hash: trxHash, transactionIndex: 2 },
                             params: { oracle: ORACLE },
                         },
                         {
-                            contract: 'BeefySwapper' as const,
-                            event: 'SetSlippage' as const,
-                            block,
+                            ...event,
+                            contract: 'BeefySwapper',
+                            event: 'SetSlippage',
                             logIndex: 3,
-                            srcAddress: SWAPPER,
-                            transaction: { hash: trxHash, transactionIndex: 3 },
-                            params: { slippage: 990000000000000000n },
+                            params: { slippage: 99n },
                         },
                     ],
                 },
             },
         });
+        expect(
+            rowsOf(result, 'SwapperConfigChange').map(({ kind, oracle, slippage, version }) => ({
+                kind,
+                oracle,
+                slippage,
+                version,
+            }))
+        ).toEqual([
+            { kind: 'INITIALIZED', oracle: undefined, slippage: undefined, version: 1 },
+            { kind: 'SET_ORACLE', oracle: ORACLE, slippage: undefined, version: undefined },
+            { kind: 'SET_SLIPPAGE', oracle: undefined, slippage: 99n, version: undefined },
+        ]);
+    });
+});
 
-        expect(trace, 'SetOracle then SetSlippage keep both fields').toMatchInlineSnapshot(`
-          {
-            "changes": [
-              {
-                "Swapper": {
-                  "sets": [
-                    {
-                      "address": "0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "id": "8453-0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc",
-                      "oracle": "0xdd27227dba7ea8f5869466a10a8e36bb2d709b35",
-                      "oracleTrxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                      "slippage": 990000000000000000n,
-                      "slippageTrxHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    },
-                  ],
+describe('LST vault', () => {
+    // beJOE on Avalanche, listed in config.yaml
+    const LST = '0x2e360492120cebeb2527c41bae1a4f21992d86ec' as const;
+
+    it('writes share transfers and reads asset() once', async () => {
+        const indexer = createTestIndexer();
+        const result = await indexer.process({
+            chains: {
+                43114: {
+                    simulate: [
+                        {
+                            contract: 'LstVault',
+                            event: 'Transfer',
+                            srcAddress: LST,
+                            logIndex: 1,
+                            block: { number: 38_500_000, timestamp: 1_722_513_600 },
+                            transaction: tx(1),
+                            params: {
+                                from: '0x0000000000000000000000000000000000000000',
+                                to: '0x94b32bdb9ff47f3239f04514bce862c7d95600ca',
+                                value: 3n,
+                            },
+                        },
+                    ],
                 },
-                "block": 12000000,
-                "chainId": 8453,
-                "eventsProcessed": 2,
-              },
-            ],
-          }
+            },
+        });
+        expect(rowsOf(result, 'ShareTransfer')).toHaveLength(1);
+        expect(rowsOf(result, 'Contract')).toMatchInlineSnapshot(`
+          [
+            {
+              "address": "0x2e360492120cebeb2527c41bae1a4f21992d86ec",
+              "createdBlock": undefined,
+              "createdTimestamp": undefined,
+              "createdTrxHash": undefined,
+              "deployName": undefined,
+              "factory": undefined,
+              "factsBlock": 38500000n,
+              "factsStatus": "PARTIAL",
+              "id": "43114-0x2e360492120cebeb2527c41bae1a4f21992d86ec",
+              "kind": "LST_VAULT",
+            },
+          ]
         `);
+        expect(rowsOf(result, 'ContractLink')).toMatchInlineSnapshot(`[]`);
+    });
+
+    it('retries an incomplete fact read at most once per FACTS_RETRY_BLOCKS', async () => {
+        const transfer = (logIndex: number, number: number) => ({
+            contract: 'LstVault' as const,
+            event: 'Transfer' as const,
+            srcAddress: LST,
+            logIndex,
+            block: { number, timestamp: 1_722_513_600 + (number - 38_500_000) * 2 },
+            transaction: tx(logIndex),
+            params: {
+                from: '0x0000000000000000000000000000000000000000' as const,
+                to: '0x94b32bdb9ff47f3239f04514bce862c7d95600ca' as const,
+                value: 1n,
+            },
+        });
+        const indexer = createTestIndexer();
+        const result = await indexer.process({
+            chains: {
+                43114: {
+                    simulate: [
+                        transfer(1, 38_500_000),
+                        transfer(2, 38_500_005), // too early: no retry
+                        transfer(3, 38_500_000 + Number(FACTS_RETRY_BLOCKS)), // retried
+                    ],
+                },
+            },
+        });
+        expect(rowsOf<{ factsBlock: bigint }>(result, 'Contract').map(({ factsBlock }) => factsBlock)).toEqual([
+            38_500_000n,
+            38_500_000n + FACTS_RETRY_BLOCKS,
+        ]);
     });
 });

@@ -1,8 +1,11 @@
-import { addressBookByChainId } from '@beefyfinance/blockchain-addressbook';
-import { type EvmChainId, indexer, type Logger, S } from 'envio';
+import type { EvmChainId } from 'envio';
 import * as R from 'remeda';
-import { config } from './config';
-import { asHex, type Bytes, toHex } from './hex';
+import { asHex } from './hex';
+
+/**
+ * Malformed or abandoned product contracts: factory registrations of these addresses are skipped and none of their
+ * events produce rows.
+ */
 export const rawVaultBlacklist =
     // rg -Ni '\[BLACKLIST\]' ./hyperindex.log | jq -c '{chainId, address: .contractAddress}'
     [
@@ -327,116 +330,15 @@ export const rawVaultBlacklist =
         { chainId: 999, address: '0xd9bcdf03d03d1f36d2b6daf6b30b9ee6c014f610' },
     ];
 
-const vaultBlacklist = R.pipe(
-    rawVaultBlacklist,
-    // ensure lowercase addresses
-    R.map((entry) => ({ ...entry, address: asHex(entry.address) })),
-    // O(1) lookup
-    // { [chainId]: { [address]: true } }
-    R.groupBy((entry) => entry.chainId),
-    R.mapValues((addresses) =>
-        R.pipe(
-            addresses,
-            R.indexBy(({ address }) => address),
-            R.mapValues(() => true)
-        )
-    )
-);
+const toLookup = (entries: ReadonlyArray<{ chainId: number; address: string }>) =>
+    R.pipe(
+        entries,
+        // ensure lowercase addresses, O(1) lookup: { [chainId]: Set<address> }
+        R.groupBy((entry) => entry.chainId),
+        R.mapValues((group) => new Set(group.map(({ address }) => asHex(address))))
+    ) as Partial<Record<number, Set<string>>>;
 
-export function isVaultBlacklisted(chainId: EvmChainId, address: Bytes) {
-    if (!(chainId in vaultBlacklist)) {
-        return false;
-    }
-    return vaultBlacklist[chainId as keyof typeof vaultBlacklist]?.[toHex(address)] ?? false;
-}
+const vaultBlacklist = toLookup(rawVaultBlacklist);
 
-const allAccountBlacklist = R.pipe(
-    // raw account blacklist
-    [
-        { chainId: 10, address: '0x9b50b06b81f033ca86d70f0a44f30bd7e0155737' },
-        { chainId: 137, address: '0x540a9f99bb730631bf243a34b19fd00ba8cf315c' },
-        { chainId: 137, address: '0xf039fe26456901f863c873556f40fb207c6c9c18' },
-        { chainId: 43114, address: '0x6674f3961C5908B086A5551377806f4BA8F0Ac99' },
-        { chainId: 43114, address: '0x7f62af30081178f502c3d4da17825e58d240d737' },
-        { chainId: 56, address: '0x03c509fd85d51dc7e75fa2de06276cfa147486ea' },
-        { chainId: 56, address: '0x31fe02b9ea5501bfe8a872e205dfe6b6a79435ed' },
-        { chainId: 56, address: '0xac18fcb470f913b94946bee43dc52e197d765791' },
-        { chainId: 8453, address: '0x6f19da51d488926c007b9ebaa5968291a2ec6a63' },
-    ],
-    R.map((entry) => ({ ...entry, address: asHex(entry.address) })),
-    // ignore addresses from address book to all chains
-    R.concat(
-        R.pipe(
-            addressBookByChainId,
-            R.entries(),
-            R.flatMap(([chainId, cfg]) =>
-                R.pipe(
-                    [
-                        cfg.platforms.beefyfinance.beefySwapper,
-                        cfg.platforms.beefyfinance.zap,
-                        cfg.platforms.beefyfinance.zapTokenManager,
-                    ],
-                    R.filter((address) => address !== undefined),
-                    R.map((address) => ({ chainId, address: asHex(address) }))
-                )
-            )
-        )
-    ),
-    // add config addresses to all chains (concatenate arrays)
-    R.concat(
-        R.pipe(
-            indexer.chainIds,
-            R.flatMap((chainId) =>
-                R.pipe(
-                    [config.ADDRESS_ZERO, config.BURN_ADDRESS, config.MINT_ADDRESS],
-                    R.map((address) => ({ chainId, address: toHex(address) }))
-                )
-            )
-        )
-    ),
-
-    // O(1) lookup
-    // { [chainId]: { [address]: true } }
-    R.groupBy((entry) => entry.chainId),
-    R.mapValues((addresses) =>
-        R.pipe(
-            addresses,
-            R.indexBy(({ address }) => address),
-            R.mapValues(() => true)
-        )
-    )
-);
-
-export async function isAccountBlacklisted(chainId: EvmChainId, address: Bytes) {
-    const addressStr = toHex(address);
-    if (allAccountBlacklist[chainId][addressStr]) {
-        return true;
-    }
-    return false;
-}
-
-export const blacklistStatus = S.union([
-    // all is green
-    'ok',
-    // definitly malformed contract
-    'blacklisted',
-    // we won't be able to index it for now
-    // but that does not mean it's malformed
-    // maybe it can be indexed later when rpc is available
-    // but can also be a bug in the indexer
-    // but can also be a bug in the contract
-    'maybe_blacklisted',
-]);
-export type BlacklistStatus = S.Output<typeof blacklistStatus>;
-
-// have a common log function for blacklist status
-// that makes it easy to grep all blacklist logs and inspect them:
-// tail -f ./hyperindex.log | rg -i 'BLACKLIST' | jq '{chainId, contractAddress}'
-export const logBlacklistStatus = (
-    log: Logger,
-    status: BlacklistStatus,
-    type: string,
-    data: Record<string, unknown> & { contractAddress: Bytes }
-) => {
-    log.debug(`[BLACKLIST] ${type}`, { status, ...data, contractAddress: toHex(data.contractAddress) });
-};
+export const isVaultBlacklisted = (chainId: EvmChainId, address: string): boolean =>
+    vaultBlacklist[chainId]?.has(asHex(address)) ?? false;

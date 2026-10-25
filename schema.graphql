@@ -1,1198 +1,440 @@
-################################
-##### Core Entities ############
-################################
+# Raw-events schema (docs/architecture.md).
+#
+# - Amounts are raw on-chain integers (no decimals applied).
+# - Addresses and hashes are lowercase 0x hex strings.
+# - `chainId` is added to every table by Envio (disable_default_cross_chain); ids still start with the chain id so
+#   they are unique across chains in ClickHouse.
+# - Event rows carry blockNumber, blockTimestamp, trxHash, trxFrom (EOA sender, labels zaps), logIndex and the
+#   emitting contract. Event ids: `chainId-trxHash-logIndex`.
+# - Storage: entities without a storage directive follow the config default (ClickHouse only in config.yaml,
+#   Postgres in config.local.yaml). Entities that handlers read, and current-state tables, are stored in both.
+#   schema.local.graphql is this file without storage directives (generated: `pnpm config:generate`).
+# - Block numbers use `@config(precision: 20)` so ClickHouse keeps them numeric (sortable).
 
-"""
-A holder account. Can be a user or a contract.
-"""
-type Account {
-  "Account address"
-  id: ID!
+# ---------------------------------------------------------------------------------------------------------------------
+# Registry and on-chain facts
+# ---------------------------------------------------------------------------------------------------------------------
 
-  "Account address"
-  address: Bytes! @index
-
-  "Balances of the account"
-  balances: [TokenBalance!]! @derivedFrom(field: "account")
-
-  "Historical changes of the account balances to retrieve balance at specific points in time"
-  changes: [TokenBalanceChange!]! @derivedFrom(field: "account")
+enum ContractKind {
+  VAULT
+  STRATEGY
+  BOOST
+  REWARD_POOL
+  CLM_MANAGER
+  CLM_STRATEGY
+  ERC4626_ADAPTER
+  LST_VAULT
+  SWAPPER
+  # explicit non-vault share tokens from config.yaml (mooBIFI, beTokens, BIFI)
+  TOKEN
+  # ClassicVaultFactory proxy that is neither a vault, a strategy nor a boost; ContractFactory deployments
+  UNKNOWN
 }
 
-"""
-A token is a representation of a fungible asset on the blockchain
-as specified by the ERC20 standard.
-"""
-type Token {
-  "chain - token address"
+enum FactsStatus {
+  # every one-time read succeeded
+  OK
+  # at least one read reverted or returned 0x0: retried by a later event, at most once per 10 000 blocks
+  PARTIAL
+}
+
+type Contract @storage(postgres: true, clickhouse: true) {
+  "chainId-address"
   id: ID!
+  address: String!
+  kind: ContractKind!
+  "factory that emitted the creation event; unset for addresses listed in config.yaml"
+  factory: String
+  createdBlock: BigInt @config(precision: 20)
+  createdTimestamp: Timestamp
+  createdTrxHash: String
+  "name from *WithName / ContractDeployed factory events"
+  deployName: String
+  "block of the event at which the one-time facts (read at latest: links, token metadata) were last read"
+  factsBlock: BigInt @config(precision: 20)
+  factsStatus: FactsStatus
+}
 
-  # metadata
+enum TokenMetadataStatus {
+  OK
+  # decimals() / name() / symbol() reverted
+  INVALID
+}
 
-  "Is virtual token, we create virtual tokens for the indexer to track non-ERC20 tokens like Beefy Boosts"
-  isVirtual: Boolean!
-
-  "The token address"
-  address: Bytes! @index
-  "The token symbol"
+type Token @storage(postgres: true, clickhouse: true) {
+  "chainId-address"
+  id: ID!
+  address: String!
+  decimals: Int
   symbol: String
-  "The token name"
   name: String
-  "The number of decimals the token uses"
-  decimals: Int!
-
-  ### metrics
-
-  "The total supply of the token"
-  totalSupply: BigDecimal! @config(precision: 100, scale: 24)
-
-  "How many holders this token has. With balance > 0. This is not accurate for non-beefy tokens"
-  holderCount: Int!
-
-  # todo: handle token breakdowns
-
-  ### references
-
-  "The token balances of the token"
-  balances: [TokenBalance!]! @derivedFrom(field: "token")
-  "Historical changes of the token balance to retrieve balance at specific points in time"
-  changes: [TokenBalanceChange!]! @derivedFrom(field: "token")
+  metadataStatus: TokenMetadataStatus!
+  "share token of a Beefy product (vault, CLM manager, reward pool, adapter, LST vault, boost, configured token)"
+  isBeefyShare: Boolean!
 }
 
-"""
-A token balance represents the amount of a specific token that an account holds
-"""
-type TokenBalance {
-  "chain - account address - token address"
+enum LinkRelation {
+  VAULT_WANT
+  VAULT_STRATEGY
+  STRATEGY_VAULT
+  BOOST_STAKED
+  BOOST_REWARD
+  REWARD_POOL_STAKED
+  REWARD_POOL_REWARD
+  CLM_WANT0
+  CLM_WANT1
+  CLM_POOL
+  CLM_STRATEGY_MANAGER
+  ADAPTER_VAULT
+}
+
+enum LinkSource {
+  READ
+  EVENT
+}
+
+type ContractLink @index(fields: ["fromAddress", "relation"]) {
+  "READ: chainId-from-relation-read; EVENT: chainId-trxHash-logIndex-relation"
   id: ID!
-
-  "The account that holds the token balance"
-  account: Account! @index
-  "The token that the account holds"
-  token: Token! @index
-
-  "Amount: the amount of the token this account holds. This amount is what is available on chain."
-  amount: BigDecimal! @config(precision: 100, scale: 24)
-
-  ### references
-
-  "Historical changes of the token balance to retrieve balance at specific points in time"
-  changes: [TokenBalanceChange!]! @derivedFrom(field: "tokenBalance")
+  fromAddress: String!
+  toAddress: String!
+  relation: LinkRelation!
+  source: LinkSource!
+  sinceBlock: BigInt! @config(precision: 20)
+  sinceTimestamp: Timestamp!
+  trxHash: String
+  logIndex: Int
 }
 
-"""
-A balance change entity to track account balance change at specific points in time.
-This enables time-travel queries since HyperIndex doesn't support them natively.
-One entry is created per transfer event per account.
-"""
-type TokenBalanceChange
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+# ---------------------------------------------------------------------------------------------------------------------
+# Balances
+# ---------------------------------------------------------------------------------------------------------------------
+
+type ShareTransfer
+  @index(fields: ["token", "blockNumber", "logIndex"])
+  @storage(clickhouse: { orderBy: ["chainId", "token", "blockNumber", "logIndex"] })
 {
-  "Unique ID: chainId-token-account-blockNumber-trxIndex-logIndex"
   id: ID!
-
-  "Token balance reference"
-  tokenBalance: TokenBalance! @index
-  "Account ID reference"
-  account: Account!
-  "Token ID reference"
-  token: Token!
-
-  "Transaction hash of the change"
-  trxHash: Bytes! @index
-  "The transaction index"
-  trxIndex: Int! @index
-  "The log index"
-  logIndex: Int! @index
-  "Block number of this change"
-  blockNumber: BigInt! @index
-  "Timestamp of this change"
-  blockTimestamp: Timestamp! @index
-
-  "Balance amount before the change"
-  balanceBefore: BigDecimal! @config(precision: 100, scale: 24)
-  "Balance amount at the end of the block"
-  balanceAfter: BigDecimal! @config(precision: 100, scale: 24)
+  token: String!
+  fromAddress: String!
+  toAddress: String!
+  value: BigInt!
+  "token total supply after this transfer; set on mints (from 0x0) and burns (to 0x0) only"
+  totalSupplyAfter: BigInt
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
 }
 
-################################
-##### Enums ####################
-################################
-
-"""
-The status of the contract's initialization
-"""
-enum InitializableStatus {
-  "The contract is in the process of being initialized"
-  INITIALIZING
-  "The contract is able to accept deposits and earn yield"
-  INITIALIZED
-}
-
-"""
-The pause status of a product or component
-"""
-enum PausableStatus {
-  "The product is running normally"
-  RUNNING
-  "The product is paused"
-  PAUSED
-}
-
-################################
-##### Infrastructure ###########
-################################
-
-type ClockTick
-  @internal
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] })
-{
-  "chainId-period-roundedTimestamp"
-  id: ID!
-
-  "Duration of the snapshot period in seconds"
-  period: BigInt!
-  "Timestamp rounded to period"
-  roundedTimestamp: Timestamp! @index
-  "Actual block timestamp when tick was created"
-  blockTimestamp: Timestamp! @index
-}
-
-################################
-##### Classic Vault ############
-################################
-
-# --- Contract components ---
-
-"""
-A vault is a contract that manages the assets of a Beefy product.
-This entity is mostly used to start tracking the events and link them to the Beefy product on new event
-"""
-type ClassicVault {
-  "chain - vault address"
-  id: ID!
-
-  "The vault address"
-  address: Bytes! @index
-
-  "The classic aggregate for this vault"
-  classic: Classic
-
-  "The share token of the vault"
-  shareToken: Token!
-  "The token the vault is using as its underlying asset"
-  underlyingToken: Token!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "The first block the vault was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the vault was active on"
-  initializedTimestamp: Timestamp!
-}
-
-"""
-A strategy is a contract that manages the assets of a Beefy product.
-This entity is mostly used to start tracking the events and link them to the Beefy product on new event
-Also used to ignore balance changes events for this address
-"""
-type ClassicVaultStrategy {
-  "chain - strategy address"
-  id: ID!
-
-  "The strategy address"
-  address: Bytes! @index
-
-  "The classic vault of the strategy"
-  classicVault: ClassicVault!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "Pause status"
-  pausableStatus: PausableStatus!
-  "The first block the strategy was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the strategy was active on"
-  initializedTimestamp: Timestamp!
-}
-
-"""
-A boost is a contract that manages the assets of a Beefy product.
-This entity is mostly used to start tracking the events and link them to the Beefy product on new event
-"""
-type ClassicBoost {
-  "chain - boost address"
-  id: ID!
-
-  "The boost address"
-  address: Bytes! @index
-
-  "The classic aggregate for this boost"
-  classic: Classic
-
-  "The share token of the boost, this is a virtual token"
-  shareToken: Token!
-  "The staked token of the boost (classic vault share token)"
-  underlyingToken: Token!
-  "The reward token paid by the boost"
-  rewardToken: Token!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "The first block the boost was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the boost was active on"
-  initializedTimestamp: Timestamp!
-}
-
-"""
-An adapter is a wrapping contract that allows a classic vault to be used as an ERC4626 vault.
-One share of the adapter is equal to one share of the classic vault.
-"""
-type ClassicErc4626Adapter {
-  "chain - adapter address"
-  id: ID!
-
-  "The adapter address"
-  address: Bytes! @index
-
-  "The classic aggregate for this adapter"
-  classic: Classic
-
-  "The share token of the adapter, this is a virtual token"
-  shareToken: Token!
-  "The underlying token of the adapter"
-  underlyingToken: Token!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "The first block the adapter was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the adapter was active on"
-  initializedTimestamp: Timestamp!
-}
-
-# --- Aggregate & analytics ---
-
-"""
-API-facing aggregate for a Beefy Classic vault product.
-"""
-type Classic @index(fields: ["initializableStatus", "vaultTokenTotalSupply"]) {
-  "chain - vault address"
-  id: ID!
-
-  "The vault address"
-  address: Bytes! @index
-
-  "The classic vault component"
-  classicVault: ClassicVault!
-  "The classic strategy component"
-  classicVaultStrategy: ClassicVaultStrategy
-
-  "Initialized status"
-  initializableStatus: InitializableStatus! @index
-  "Pause status"
-  pausableStatus: PausableStatus!
-  "The first block the classic was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the classic was active on"
-  initializedTimestamp: Timestamp!
-
-  "The vault share token"
-  vaultToken: Token!
-  "Total supply of vault share token"
-  vaultTokenTotalSupply: BigDecimal! @index @config(precision: 100, scale: 24)
-  "The underlying token"
-  underlyingToken: Token!
-  "Underlying platform identifier"
-  underlyingPlatform: String!
-  "Underlying breakdown token ids ordered by underlyingBreakdownTokensOrder"
-  underlyingBreakdownToken_ids: [String!]!
-  "Underlying breakdown token addresses"
-  underlyingBreakdownTokensOrder: [String!]!
-  "Reward pool share token ids ordered by rewardPoolTokensOrder"
-  rewardPoolToken_ids: [String!]!
-  "Reward pool token addresses"
-  rewardPoolTokensOrder: [String!]!
-  "Boost reward token ids ordered by boostRewardTokensOrder"
-  boostRewardToken_ids: [String!]!
-  "Boost reward token addresses"
-  boostRewardTokensOrder: [String!]!
-  "Reward pool output token ids ordered by rewardTokensOrder"
-  rewardToken_ids: [String!]!
-  "Reward pool output token addresses"
-  rewardTokensOrder: [String!]!
-  "ERC4626 adapter token ids ordered by erc4626AdapterTokensOrder"
-  erc4626AdapterToken_ids: [String!]!
-  "ERC4626 adapter token addresses"
-  erc4626AdapterTokensOrder: [String!]!
-
-  "Amount of underlying token in the vault"
-  underlyingAmount: BigDecimal! @config(precision: 100, scale: 24)
-  "Total supply of underlying token"
-  vaultUnderlyingTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying breakdown balances ordered by underlyingBreakdownTokensOrder"
-  vaultUnderlyingBreakdownBalances: [BigDecimal!]!
-  "Balance of underlying token in the vault"
-  vaultUnderlyingBalance: BigDecimal! @config(precision: 100, scale: 24)
-  "Reward pool total supplies ordered by rewardPoolTokensOrder"
-  rewardPoolsTotalSupply: [BigDecimal!]!
-  "ERC4626 adapter total supplies ordered by erc4626AdapterTokensOrder"
-  erc4626AdaptersTotalSupply: [BigDecimal!]!
-  "Vault shares held by adapters ordered by erc4626AdapterTokensOrder"
-  erc4626AdapterVaultSharesBalances: [BigDecimal!]!
-
-  "Underlying token price in native"
-  underlyingToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying breakdown prices in native"
-  underlyingBreakdownToNativePrices: [BigDecimal!]!
-  "Boost reward token prices in native"
-  boostRewardToNativePrices: [BigDecimal!]!
-  "Reward token prices in native"
-  rewardToNativePrices: [BigDecimal!]!
-  "Native token price in USD"
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Total call fees charged"
-  totalCallFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total beefy fees charged"
-  totalBeefyFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total strategist fees charged"
-  totalStrategistFees: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-type ClassicSnapshot
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] })
-{
-  "classicId-period-roundedTimestamp"
-  id: ID!
-
-  "The classic aggregate"
-  classic: Classic!
-
-  "Duration of the snapshot period in seconds"
-  period: BigInt!
-  "Timestamp rounded to period"
-  roundedTimestamp: Timestamp! @index
-  "Actual timestamp of the snapshot"
-  blockTimestamp: Timestamp! @index
-
-  "Total supply of vault share token"
-  vaultTokenTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  "Total supply of underlying token"
-  vaultUnderlyingTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying breakdown balances"
-  vaultUnderlyingBreakdownBalances: [BigDecimal!]!
-  "Balance of underlying token"
-  vaultUnderlyingBalance: BigDecimal! @config(precision: 100, scale: 24)
-  "Reward pool total supplies"
-  rewardPoolsTotalSupply: [BigDecimal!]!
-  "ERC4626 adapter total supplies"
-  erc4626AdaptersTotalSupply: [BigDecimal!]!
-  "Vault shares held by adapters"
-  erc4626AdapterVaultSharesBalances: [BigDecimal!]!
-
-  "Underlying token price in native"
-  underlyingToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying breakdown prices in native"
-  underlyingBreakdownToNativePrices: [BigDecimal!]!
-  "Boost reward token prices in native"
-  boostRewardToNativePrices: [BigDecimal!]!
-  "Reward token prices in native"
-  rewardToNativePrices: [BigDecimal!]!
-  "Native token price in USD"
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Amount of underlying token"
-  underlyingAmount: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Total call fees in this snapshot period"
-  totalCallFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total beefy fees in this snapshot period"
-  totalBeefyFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total strategist fees in this snapshot period"
-  totalStrategistFees: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-type ClassicPosition {
-  "classicId-accountAddress"
-  id: ID!
-
-  "The classic aggregate"
-  classic: Classic!
-  "The account holding the position"
-  account: Account!
-
-  "Transaction hash that created the position"
-  createdWithTrxHash: Bytes!
-
-  "Direct vault share balance"
-  vaultBalance: BigDecimal! @config(precision: 100, scale: 24)
-  "Boost share balance"
-  boostBalance: BigDecimal! @config(precision: 100, scale: 24)
-  "Reward pool share balances ordered by rewardPoolTokensOrder"
-  rewardPoolBalances: [BigDecimal!]!
-  "ERC4626 adapter share balances ordered by erc4626AdapterTokensOrder"
-  erc4626AdapterBalances: [BigDecimal!]!
-  "Vault shares held via adapters ordered by erc4626AdapterTokensOrder"
-  erc4626AdapterVaultSharesBalances: [BigDecimal!]!
-  "Total vault share balance across all sources"
-  totalBalance: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-enum ClassicPositionInteractionType {
-  VAULT_DEPOSIT
-  VAULT_WITHDRAW
+enum BalanceChangeSource {
+  TRANSFER
   BOOST_STAKE
-  BOOST_UNSTAKE
-  BOOST_REWARD_CLAIM
-  CLASSIC_REWARD_POOL_STAKE
-  CLASSIC_REWARD_POOL_UNSTAKE
-  CLASSIC_REWARD_POOL_CLAIM
-  CLASSIC_ERC4626_ADAPTER_STAKE
-  CLASSIC_ERC4626_ADAPTER_UNSTAKE
 }
 
-type ClassicPositionInteraction
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+type BalanceChange
+  @index(fields: ["token", "account", "blockNumber", "logIndex"])
+  @storage(
+    clickhouse: {
+      orderBy: ["chainId", "token", "account", "blockNumber", "logIndex"]
+      skippingIndexes: [{ name: "idx_account", expr: "account", type: "bloom_filter", granularity: 4 }]
+    }
+  )
 {
-  "chain-trxHash-trxIndex-logIndex-suffix"
+  "chainId-trxHash-logIndex-account"
   id: ID!
-
-  "The classic aggregate"
-  classic: Classic!
-  "The account"
-  account: Account!
-  "The position"
-  classicPosition: ClassicPosition!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Interaction type"
-  type: ClassicPositionInteractionType!
-
-  "Position balances after interaction"
-  vaultBalance: BigDecimal! @config(precision: 100, scale: 24)
-  boostBalance: BigDecimal! @config(precision: 100, scale: 24)
-  rewardPoolBalances: [BigDecimal!]!
-  erc4626AdapterBalances: [BigDecimal!]!
-  erc4626AdapterVaultSharesBalances: [BigDecimal!]!
-  totalBalance: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Classic stats at time of interaction"
-  vaultTokenTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  vaultUnderlyingTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  vaultUnderlyingBreakdownBalances: [BigDecimal!]!
-  vaultUnderlyingAmount: BigDecimal! @config(precision: 100, scale: 24)
-  vaultUnderlyingBalance: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Balance deltas"
-  vaultBalanceDelta: BigDecimal! @config(precision: 100, scale: 24)
-  boostBalanceDelta: BigDecimal! @config(precision: 100, scale: 24)
-  boostRewardBalancesDelta: [BigDecimal!]!
-  rewardPoolBalancesDelta: [BigDecimal!]!
-  rewardBalancesDelta: [BigDecimal!]!
-  erc4626AdapterBalancesDelta: [BigDecimal!]!
-  erc4626AdapterVaultSharesBalancesDelta: [BigDecimal!]!
-
-  "Prices at time of interaction"
-  underlyingToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingBreakdownToNativePrices: [BigDecimal!]!
-  boostRewardToNativePrices: [BigDecimal!]!
-  rewardToNativePrices: [BigDecimal!]!
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
+  "share token, or the boost address for boost stakes"
+  token: String!
+  account: String! @index
+  delta: BigInt!
+  balanceAfter: BigInt!
+  source: BalanceChangeSource!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
 }
 
-# --- Events ---
+type Balance @index(fields: ["token", ["balance", "DESC"]]) @storage(postgres: true, clickhouse: true) {
+  "chainId-token-account"
+  id: ID!
+  token: String!
+  account: String! @index
+  balance: BigInt!
+  lastChangeBlock: BigInt! @config(precision: 20)
+}
 
-type ClassicHarvestEvent
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
+type TokenSupply @storage(postgres: true, clickhouse: true) {
+  "chainId-token"
+  id: ID!
+  token: String!
+  totalSupply: BigInt!
+  lastChangeBlock: BigInt! @config(precision: 20)
+}
+
+enum StakeDirection {
+  STAKE
+  UNSTAKE
+}
+
+type BoostStake @storage(clickhouse: { orderBy: ["chainId", "boost", "blockNumber", "logIndex"] }) {
+  id: ID!
+  boost: String!
+  user: String!
+  amount: BigInt!
+  direction: StakeDirection!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# CLM
+# ---------------------------------------------------------------------------------------------------------------------
+
+type ClmDeposit @storage(clickhouse: { orderBy: ["chainId", "manager", "blockNumber", "logIndex"] }) {
+  id: ID!
+  manager: String!
+  user: String!
+  shares: BigInt!
+  amount0: BigInt!
+  amount1: BigInt!
+  fee0: BigInt!
+  fee1: BigInt!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
+}
+
+type ClmWithdraw @storage(clickhouse: { orderBy: ["chainId", "manager", "blockNumber", "logIndex"] }) {
+  id: ID!
+  manager: String!
+  user: String!
+  shares: BigInt!
+  amount0: BigInt!
+  amount1: BigInt!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
+}
+
+type ClmTvl @storage(clickhouse: { orderBy: ["chainId", "strategy", "blockNumber", "logIndex"] }) {
+  id: ID!
+  strategy: String!
+  bal0: BigInt!
+  bal1: BigInt!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
+}
+
+enum ReadStatus {
+  OK
+  # at least one of price() / range() / balancesOfPool() reverted; the failed fields are unset
+  FAILED
+}
+
+"Raw CLM strategy state read at blocks with a TVL or Harvest event (the only per-event eth_call)."
+type ClmPoolState @storage(clickhouse: { orderBy: ["chainId", "strategy", "blockNumber"] }) {
+  "chainId-strategy-blockNumber"
+  id: ID!
+  strategy: String!
+  status: ReadStatus!
+  "price() raw (token1 per token0, strategy encoding)"
+  price: BigInt
+  rangeLower: BigInt
+  rangeUpper: BigInt
+  "balancesOfPool()"
+  token0Bal: BigInt
+  token1Bal: BigInt
+  mainAmount0: BigInt
+  mainAmount1: BigInt
+  altAmount0: BigInt
+  altAmount1: BigInt
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Rewards
+# ---------------------------------------------------------------------------------------------------------------------
+
+enum RewardSource {
+  BOOST
+  REWARD_POOL
+}
+
+type RewardNotified @storage(clickhouse: { orderBy: ["chainId", "contract", "blockNumber", "logIndex"] }) {
+  id: ID!
+  "boost or reward pool"
+  contract: String!
+  source: RewardSource!
+  "reward pools only (boosts: see the BOOST_REWARD link)"
+  rewardToken: String
+  amount: BigInt!
+  "reward pools only"
+  duration: BigInt
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
+}
+
+type RewardPaid @storage(clickhouse: { orderBy: ["chainId", "contract", "blockNumber", "logIndex"] }) {
+  id: ID!
+  contract: String!
+  source: RewardSource!
+  user: String!
+  "reward pools only (boosts: see the BOOST_REWARD link)"
+  rewardToken: String
+  amount: BigInt!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Strategy activity
+# ---------------------------------------------------------------------------------------------------------------------
+
+enum HarvestKind {
+  "classic StratHarvest (both ABIs): harvester, wantHarvested, tvl"
+  CLASSIC_STRAT_HARVEST
+  "CLM Harvest: fee0, fee1"
+  CLM_HARVEST
+  "CLM HarvestRewards: fees"
+  CLM_HARVEST_REWARDS
+  "CLM ClaimedFees: feeMain0, feeMain1, feeAlt0, feeAlt1"
+  CLM_CLAIMED_FEES
+  "CLM ClaimedRewards: fees"
+  CLM_CLAIMED_REWARDS
+}
+
+type Harvest
+  @index(fields: ["blockTimestamp"])
+  @storage(clickhouse: { orderBy: ["chainId", "blockTimestamp", "strategy", "logIndex"] })
 {
-  "chain-trxHash-trxIndex-logIndex"
   id: ID!
-
-  "The classic aggregate"
-  classic: Classic!
-  "The strategy that harvested"
-  classicVaultStrategy: ClassicVaultStrategy!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Underlying amount after harvest"
-  underlyingAmount: BigDecimal! @config(precision: 100, scale: 24)
-  "Compounded underlying amount"
-  compoundedAmount: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Vault share total supply at harvest"
-  vaultTokenTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  "Reward pool total supplies at harvest"
-  rewardPoolsTotalSupply: [BigDecimal!]!
-
-  "Prices at harvest"
-  underlyingToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  boostRewardToNativePrices: [BigDecimal!]!
-  rewardToNativePrices: [BigDecimal!]!
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
+  strategy: String!
+  kind: HarvestKind!
+  harvester: String
+  wantHarvested: BigInt
+  tvl: BigInt
+  fee0: BigInt
+  fee1: BigInt
+  fees: BigInt
+  feeMain0: BigInt
+  feeMain1: BigInt
+  feeAlt0: BigInt
+  feeAlt1: BigInt
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
 }
 
-################################
-##### CLM ######################
-################################
-
-# --- Contract components ---
-
-"""
-A ClmManager handles the accounting of a CLM.
-"""
-type ClmManager {
-  "chain - manager address"
-  id: ID!
-
-  "The manager address"
-  address: Bytes! @index
-
-  "The CLM aggregate for this manager"
-  clm: Clm
-
-  "The share token of the manager, this is a virtual token"
-  shareToken: Token!
-  "The underlying tokens of the manager"
-  underlyingToken0: Token!
-  underlyingToken1: Token!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "The first block the manager was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the manager was active on"
-  initializedTimestamp: Timestamp!
+enum ProductFamily {
+  CLASSIC
+  CLM
 }
 
-"""
-A strategy is a contract that manages the assets of a CLM.
-This entity is mostly used to start tracking the events and link them to the CLM on new event
-Also used to ignore balance changes events for this address
-"""
-type ClmStrategy {
-  "chain - strategy address"
+type FeesCharged @storage(clickhouse: { orderBy: ["chainId", "strategy", "blockNumber", "logIndex"] }) {
   id: ID!
-
-  "The strategy address"
-  address: Bytes! @index
-
-  "The clm manager of the strategy"
-  clmManager: ClmManager!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "Pause status"
-  pausableStatus: PausableStatus!
-  "The first block the strategy was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the strategy was active on"
-  initializedTimestamp: Timestamp!
+  strategy: String!
+  family: ProductFamily!
+  "1: ChargedFees(beefyFee, liquidityFee), 2: ChargedFees(callFee, beefyFee, strategistFee)"
+  version: Int!
+  callFee: BigInt
+  beefyFee: BigInt!
+  strategistFee: BigInt
+  liquidityFee: BigInt
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
 }
 
-# --- Aggregate & analytics ---
-
-"""
-API-facing aggregate for a Beefy CLM product.
-"""
-type Clm @index(fields: ["initializableStatus", "managerTotalSupply"]) {
-  "chain - manager address"
+type PauseChange @storage(clickhouse: { orderBy: ["chainId", "contract", "blockNumber", "logIndex"] }) {
   id: ID!
-
-  "The manager address"
-  address: Bytes! @index
-
-  "The CLM manager component"
-  clmManager: ClmManager!
-  "The CLM strategy component"
-  clmStrategy: ClmStrategy
-
-  "Initialized status"
-  initializableStatus: InitializableStatus! @index
-  "Pause status"
-  pausableStatus: PausableStatus!
-  "The first block the CLM was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the CLM was active on"
-  initializedTimestamp: Timestamp!
-
-  "Underlying protocol pool address"
-  underlyingProtocolPool: Bytes!
-
-  "The manager share token"
-  managerToken: Token!
-  "Total supply of manager share token"
-  managerTotalSupply: BigDecimal! @index @config(precision: 100, scale: 24)
-  "The underlying tokens"
-  underlyingToken0: Token!
-  underlyingToken1: Token!
-
-  "Reward pool share token ids ordered by rewardPoolTokensOrder"
-  rewardPoolToken_ids: [String!]!
-  "Reward pool token addresses"
-  rewardPoolTokensOrder: [String!]!
-  "Output token ids ordered by outputTokensOrder"
-  outputToken_ids: [String!]!
-  "Output token addresses"
-  outputTokensOrder: [String!]!
-  "Reward token ids ordered by rewardTokensOrder"
-  rewardToken_ids: [String!]!
-  "Reward token addresses"
-  rewardTokensOrder: [String!]!
-
-  "Reward pool total supplies ordered by rewardPoolTokensOrder"
-  rewardPoolsTotalSupply: [BigDecimal!]!
-
-  "Token 0 price in native"
-  token0ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  "Token 1 price in native"
-  token1ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  "Output token prices in native"
-  outputToNativePrices: [BigDecimal!]!
-  "Reward token prices in native"
-  rewardToNativePrices: [BigDecimal!]!
-  "Native token price in USD"
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Price of token0 in token1"
-  priceOfToken0InToken1: BigDecimal! @config(precision: 100, scale: 24)
-  "Price range min in token1"
-  priceRangeMin1: BigDecimal! @config(precision: 100, scale: 24)
-  "Price range max in token1"
-  priceRangeMax1: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Total underlying token0 amount"
-  totalUnderlyingAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Total underlying token1 amount"
-  totalUnderlyingAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Idle token0 in the strategy (balancesOfThis)"
-  underlyingIdleAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Idle token1 in the strategy (balancesOfThis)"
-  underlyingIdleAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Locked token0 profit"
-  underlyingLockedAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Locked token1 profit"
-  underlyingLockedAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Unharvested token0 fees"
-  underlyingUnharvestedFees0: BigDecimal! @config(precision: 100, scale: 24)
-  "Unharvested token1 fees"
-  underlyingUnharvestedFees1: BigDecimal! @config(precision: 100, scale: 24)
-  "Main position token0 amount"
-  underlyingMainAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Main position token1 amount"
-  underlyingMainAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Alt position token0 amount"
-  underlyingAltAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Alt position token1 amount"
-  underlyingAltAmount1: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Total call fees charged"
-  totalCallFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total beefy fees charged"
-  totalBeefyFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total strategist fees charged"
-  totalStrategistFees: BigDecimal! @config(precision: 100, scale: 24)
+  contract: String!
+  paused: Boolean!
+  account: String!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
 }
 
-type ClmSnapshot
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(roundedTimestamp)", orderBy: ["roundedTimestamp"] })
-{
-  "clmId-period-roundedTimestamp"
+# ---------------------------------------------------------------------------------------------------------------------
+# Swapper
+# ---------------------------------------------------------------------------------------------------------------------
+
+type SwapperRoute @storage(postgres: true, clickhouse: true) {
+  "chainId-swapper-fromToken-toToken"
   id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-
-  "Duration of the snapshot period in seconds"
-  period: BigInt!
-  "Timestamp rounded to period"
-  roundedTimestamp: Timestamp! @index
-  "Actual timestamp of the snapshot"
-  blockTimestamp: Timestamp! @index
-
-  "Total supply of manager share token"
-  managerTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  "Reward pool total supplies"
-  rewardPoolsTotalSupply: [BigDecimal!]!
-
-  "Token 0 price in native"
-  token0ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  "Token 1 price in native"
-  token1ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  "Output token prices in native"
-  outputToNativePrices: [BigDecimal!]!
-  "Reward token prices in native"
-  rewardToNativePrices: [BigDecimal!]!
-  "Native token price in USD"
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Price of token0 in token1"
-  priceOfToken0InToken1: BigDecimal! @config(precision: 100, scale: 24)
-  "Price range min in token1"
-  priceRangeMin1: BigDecimal! @config(precision: 100, scale: 24)
-  "Price range max in token1"
-  priceRangeMax1: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Total underlying token0 amount"
-  totalUnderlyingAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Total underlying token1 amount"
-  totalUnderlyingAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Idle token0 in the strategy (balancesOfThis)"
-  underlyingIdleAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Idle token1 in the strategy (balancesOfThis)"
-  underlyingIdleAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Locked token0 profit"
-  underlyingLockedAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Locked token1 profit"
-  underlyingLockedAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Unharvested token0 fees"
-  underlyingUnharvestedFees0: BigDecimal! @config(precision: 100, scale: 24)
-  "Unharvested token1 fees"
-  underlyingUnharvestedFees1: BigDecimal! @config(precision: 100, scale: 24)
-  "Main position token0 amount"
-  underlyingMainAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Main position token1 amount"
-  underlyingMainAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Alt position token0 amount"
-  underlyingAltAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  "Alt position token1 amount"
-  underlyingAltAmount1: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Total call fees in this snapshot period"
-  totalCallFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total beefy fees in this snapshot period"
-  totalBeefyFees: BigDecimal! @config(precision: 100, scale: 24)
-  "Total strategist fees in this snapshot period"
-  totalStrategistFees: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-type ClmPosition {
-  "clmId-accountAddress"
-  id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-  "The account holding the position"
-  account: Account!
-
-  "Transaction hash that created the position"
-  createdWithTrxHash: Bytes!
-
-  "Manager share balance"
-  managerBalance: BigDecimal! @config(precision: 100, scale: 24)
-  "Reward pool share balances ordered by rewardPoolTokensOrder"
-  rewardPoolBalances: [BigDecimal!]!
-  "Total share balance"
-  totalBalance: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-enum ClmPositionInteractionType {
-  MANAGER_DEPOSIT
-  MANAGER_WITHDRAW
-  CLM_REWARD_POOL_STAKE
-  CLM_REWARD_POOL_UNSTAKE
-  CLM_REWARD_POOL_CLAIM
-}
-
-type ClmPositionInteraction
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
-{
-  "chain-trxHash-trxIndex-logIndex-suffix"
-  id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-  "The account"
-  account: Account!
-  "The position"
-  clmPosition: ClmPosition!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Interaction type"
-  type: ClmPositionInteractionType!
-
-  "Position balances after interaction"
-  managerBalance: BigDecimal! @config(precision: 100, scale: 24)
-  rewardPoolBalances: [BigDecimal!]!
-  totalBalance: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying balances after interaction"
-  underlyingBalance0: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingBalance1: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Balance deltas"
-  managerBalanceDelta: BigDecimal! @config(precision: 100, scale: 24)
-  rewardPoolBalancesDelta: [BigDecimal!]!
-  rewardBalancesDelta: [BigDecimal!]!
-  "Reward pool from which rewards were claimed"
-  claimedRewardPool: RewardPool
-  underlyingBalance0Delta: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingBalance1Delta: BigDecimal! @config(precision: 100, scale: 24)
-
-  "Prices at time of interaction"
-  token0ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  token1ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  outputToNativePrices: [BigDecimal!]!
-  rewardToNativePrices: [BigDecimal!]!
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-# --- Events ---
-
-type ClmHarvestEvent
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
-{
-  "chain-trxHash-trxIndex-logIndex"
-  id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-  "The strategy that harvested"
-  clmStrategy: ClmStrategy!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Underlying amounts after harvest"
-  underlyingAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Compounded amounts"
-  compoundedAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  compoundedAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Collected output amounts ordered by outputTokensOrder"
-  collectedOutputAmounts: [BigDecimal!]!
-
-  "Manager total supply at harvest"
-  managerTotalSupply: BigDecimal! @config(precision: 100, scale: 24)
-  "Reward pool total supplies at harvest"
-  rewardPoolsTotalSupply: [BigDecimal!]!
-
-  "Prices at harvest"
-  token0ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  token1ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  outputToNativePrices: [BigDecimal!]!
-  rewardToNativePrices: [BigDecimal!]!
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-type ClmManagerCollectionEvent
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
-{
-  "chain-trxHash-trxIndex-logIndex"
-  id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-  "The strategy that collected"
-  clmStrategy: ClmStrategy!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Position amounts at collection"
-  underlyingMainAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingMainAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingAltAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingAltAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying amounts after collection"
-  underlyingAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Collected fee amounts"
-  collectedAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  collectedAmount1: BigDecimal! @config(precision: 100, scale: 24)
-  collectedOutputAmounts: [BigDecimal!]!
-
-  "Prices at collection"
-  token0ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  token1ToNativePrice: BigDecimal! @config(precision: 100, scale: 24)
-  outputToNativePrices: [BigDecimal!]!
-  rewardToNativePrices: [BigDecimal!]!
-  nativeToUSDPrice: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-type ClmDepositEvent
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
-{
-  "chain-trxHash-trxIndex-logIndex"
-  id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-  "The account that deposited"
-  account: Account!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Shares deposited"
-  shares: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying amounts deposited"
-  amount0: BigDecimal! @config(precision: 100, scale: 24)
-  amount1: BigDecimal! @config(precision: 100, scale: 24)
-  "Deposit fees"
-  fee0: BigDecimal! @config(precision: 100, scale: 24)
-  fee1: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-type ClmWithdrawEvent
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
-{
-  "chain-trxHash-trxIndex-logIndex"
-  id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-  "The account that withdrew"
-  account: Account!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Shares withdrawn"
-  shares: BigDecimal! @config(precision: 100, scale: 24)
-  "Underlying amounts withdrawn"
-  amount0: BigDecimal! @config(precision: 100, scale: 24)
-  amount1: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-type ClmStrategyTvlEvent
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
-{
-  "chain-trxHash-trxIndex-logIndex"
-  id: ID!
-
-  "The CLM aggregate"
-  clm: Clm!
-  "The strategy"
-  clmStrategy: ClmStrategy!
-
-  "Transaction hash"
-  trxHash: Bytes! @index
-  "Transaction index"
-  trxIndex: Int! @index
-  "Log index"
-  logIndex: Int! @index
-  "Block number"
-  blockNumber: BigInt! @index
-  "Block timestamp"
-  blockTimestamp: Timestamp! @index
-
-  "Underlying amounts after TVL update"
-  underlyingAmount0: BigDecimal! @config(precision: 100, scale: 24)
-  underlyingAmount1: BigDecimal! @config(precision: 100, scale: 24)
-}
-
-################################
-##### Reward Pool ##############
-################################
-
-"""
-Some clm vaults do not automatically compound their earnings. Those earnings are sent to the reward pool instead.
-Another use of reward pools is to boost beefy products.
-This entity is mostly used to start tracking the events and link them to the Classic vault on new event
-"""
-type RewardPool {
-  "chain - reward pool address"
-  id: ID!
-
-  "The reward pool address"
-  address: Bytes! @index
-
-  "The classic aggregate when staked token is a classic vault"
-  classic: Classic
-  "The CLM aggregate when staked token is a CLM manager"
-  clm: Clm
-
-  "The share token of the reward pool, this is a virtual token"
-  shareToken: Token!
-  "The underlying tokens of the reward pool"
-  underlyingToken: Token!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "The first block the reward pool was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the reward pool was active on"
-  initializedTimestamp: Timestamp!
-}
-
-type RewardPoolRewardedEvent
-  @storage(postgres: true, clickhouse: { partitionBy: "toYYYYMM(blockTimestamp)", orderBy: ["blockTimestamp"] })
-{
-  "chain - trx hash - trx index - log index"
-  id: ID!
-
-  "The trx hash"
-  trxHash: Bytes! @index
-  "The transaction index"
-  trxIndex: Int! @index
-  "The log index"
-  logIndex: Int! @index
-
-  "Block number of the event"
-  blockNumber: BigInt! @index
-  "Timestamp of the event"
-  blockTimestamp: Timestamp! @index
-
-  "The reward pool address. Can be a reward pool or a boost. Represented by the share token address"
-  poolShareToken: Token! @index
-
-  "The reward token address"
-  rewardToken: Token! @index
-  "The reward amount"
-  rewardAmount: BigDecimal! @config(precision: 100, scale: 24)
-  "The reward linear distribution duration in seconds, set to 0 for immediate distribution"
-  rewardVestingSeconds: BigInt!
-}
-
-################################
-##### LST ######################
-################################
-
-"""
-A beefy liquid staking vault like beS.
-"""
-type LstVault {
-  "chain - lst address"
-  id: ID!
-
-  "The lst address"
-  address: Bytes! @index
-
-  "The share token of the lst, this is a virtual token"
-  shareToken: Token!
-  "The underlying token of the lst"
-  underlyingToken: Token!
-
-  "Initialized status"
-  initializableStatus: InitializableStatus!
-  "The first block the lst was active on"
-  initializedBlock: BigInt!
-  "The first timestamp the lst was active on"
-  initializedTimestamp: Timestamp!
-}
-
-################################
-##### Swapper ##################
-################################
-
-"""
-A Beefy swapper contract. One row per indexed address.
-Oracle and slippage stay unset until those events are seen.
-"""
-type Swapper {
-  "chain - swapper address"
-  id: ID!
-
-  "The swapper contract address"
-  address: Bytes! @index
-
-  "Oracle used to calculate minimum swap output"
-  oracle: Bytes
-  "Transaction hash of the last SetOracle"
-  oracleTrxHash: Bytes
-
-  "Global slippage as a raw 1e18 fraction. 1e18 is 100 percent"
-  slippage: BigInt
-  "Transaction hash of the last SetSlippage"
-  slippageTrxHash: Bytes
-
-  "Latest routes configured on this swapper"
-  routes: [SwapperRoute!]! @derivedFrom(field: "swapper")
-}
-
-"""
-Latest stored swap route for a token pair on a swapper.
-"""
-type SwapperRoute {
-  "chain - from token - to token"
-  id: ID!
-
-  "The swapper this route belongs to"
-  swapper: Swapper! @index
-
-  "Token swapped from"
-  fromToken: Token! @index
-  "Token swapped to"
-  toToken: Token! @index
-
-  "Router that executes the swap"
-  router: Bytes! @index
-  "Template calldata with blank amount slots"
-  data: Bytes!
-  "Byte offset where the input amount is written"
+  swapper: String!
+  fromToken: String!
+  toToken: String!
+  router: String!
+  data: String!
   amountIndex: BigInt!
-  "Byte offset where the minimum output is written"
   minIndex: BigInt!
-  "Sign of the minimum output. Negative values encode a negative min amount"
   minAmountSign: Int!
+  updatedBlock: BigInt! @config(precision: 20)
+  updatedTimestamp: Timestamp!
+  updatedTrxHash: String!
+}
 
-  "Transaction hash of the last SetSwapInfo for this pair"
-  trxHash: Bytes! @index
-  "Block number of the last SetSwapInfo for this pair"
-  blockNumber: BigInt! @index
-  "Timestamp of the last SetSwapInfo for this pair"
-  blockTimestamp: Timestamp! @index
+type SwapperRouteChange @storage(clickhouse: { orderBy: ["chainId", "swapper", "blockNumber", "logIndex"] }) {
+  id: ID!
+  swapper: String!
+  fromToken: String!
+  toToken: String!
+  router: String!
+  data: String!
+  amountIndex: BigInt!
+  minIndex: BigInt!
+  minAmountSign: Int!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
+}
+
+enum SwapperConfigKind {
+  INITIALIZED
+  SET_ORACLE
+  SET_SLIPPAGE
+}
+
+type SwapperConfigChange @storage(clickhouse: { orderBy: ["chainId", "swapper", "blockNumber", "logIndex"] }) {
+  id: ID!
+  swapper: String!
+  kind: SwapperConfigKind!
+  oracle: String
+  slippage: BigInt
+  "Initialized(version)"
+  version: Int
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  trxHash: String!
+  trxFrom: String
+  logIndex: Int!
 }

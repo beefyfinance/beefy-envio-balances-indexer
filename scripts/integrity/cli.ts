@@ -5,8 +5,8 @@
  *   pnpm integrity --chains 4326,4663,8453,9745,42161,43114
  *
  * Reads indexed rows from ClickHouse (ENVIO_CLICKHOUSE_HOST, default http://localhost:8123).
- * Hard failures (missing active products, broken graphs, array mismatches, id/address drift) exit 1.
- * EOL gaps, missing configured swappers, zero prices, unknown platforms, and ledger drift are warnings.
+ * Hard failures (missing active products, missing registry links / share tokens, id drift, ledger drift) exit 1.
+ * EOL gaps, missing configured swappers, partial or unread facts, and failed CLM pool reads are warnings.
  * Indexed products that the Beefy API does not list are ignored.
  */
 import { readFileSync } from 'node:fs';
@@ -16,6 +16,7 @@ import {
     COVERAGE_ENTITIES,
     configuredLstProducts,
     configuredSwapperProducts,
+    ENTITY_KINDS,
     fetchCatalog,
     type IndexedEntity,
     loadActiveChainIds,
@@ -23,11 +24,11 @@ import {
     productId,
 } from './catalog';
 import { type Finding, runIntegrityChecks, type Section, type Severity } from './checks';
-import { clickHouseConfigFromEnv, createClickHouseClient, fetchIds } from './clickhouse';
+import { clickHouseConfigFromEnv, createClickHouseClient, fetchContractIds } from './clickhouse';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
-const HELP = `Usage: pnpm integrity [--chains 8453,42161] [--sample 20] [--stuck-threshold 10]
+const HELP = `Usage: pnpm integrity [--chains 8453,42161] [--sample 20]
 
 Env:
   ENVIO_CLICKHOUSE_HOST          ClickHouse HTTP URL (default http://localhost:8123)
@@ -40,11 +41,10 @@ Env:
 type CliOptions = {
     chainIds: number[];
     sampleSize: number;
-    stuckThreshold: number;
 };
 
 const parseArgs = (argv: string[]): CliOptions => {
-    const options: CliOptions = { chainIds: [], sampleSize: 20, stuckThreshold: 10 };
+    const options: CliOptions = { chainIds: [], sampleSize: 20 };
     for (let index = 0; index < argv.length; index++) {
         const arg = argv[index];
         const next = argv[index + 1];
@@ -66,16 +66,12 @@ const parseArgs = (argv: string[]): CliOptions => {
             index += 1;
             continue;
         }
-        if (arg === '--sample' || arg === '--stuck-threshold') {
+        if (arg === '--sample') {
             const value = Number(next);
             if (!Number.isInteger(value) || value < 0) {
                 throw new Error(`${arg} requires a non-negative integer`);
             }
-            if (arg === '--sample') {
-                options.sampleSize = value;
-            } else {
-                options.stuckThreshold = value;
-            }
+            options.sampleSize = value;
             index += 1;
             continue;
         }
@@ -116,8 +112,8 @@ const countSeverity = (findings: Finding[], severity: Severity) =>
 const loadIndexed = async (client: ReturnType<typeof createClickHouseClient>, chainIds: number[]) => {
     const indexed = new Map<IndexedEntity, Set<string>>();
     for (const entity of COVERAGE_ENTITIES) {
-        console.error(`loading ${entity} ids`);
-        indexed.set(entity, await fetchIds(client, entity, chainIds));
+        console.error(`loading ${entity} contract ids`);
+        indexed.set(entity, await fetchContractIds(client, ENTITY_KINDS[entity], chainIds));
     }
     return indexed;
 };
@@ -128,7 +124,7 @@ const main = async () => {
     const blacklistSource = readFileSync(join(repoRoot, 'src/lib/blacklist.ts'), 'utf8');
     const chainIds = options.chainIds.length > 0 ? options.chainIds : loadActiveChainIds(configYaml);
     if (chainIds.length === 0) {
-        throw new Error('No chain ids. Pass --chains or uncomment networks in config.yaml');
+        throw new Error('No chain ids. Pass --chains or add chains to config.yaml');
     }
 
     const clickHouse = clickHouseConfigFromEnv();
@@ -153,7 +149,6 @@ const main = async () => {
     const findings = await runIntegrityChecks(client, {
         chainIds,
         sampleSize: options.sampleSize,
-        stuckThreshold: options.stuckThreshold,
         catalog,
         indexedByEntity,
         blacklist,

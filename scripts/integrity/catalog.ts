@@ -1,5 +1,5 @@
 /**
- * Beefy API catalog, normalized onto indexer entity ids (`chainId-address`).
+ * Beefy API catalog, normalized onto indexer `Contract` ids (`chainId-address`).
  *
  * `/vaults` is the classic vault list (including CLM wrappers). Managers come from
  * `/cow-vaults`, gov/reward pools from `/gov-vaults`, and launchpool boosts from `/boosts`.
@@ -7,7 +7,19 @@
  * the uncommented `LstVault` and `BeefySwapper` addresses in config.yaml.
  */
 
+/** Product category of the catalog; indexed as `Contract` rows of the kinds in `ENTITY_KINDS`. */
 export type IndexedEntity = 'Classic' | 'Clm' | 'RewardPool' | 'ClassicBoost' | 'LstVault' | 'Swapper';
+
+/** `Contract.kind` values that satisfy a catalog product of each category. */
+export const ENTITY_KINDS: Record<IndexedEntity, readonly string[]> = {
+    Classic: ['VAULT'],
+    Clm: ['CLM_MANAGER'],
+    // the gov-vaults list includes old gov vaults, indexed as launchpool-style boosts
+    RewardPool: ['REWARD_POOL', 'BOOST'],
+    ClassicBoost: ['BOOST'],
+    LstVault: ['LST_VAULT'],
+    Swapper: ['SWAPPER'],
+};
 
 export const COVERAGE_ENTITIES: IndexedEntity[] = [
     'Classic',
@@ -85,7 +97,7 @@ export const isLiveStatus = (status: string | undefined) => {
     return normalized === 'active' || normalized === 'paused';
 };
 
-/** Uncommented `  - id: <chainId>` entries under `networks` in config.yaml. */
+/** `  - id: <chainId>` entries under `chains` in config.yaml. */
 export const loadActiveChainIds = (configYaml: string): number[] => {
     const ids: number[] = [];
     for (const line of configYaml.split('\n')) {
@@ -97,7 +109,7 @@ export const loadActiveChainIds = (configYaml: string): number[] => {
     return ids;
 };
 
-/** `{chainId, address}` pairs from `rawVaultBlacklist` only (not the account blacklist). */
+/** `{chainId, address}` pairs from `rawVaultBlacklist` in src/lib/blacklist.ts. */
 export const loadVaultBlacklist = (source: string): Array<{ chainId: number; address: string }> => {
     const start = source.indexOf('export const rawVaultBlacklist');
     const end = source.indexOf('const vaultBlacklist', start);
@@ -180,26 +192,35 @@ export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: nu
 export const loadConfiguredSwappers = (configYaml: string): Array<{ chainId: number; address: string }> =>
     loadConfiguredContracts(configYaml, 'BeefySwapper');
 
-type BeefyVault = {
+/** The fields this repo reads from the Beefy API product lists. */
+export type BeefyApiProduct = {
     id?: string;
     chain?: string;
     network?: string;
     status?: string;
     earnContractAddress?: string | null;
+    /** current strategy (`/vaults`, `/cow-vaults`) */
+    strategy?: string | null;
+    /** `/gov-vaults`: 2 = reward pool, unset = launchpool-style gov vault; `/boosts`: launchpool version */
+    version?: number | null;
 };
 
-type BeefyBoost = {
-    id?: string;
-    chain?: string;
-    status?: string;
-    earnContractAddress?: string | null;
+export type BeefyApiLists = {
+    /** classic vaults (including CLM wrappers) */
+    vaults: BeefyApiProduct[];
+    /** CLM managers */
+    cows: BeefyApiProduct[];
+    /** reward pools and old gov vaults */
+    govs: BeefyApiProduct[];
+    /** launchpool boosts */
+    boosts: BeefyApiProduct[];
 };
 
 const fetchJson = async <T>(url: string): Promise<T> => {
     const response = await fetch(url, {
         headers: {
             accept: 'application/json',
-            'user-agent': 'beefy-envio-integrity',
+            'user-agent': 'beefy-envio-indexer',
         },
     });
     if (!response.ok) {
@@ -218,13 +239,12 @@ const addProduct = (products: Map<string, CatalogProduct>, product: CatalogProdu
 
 const collectVaults = (
     products: Map<string, CatalogProduct>,
-    rows: BeefyVault[],
+    rows: BeefyApiProduct[],
     entity: IndexedEntity,
     chainIds: Set<number>
 ) => {
     for (const row of rows) {
-        const network = row.chain ?? row.network;
-        const chainId = network ? BEEFY_NETWORK_TO_CHAIN_ID[network] : undefined;
+        const chainId = apiChainId(row);
         const address = row.earnContractAddress;
         if (chainId == null || !chainIds.has(chainId) || !address || !address.startsWith('0x')) {
             continue;
@@ -242,14 +262,26 @@ const collectVaults = (
     }
 };
 
+/** `/vaults`, `/cow-vaults`, `/gov-vaults`, `/boosts`. */
+export const fetchBeefyApiLists = async (apiUrl = BEEFY_API_URL): Promise<BeefyApiLists> => {
+    const [vaults, cows, govs, boosts] = await Promise.all([
+        fetchJson<BeefyApiProduct[]>(`${apiUrl}/vaults`),
+        fetchJson<BeefyApiProduct[]>(`${apiUrl}/cow-vaults`),
+        fetchJson<BeefyApiProduct[]>(`${apiUrl}/gov-vaults`),
+        fetchJson<BeefyApiProduct[]>(`${apiUrl}/boosts`),
+    ]);
+    return { vaults, cows, govs, boosts };
+};
+
+/** Chain id of an API product, when the network is known. */
+export const apiChainId = (product: BeefyApiProduct): number | undefined => {
+    const network = product.chain ?? product.network;
+    return network ? BEEFY_NETWORK_TO_CHAIN_ID[network] : undefined;
+};
+
 export const fetchCatalog = async (chainIds: number[], apiUrl = BEEFY_API_URL): Promise<CatalogProduct[]> => {
     const selected = new Set(chainIds);
-    const [vaults, cows, govs, boosts] = await Promise.all([
-        fetchJson<BeefyVault[]>(`${apiUrl}/vaults`),
-        fetchJson<BeefyVault[]>(`${apiUrl}/cow-vaults`),
-        fetchJson<BeefyVault[]>(`${apiUrl}/gov-vaults`),
-        fetchJson<BeefyBoost[]>(`${apiUrl}/boosts`),
-    ]);
+    const { vaults, cows, govs, boosts } = await fetchBeefyApiLists(apiUrl);
 
     const products = new Map<string, CatalogProduct>();
     collectVaults(products, vaults, 'Classic', selected);

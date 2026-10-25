@@ -18,6 +18,3 @@ pre-push:
       env:
         COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       run: pnpm run test:ts
-    # test:
-    #   glob: "*.{js,ts,jsx,tsx}"
-    #   run: pnpm run test:unit
