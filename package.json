@@ -22,6 +22,8 @@
     "integrity": "tsx scripts/integrity/cli.ts",
     "config:generate": "node scripts/configVariants.ts",
     "known-contracts": "node --env-file=.env scripts/knownContracts.ts",
+    "correctness": "node --env-file=.env scripts/correctness.ts",
+    "rpc-pacer": "node scripts/rpcPacer.ts",
     "codegen:local": "envio codegen --config config.local.yaml",
     "codegen:rpc": "envio codegen --config config.rpc.yaml",
     "start:rpc": "MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} envio start --config config.rpc.yaml",

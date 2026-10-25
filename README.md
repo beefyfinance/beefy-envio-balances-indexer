@@ -65,6 +65,32 @@ Handler tests simulate events with `createTestIndexer`. Under vitest, every RPC 
 `src/lib/rpcFixtures.ts`: answered from `test/fixtures/rpc/<chainId>/`, or fetched live once and recorded (needs the
 chain's `ENVIO_RPC_URL_<chainId>`). Commit new fixtures. `RPC_FIXTURES=off` uses live RPC only.
 
+## Correctness check
+
+After an indexing run, compare what is stored in Postgres with the chain at a fixed block:
+
+```bash
+pnpm correctness --chain 1135 --schema raw_lisk --rpc http://localhost:8546 --config config.local.yaml
+```
+
+It checks every `TokenSupply` and `Balance` row against `totalSupply()` / `balanceOf()`, share-token, boost and CLM
+events against the chain's own logs, a sample of event rows against receipts and blocks, `ClmPoolState` against
+re-reads, and contract / token coverage. The block defaults to the indexer's last fully processed block
+(`envio_chains.progress_block`); exit code 1 on any failure. Needs `psql` and an archive-capable RPC.
+
+## Rate-limited RPCs
+
+Envio's RPC source has no request-rate setting. For RPC-only runs against public or shared endpoints, put the pacer in
+front of the RPC and point `ENVIO_RPC_URL_<chain>` at it:
+
+```bash
+pnpm rpc-pacer --upstream https://rpc.api.lisk.com --port 8546 --rps 10 --max-rps 12 --concurrency 8
+```
+
+It paces with an adaptive rate (halved on rate limits, at most once per burst, raised after successes), retries
+rate-limited and failed requests, and rebuilds `eth_getTransactionByHash` answers from the full block when a node
+returns `null` for an old transaction. Production uses rpc.beefy.com (eRPC), which does this upstream.
+
 ## Integrity audit
 
 After a sync, check the ClickHouse tables against the Beefy API catalog and the internal invariants:

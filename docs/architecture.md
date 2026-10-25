@@ -188,6 +188,12 @@ only, 3 minutes, same rate-limited endpoint: dynamic registration without static
 partitions of 5 000 / 50 / 250 addresses 7.4k / 17.8k / 21.1k events. The runs were noisy (140 to 280 HTTP 429 each)
 but consistent in direction; re-measure with a production RPC token.
 
+Verified end to end: Lisk (1135) indexed RPC-only from its first block to block 39 000 000 through the public
+`rpc.api.lisk.com` and the pacer (`scripts/rpcPacer.ts`), then compared with the chain by `scripts/correctness.ts`: 14
+checks passed, including 31 185 share transfers and 6 160 CLM deposits and withdrawals matched one to one, and every
+`Balance` and `TokenSupply` row equal to `balanceOf` / `totalSupply` at the end block. Two factory clones that were
+never initialized on chain stay PARTIAL by design.
+
 RPC sync cost: one `eth_getBlockByNumber` per block with a handled event, one `eth_getTransactionByHash` per
 transaction (for `transaction.from`, and `input` on ClassicVaultFactory events). Details in
 `docs/envio-3.14-notes.md`, "RPC sync cost model".
