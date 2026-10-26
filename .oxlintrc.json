@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "import", "node", "promise", "vitest"],
+  "categories": { "correctness": "error" },
+  "options": { "typeAware": true, "denyWarnings": true },
+  "rules": {
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-unnecessary-template-expression": "error",
+    "typescript/no-unnecessary-type-conversion": "error",
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }]
+  },
+  "ignorePatterns": [
+    "**/dist",
+    "**/.envio",
+    "**/.turbo",
+    "**/node_modules",
+    "apps/indexer/envio-env.d.ts",
+    "apps/indexer/test/fixtures/rpc"
+  ]
+}

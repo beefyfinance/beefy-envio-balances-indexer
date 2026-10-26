@@ -39,3 +39,8 @@ networks_config.yaml
 *.log
 
 existing-apis
+# monorepo
+.turbo/
+dist/
+*.tsbuildinfo
+coverage/

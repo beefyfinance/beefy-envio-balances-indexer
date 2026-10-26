@@ -1,5 +1,8 @@
 # Envio HyperIndex 3.14.1 reference
 
+> Monorepo: file paths below that are not prefixed (`src/`, `scripts/`, `config.yaml`, `schema.graphql`, `test/`)
+> are relative to `apps/indexer/`. Other apps live in `apps/`, shared code in `packages/` (see the root README).
+
 APIs and runtime behaviour of `envio@3.14.1` as used by this indexer. Sources, in order of trust: the installed
 package (`node_modules/envio/src/*.res`, `index.d.ts`, `evm.schema.json`), the generated `.envio/types.d.ts`, the
 public Rust RPC source (enviodev/hyperindex `packages/cli/src/evm_rpc_source/`), `envio <cmd> --help`, then

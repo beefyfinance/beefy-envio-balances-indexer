@@ -1,112 +1,95 @@
-# Beefy raw-events indexer
+# Beefy balances
 
-An [Envio HyperIndex](https://docs.envio.dev) 3.14 indexer that records raw on-chain facts about Beefy products on
-22 EVM chains: share transfers and running balances, boost stakes, CLM deposits / withdrawals and pool state, rewards,
-harvests, fees, pauses and swapper routes, plus a registry of Beefy contracts with their on-chain links and token
-metadata. Amounts are raw integers; prices, positions and PnL are computed by a separate wrapper service.
+A pnpm + Turborepo monorepo for tracking Beefy user positions and PnL: a raw-events indexer, a worker for background
+jobs (starting with the price sync from TimescaleDB), and an API. Raw facts come from the chains, prices from the TimescaleDB on Tiger Cloud, and everything
+derived (positions, values, PnL) is computed downstream, so changing a formula never forces a reindex.
 
-- [docs/architecture.md](docs/architecture.md): principles, entity model, allowed eth_calls, deployment modes, wrapper
-  responsibilities, API coverage and known gaps.
-- [docs/envio-3.14-notes.md](docs/envio-3.14-notes.md): Envio 3.14.1 reference (config, handlers, effects, testing,
-  running, RPC cost model).
-- `schema.graphql`: the tables.
-
-## Quick start
-
-Requirements: Node 26, pnpm 11, Docker for `envio dev` (or external Postgres / ClickHouse, see the Envio notes).
-
-```bash
-pnpm install
-cp .env.example .env      # ENVIO_API_TOKEN (HyperSync) and ENVIO_RPC_URL_<chainId> per chain
-pnpm codegen              # .envio/types.d.ts from config.yaml + schema.graphql
-pnpm dev                  # production config: HyperSync, Postgres + ClickHouse
+```
+apps/
+  indexer/          @beefy/indexer          Envio HyperIndex 3.14 indexer (events → ClickHouse, state → Postgres)
+  worker/           @beefy/worker           Background jobs: a small scheduler plus jobs, starting with the TimescaleDB price
+                                            sync into ClickHouse (scaffold: scheduler and config done, the job is a stub)
+  api/              @beefy/api              Read API over ClickHouse: Hono + zod-openapi (scaffold: /healthz, /v1/chains,
+                                            /openapi.json)
+packages/
+  models/           @beefy/models           Dependency-free domain models: chain registry, hex helpers
+  config/           @beefy/config           Typed fail-fast env parsing, ClickHouse connection settings
+  tsconfig/         @beefy/tsconfig         Shared TypeScript settings (base, app, library)
+docs/               Architecture and Envio reference notes
 ```
 
-## Configs
+Start with [docs/architecture.md](docs/architecture.md) and the [indexer README](apps/indexer/README.md).
 
-`config.yaml` is the hand-edited source. `config.rpc.yaml`, `config.local.yaml` and `schema.local.graphql` are
-generated from it: run `pnpm config:generate` after any change to config.yaml or schema.graphql (a unit test fails
-when they are stale). The `# generated` address blocks inside config.yaml are written by `pnpm known-contracts`.
+## Getting started
 
-| config | sync | storage | run | codegen |
-|---|---|---|---|---|
-| `config.yaml` | HyperSync, RPC fallback (hyperevm, metis: RPC) | Postgres + ClickHouse | `pnpm dev`, `pnpm start` | `pnpm codegen` |
-| `config.rpc.yaml` | RPC only | Postgres + ClickHouse | `pnpm start:rpc` | `pnpm codegen:rpc` |
-| `config.local.yaml` | RPC only | Postgres only | `pnpm dev:local` | `pnpm codegen:local` |
-
-The RPC scripts set `MAX_PARTITION_SIZE=250` and `ENVIO_PG_MAX_CONNECTIONS=8` (override with the env vars) and need no
-`ENVIO_API_TOKEN`. The second one makes Envio run one worker process per chain (see "Multichain isolation" in
-[docs/architecture.md](docs/architecture.md)); production needs it too. `dev` and
-`start` run codegen for their config; the type check (`pnpm test:ts`) uses whichever codegen ran last, so finish with
-`pnpm codegen`. Switching configs on one Postgres schema requires `-r` (or a separate `ENVIO_PG_SCHEMA`).
-
-## Known contracts
-
-Known Beefy contracts are listed statically in config.yaml so a fresh index starts each chain with a few address
-partitions. The lists come from the Beefy API and every entry is verified on chain at `latest` (details in
-docs/architecture.md); the factory handlers still register anything missing.
-
-Regenerating changes static addresses, which changes the stored config and **requires a reindex**: run it only when
-planning one, then commit config.yaml and the variants.
+Requirements: Node 26.12.1 (`.nvmrc`; `nvm use` / `fnm use`) and pnpm 11.28.6 (pinned in `packageManager` and `engines`;
+`corepack enable` picks it up).
 
 ```bash
-pnpm known-contracts             # all chains (or chain ids as arguments); needs ENVIO_RPC_URL_<chainId> in .env
-pnpm codegen
+pnpm install        # whole workspace, from the repo root
+pnpm build          # packages compile to dist/ (apps import them from there)
+pnpm test           # formatting check, typecheck and unit tests of everything
 ```
 
-It takes about 20 seconds for the 22 chains and rewrites config.yaml's `# generated` blocks and the variants.
+Each app has a `.env.example`; copy it to `.env` in that app's directory. Never commit a `.env`.
 
-## Tests
+## Commands
 
-```bash
-pnpm test                               # biome ci + tsc --noEmit + vitest run
-RPC_FIXTURES=replay pnpm test:unit      # offline: fail on any missing RPC fixture (CI)
-```
+All run from the repo root. 
+| Command | What it does |
+|---|---|
+| `pnpm build` | Build the packages |
+| `pnpm test` | Everything the CI gate checks: `format:check`, `test:ts` and `test:unit` |
+| `pnpm test:ts` | `tsc --noEmit` in every package (builds the packages and runs the indexer's codegen first) |
+| `pnpm test:unit` | Vitest in every package |
+| `pnpm format` | Biome check with safe fixes, in every package and for the root files (`format:check` only reports) |
+| `pnpm codegen` | Envio codegen for the indexer |
+| `pnpm clean` | Remove build output and the Turborepo cache |
+| `pnpm --filter @beefy/<app> <script>` | Any other script of one app (`dev`, `start`, `correctness`, ...) |
 
-Handler tests simulate events with `createTestIndexer`. Under vitest, every RPC state read goes through
-`src/lib/rpcFixtures.ts`: answered from `test/fixtures/rpc/<chainId>/`, or fetched live once and recorded (needs the
-chain's `ENVIO_RPC_URL_<chainId>`). Commit new fixtures. `RPC_FIXTURES=off` uses live RPC only.
+Every package defines the same `build`, `test`, `test:ts`, `test:unit`, `format` and `format:check` scripts, so inside
+a package `pnpm test` and friends work on that package alone; the root ones fan out through Turborepo, in dependency
+order and cached on their inputs (a second `pnpm test` with no changes is instant).
 
-## Correctness check
+To work on one app, `cd` into it and use its own scripts (`pnpm dev`, `pnpm test`).
 
-After an indexing run, compare what is stored in Postgres with the chain at a fixed block:
+## Conventions
 
-```bash
-pnpm correctness --chain 1135 --schema raw_lisk --rpc http://localhost:8546 --config config.local.yaml
-```
+- **Versions are exact and locked.** Dependencies have no `^` or `~` (`savePrefix: ""`), and `pnpm-lock.yaml` is
+  committed; install in CI with `pnpm install --frozen-lockfile`. Versions used by several packages live once in the
+  `catalog:` of `pnpm-workspace.yaml` (`catalogMode: strict` rejects a different version in a package).
+- **Supply chain.** New releases are not installable for a week (`minimumReleaseAge`), a package may not lose its
+  trusted-publisher provenance (`trustPolicy: no-downgrade`), exotic (git / tarball) transitive dependencies are blocked,
+  and install scripts only run for packages listed in `allowBuilds`.
+- **Engines are enforced** (`engineStrict`): Node and pnpm versions come from `package.json` and `.nvmrc`.
+- **Turborepo runs in strict env mode.** A task only sees the variables declared in `turbo.json`; add a new one to
+  `passThroughEnv` (not hashed) or `env` (hashed, changes the cache key) on purpose. Telemetry: set
+  `TURBO_TELEMETRY_DISABLED=1` (or run `pnpm exec turbo telemetry disable` once).
+- **Internal packages are compiled.** `packages/*` build to `dist/` with `tsc` (ESM, `.ts` extensions in source are
+  rewritten to `.js`) and export only `dist`, so an app can run on plain Node, also when deployed.
+- **Fail fast configuration.** Apps read their environment through `@beefy/config`, which reports every problem at once,
+  has safe defaults, and refuses a ClickHouse analytics database that equals the indexer's (Envio drops its own on a
+  reindex).
+- **The indexer is self-contained on purpose.** Envio Cloud deploys from a root directory and warns that imports from
+  outside it can break the deployment, so `apps/indexer` depends on no workspace package and extends no shared
+  tsconfig. `packages/models` has a test that keeps its chain list equal to the indexer's `config.yaml`.
 
-It checks every `TokenSupply` and `Balance` row against `totalSupply()` / `balanceOf()`, share-token, boost and CLM
-events against the chain's own logs, a sample of event rows against receipts and blocks, `ClmPoolState` against
-re-reads, and contract / token coverage. The block defaults to the indexer's last fully processed block
-(`envio_chains.progress_block`); exit code 1 on any failure. Needs `psql` and an archive-capable RPC.
+## Adding an app or a package
 
-## Rate-limited RPCs
+1. Create `apps/<name>` or `packages/<name>` with a `package.json` named `@beefy/<name>` (`private: true`,
+   `type: module`, `engines`), a `tsconfig.json` extending `@beefy/tsconfig/app.json` (or `library.json` for a package
+   with an `outDir`/`rootDir`), and the standard scripts (`test`, `test:ts`, `test:unit`, `format`, `format:check`). Packages also need a `build` script and an `exports`
+   map pointing at `dist`.
+2. Use `catalog:` for versions that exist in the catalog, exact versions otherwise.
+3. `pnpm install`, then `pnpm test`.
 
-Envio's RPC source has no request-rate setting. For RPC-only runs against public or shared endpoints, put the pacer in
-front of the RPC and point `ENVIO_RPC_URL_<chain>` at it:
+## Deployment notes
 
-```bash
-pnpm rpc-pacer --upstream https://rpc.api.lisk.com --port 8546 --rps 10 --max-rps 12 --concurrency 8
-```
-
-It paces with an adaptive rate (halved on rate limits, at most once per burst, raised after successes), retries
-rate-limited and failed requests, and rebuilds `eth_getTransactionByHash` answers from the full block when a node
-returns `null` for an old transaction. Production uses rpc.beefy.com (eRPC), which does this upstream.
-
-## Integrity audit
-
-After a sync, check the ClickHouse tables against the Beefy API catalog and the internal invariants:
-
-```bash
-pnpm integrity --chains 8453,42161 [--sample 20]
-```
-
-It reads `ENVIO_CLICKHOUSE_*` (defaults: local ClickHouse) and `BEEFY_API_URL` (default https://api.beefy.finance),
-and exits 1 on errors (missing active products, missing links or share tokens, ledger drift).
-
-## Other scripts
-
-- `pnpm format`: biome check with fixes. `pnpm watch`: type check in watch mode.
-- `pnpm db:console`, `pnpm db:console:clickhouse`: database shells for the local Docker setup.
-- `pnpm stop`: delete the local Docker environment (including the effect cache, unless dumped).
-- `pnpm run deploy`: fast-forward the `prod` branch to `origin/main` and push it.
+- **Indexer (Envio Cloud).** Point the indexer at the root directory `apps/indexer` (config file `config.yaml`).
+  Not verified yet: a deploy from this layout, and which pnpm / Envio versions the cloud accepts.
+- **Worker and API (Heroku).** Not set up yet. The API reads `PORT`; both shut down on `SIGTERM`. `WORKER_JOBS` picks
+  which jobs a process runs, so each job can be its own process type. A monorepo build must run `pnpm build` for the
+  packages before starting an app.
+- **API caching.** Hono's `cache()` middleware needs the Web Cache API, which Node does not have, so the API sets
+  `Cache-Control` and `ETag` (for browsers and any CDN in front) and leaves server-side caching to ClickHouse's query
+  cache.

@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "tabWidth": 4,
+  "useTabs": false,
+  "printWidth": 120,
+  "singleQuote": true,
+  "quoteProps": "as-needed",
+  "trailingComma": "es5",
+  "semi": true,
+  "arrowParens": "always",
+  "bracketSpacing": true,
+  "endOfLine": "lf",
+  "insertFinalNewline": true,
+  "sortImports": true,
+  "sortPackageJson": false,
+  "overrides": [{ "files": ["**/*.json", "**/*.jsonc"], "options": { "tabWidth": 2 } }],
+  "ignorePatterns": [
+    "**/dist",
+    "**/.envio",
+    "**/.turbo",
+    "**/node_modules",
+    "pnpm-lock.yaml",
+    "apps/indexer/test/fixtures/rpc",
+    "apps/indexer/schema.local.graphql",
+    "**/*.md",
+    "**/*.yaml",
+    "**/*.yml",
+    "**/*.graphql"
+  ]
+}

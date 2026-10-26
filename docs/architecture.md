@@ -1,5 +1,8 @@
 # Architecture
 
+> Monorepo: file paths below that are not prefixed (`src/`, `scripts/`, `config.yaml`, `schema.graphql`, `test/`)
+> are relative to `apps/indexer/`. Other apps live in `apps/`, shared code in `packages/` (see the root README).
+
 ## Goal and principles
 
 The indexer records raw on-chain facts about Beefy products (classic vaults, boosts, reward pools, CLMs, ERC-4626
@@ -201,6 +204,13 @@ Verified end to end: Lisk (1135) indexed RPC-only from its first block to block 
 checks passed, including 31 185 share transfers and 6 160 CLM deposits and withdrawals matched one to one, and every
 `Balance` and `TokenSupply` row equal to `balanceOf` / `totalSupply` at the end block. Two factory clones that were
 never initialized on chain stay PARTIAL by design.
+
+Production storage (events in ClickHouse, current-state entities in Postgres, `config.yaml` storage directives)
+verified on the same Lisk range, once as a single process and once with two worker processes (Lisk plus Fraxtal to
+6 000 000): every ClickHouse table equals the verified Postgres-only rows exactly (all 20 tables, field by field), the
+five Postgres entities (`Balance`, `Contract`, `SwapperRoute`, `Token`, `TokenSupply`) equal them too, no event table
+exists in Postgres, and each ClickHouse event history table has one row per event id. Events came from HyperSync for
+speed; the sources were already shown to produce identical rows.
 
 RPC sync cost: one `eth_getBlockByNumber` per block with a handled event, one `eth_getTransactionByHash` per
 transaction (for `transaction.from`, and `input` on ClassicVaultFactory events). Details in

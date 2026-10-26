@@ -1,0 +1,5 @@
+{
+  "extends": "@beefy/tsconfig/library.json",
+  "compilerOptions": { "noEmit": true, "rootDir": "." },
+  "include": ["src"]
+}

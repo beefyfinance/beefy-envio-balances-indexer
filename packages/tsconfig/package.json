@@ -1,0 +1,17 @@
+{
+  "name": "@beefy/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared TypeScript compiler settings for the Beefy workspace",
+  "type": "module",
+  "files": [
+    "base.json",
+    "app.json",
+    "library.json"
+  ],
+  "exports": {
+    "./base.json": "./base.json",
+    "./app.json": "./app.json",
+    "./library.json": "./library.json"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "extends": "@beefy/tsconfig/app.json",
+  "include": ["src"]
+}

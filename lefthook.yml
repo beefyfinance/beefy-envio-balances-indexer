@@ -1,20 +1,46 @@
+# Git hooks (installed by `pnpm install` through lefthook's postinstall; `pnpm exec lefthook install` re-installs them).
+# Skip once with `LEFTHOOK=0 git commit ...`; run a hook by hand with `pnpm exec lefthook run pre-commit --all-files`.
+min_version: 2.1.0
+output:
+  - failure
+  - summary
+
 pre-commit:
   parallel: true
+  skip:
+    - merge
+    - rebase
   commands:
-    biome:
-      glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
-      env:
-        COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      run: pnpm run format
+    secretlint:
+      # Every staged file, whatever its type: a secret is a secret in a markdown file too.
+      run: pnpm exec secretlint --secretlintrc .secretlintrc.json --secretlintignore .secretlintignore --maskSecrets {staged_files}
+    format:
+      glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc}"
       exclude:
-        - "**/codegen/**"
+        - "**/.envio/**"
+        - "**/dist/**"
+        - "apps/indexer/test/fixtures/**"
+      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
+    lint:
+      # Safe fixes only; anything oxlint cannot fix fails the commit.
+      glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"
+      exclude:
+        - "**/.envio/**"
+        - "**/dist/**"
+      run: pnpm exec oxlint -c .oxlintrc.json --fix {staged_files}
+      stage_fixed: true
+    lockfile:
+      # Dependency manifests changed: the lockfile must have been regenerated with them.
+      glob: "{package.json,pnpm-workspace.yaml,apps/*/package.json,packages/*/package.json}"
+      run: pnpm install --frozen-lockfile --lockfile-only
 
 pre-push:
-  parallel: true
-  commands:
-    types:
-      glob: "*.{ts,tsx}"
+  # Same gate as CI (`pnpm test`): typecheck, unit tests, lint and secretlint of everything. Offline (recorded RPC
+  # fixtures), and Turborepo skips packages whose inputs did not change.
+  jobs:
+    - name: test
+      run: pnpm test
       env:
-        COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      run: pnpm run test:ts
+        RPC_FIXTURES: replay
+        TURBO_TELEMETRY_DISABLED: "1"

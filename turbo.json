@@ -1,0 +1,64 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "envMode": "strict",
+  "ui": "stream",
+  "globalDependencies": [".nvmrc", "pnpm-workspace.yaml", "packages/tsconfig/*.json"],
+  "globalPassThroughEnv": [
+    "CI",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "NODE_USE_ENV_PROXY",
+    "NODE_OPTIONS",
+    "NODE_EXTRA_CA_CERTS",
+    "TMPDIR",
+    "TMP",
+    "TEMP"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "package.json", "tsconfig*.json"],
+      "outputs": ["dist/**"]
+    },
+    "codegen": {
+      "inputs": ["config*.yaml", "schema*.graphql", "abis/**", "package.json"],
+      "outputs": [".envio/**", "envio-env.d.ts"],
+      "passThroughEnv": ["ENVIO_*"]
+    },
+    "test:ts": {
+      "dependsOn": ["^build", "codegen"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!test/fixtures/**"]
+    },
+    "test:unit": {
+      "dependsOn": ["^build", "codegen"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
+      "passThroughEnv": ["RPC_FIXTURES", "ENVIO_*", "BEEFY_API_URL"]
+    },
+    "test:lint": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.oxlintrc.json", "!**/*.md"]
+    },
+    "//#test:secretlint": {
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["ENVIO_*", "MAX_PARTITION_SIZE"]
+    },
+    "start": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["ENVIO_*", "MAX_PARTITION_SIZE"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@beefy/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Beefy raw-events HyperIndex indexer: share transfers, balances, stakes, rewards, harvests, swapper routes",
+  "type": "module",
+  "scripts": {
+    "dev": "ENVIO_PG_MAX_CONNECTIONS=${ENVIO_PG_MAX_CONNECTIONS:-8} NODE_OPTIONS='--max-old-space-size=12288' envio dev",
+    "start": "ENVIO_PG_MAX_CONNECTIONS=${ENVIO_PG_MAX_CONNECTIONS:-8} envio start",
+    "start:rpc": "ENVIO_RPC_FOR=sync MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} ENVIO_PG_MAX_CONNECTIONS=${ENVIO_PG_MAX_CONNECTIONS:-8} envio start",
+    "stop": "envio stop",
+    "codegen": "envio codegen",
+    "test": "pnpm run test:ts && pnpm run test:unit && pnpm run test:lint",
+    "test:ts": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:lint": "oxlint -c ../../.oxlintrc.json",
+    "test:watch": "vitest watch --reporter=verbose",
+    "known-contracts": "node --env-file=.env scripts/knownContracts.ts",
+    "correctness": "node --env-file=.env scripts/correctness.ts",
+    "integrity": "tsx scripts/integrity/cli.ts",
+    "rpc-pacer": "node scripts/rpcPacer.ts",
+    "db:console": "PGPASSWORD=testing psql -h localhost -p ${ENVIO_PG_PORT:-55433} -U postgres -d envio-dev",
+    "db:console:clickhouse": "docker compose -f ../../docker-compose.yml exec clickhouse clickhouse-client"
+  },
+  "dependencies": {
+    "@beefyfinance/blockchain-addressbook": "0.59.12",
+    "envio": "3.14.1",
+    "remeda": "2.34.0",
+    "viem": "2.56.3"
+  },
+  "devDependencies": {
+    "@types/node": "25.6.2",
+    "tsx": "4.21.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.5"
+  },
+  "engines": {
+    "node": "^26.12.1"
+  }
+}

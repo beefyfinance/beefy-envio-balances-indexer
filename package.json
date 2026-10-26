@@ -1,50 +1,36 @@
 {
-  "name": "envio-indexer",
-  "version": "0.1.0",
+  "name": "beefy-balances",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Beefy balances monorepo: raw-events indexer, TimescaleDB price sync and API",
   "type": "module",
   "scripts": {
-    "build": "tsc --build",
-    "watch": "tsc --watch",
-    "codegen": "envio codegen",
-    "dev": "NODE_OPTIONS='--max-old-space-size=12288' envio dev",
-    "start": "envio start",
-    "stop": "envio stop",
-    "deploy": "git checkout prod && git merge origin/main --ff-only && git push && git checkout -",
-    "format": "biome check --write --unsafe",
-    "format:safe": "biome check --write",
-    "db:console": "PGPASSWORD=testing psql -h localhost -p ${ENVIO_PG_PORT:-5433} -U postgres -d envio-dev",
-    "db:console:clickhouse": "docker exec -it envio-clickhouse clickhouse-client ",
-    "test": "pnpm run test:lint && pnpm run test:ts && pnpm run test:unit",
-    "test:lint": "biome ci",
-    "test:ts": "tsc --noEmit",
-    "test:unit": "vitest run",
-    "test:unit:watch": "vitest watch --reporter=verbose",
-    "integrity": "tsx scripts/integrity/cli.ts",
-    "config:generate": "node scripts/configVariants.ts",
-    "known-contracts": "node --env-file=.env scripts/knownContracts.ts",
-    "correctness": "node --env-file=.env scripts/correctness.ts",
-    "rpc-pacer": "node scripts/rpcPacer.ts",
-    "codegen:local": "envio codegen --config config.local.yaml",
-    "codegen:rpc": "envio codegen --config config.rpc.yaml",
-    "start:rpc": "MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} ENVIO_PG_MAX_CONNECTIONS=${ENVIO_PG_MAX_CONNECTIONS:-8} envio start --config config.rpc.yaml",
-    "dev:local": "MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} ENVIO_PG_MAX_CONNECTIONS=${ENVIO_PG_MAX_CONNECTIONS:-8} NODE_OPTIONS='--max-old-space-size=12288' envio dev --config config.local.yaml"
-  },
-  "dependencies": {
-    "@beefyfinance/blockchain-addressbook": "0.59.12",
-    "envio": "3.14.1",
-    "remeda": "2.34.0",
-    "viem": "2.56.3"
+    "build": "turbo run build",
+    "codegen": "turbo run codegen",
+    "test": "turbo run test:ts test:unit test:lint //#test:secretlint",
+    "test:ts": "turbo run test:ts",
+    "test:unit": "turbo run test:unit",
+    "test:lint": "turbo run test:lint",
+    "test:secretlint": "git ls-files -z | xargs -0 secretlint --secretlintrc .secretlintrc.json --secretlintignore .secretlintignore --maskSecrets",
+    "format": "oxfmt",
+    "infra:start": "docker compose up --detach --wait",
+    "infra:stop": "docker compose down",
+    "infra:reset": "docker compose down --volumes",
+    "clean": "turbo run clean && rm -rf .turbo",
+    "deploy": "git checkout prod && git merge origin/main --ff-only && git push && git checkout -"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.14",
-    "@types/node": "25.6.2",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.7",
     "lefthook": "2.1.6",
-    "tsx": "4.21.0",
-    "typescript": "7.0.2",
-    "vitest": "4.1.5"
+    "oxfmt": "0.73.0",
+    "oxlint": "1.88.0",
+    "oxlint-tsgolint": "7.0.2004",
+    "secretlint": "13.0.7",
+    "turbo": "2.11.9"
   },
   "packageManager": "pnpm@11.28.6",
   "engines": {
-    "node": "^26.12.1"
+    "node": "^26.12.1",
+    "pnpm": "11.28.6"
   }
 }
