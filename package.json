@@ -26,8 +26,8 @@
     "rpc-pacer": "node scripts/rpcPacer.ts",
     "codegen:local": "envio codegen --config config.local.yaml",
     "codegen:rpc": "envio codegen --config config.rpc.yaml",
-    "start:rpc": "MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} envio start --config config.rpc.yaml",
-    "dev:local": "MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} NODE_OPTIONS='--max-old-space-size=12288' envio dev --config config.local.yaml"
+    "start:rpc": "MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} ENVIO_PG_MAX_CONNECTIONS=${ENVIO_PG_MAX_CONNECTIONS:-8} envio start --config config.rpc.yaml",
+    "dev:local": "MAX_PARTITION_SIZE=${MAX_PARTITION_SIZE:-250} ENVIO_PG_MAX_CONNECTIONS=${ENVIO_PG_MAX_CONNECTIONS:-8} NODE_OPTIONS='--max-old-space-size=12288' envio dev --config config.local.yaml"
   },
   "dependencies": {
     "@beefyfinance/blockchain-addressbook": "0.59.12",

@@ -13,16 +13,21 @@
  *
  * Production uses rpc.beefy.com (eRPC), which does this upstream; this is for local runs and correctness checks.
  *
- * Usage: pnpm rpc-pacer --upstream <url> [--port 8545] [--rps 5] [--max-rps 50] [--concurrency 4]
+ * Several upstreams (comma separated) are tried in turn on retries.
+ *
+ * Usage: pnpm rpc-pacer --upstream <url>[,<url>] [--port 8545] [--rps 5] [--max-rps 50] [--concurrency 4]
  *        then point ENVIO_RPC_URL_<chain> at http://localhost:<port>
  */
 import http from 'node:http';
 import * as R from 'remeda';
 
-type Options = { upstream: string; port: number; rps: number; maxRps: number; minRps: number; concurrency: number };
+type Options = { upstreams: string[]; port: number; rps: number; maxRps: number; minRps: number; concurrency: number };
 type Answer = { status: number; text: string };
 
 const MAX_ATTEMPTS = 12;
+// A bare "Internal error" is usually one node of a pool missing data; a few attempts on the other upstreams are
+// enough, more would only delay a real error (some nodes also use it for reverts).
+const INTERNAL_ERROR_ATTEMPTS = 4;
 const MAX_BACKOFF_MS = 60_000;
 const UPSTREAM_TIMEOUT_MS = 60_000;
 const SUCCESSES_PER_RATE_STEP = 20;
@@ -31,11 +36,13 @@ const RATE_DECREASE_COOLDOWN_MS = 10_000;
 
 const RATE_LIMIT_RE = /rate.?limit|too many requests|exceeded.*(limit|quota|capacity)|-32005|-32029|throttl/i;
 const TRANSIENT_RE = /timeout|timed out|temporarily unavailable|-32603.*(failsafe|upstream)/i;
+const INTERNAL_ERROR_RE = /"code"\s*:\s*-32603.*internal error/i;
 
-/** How the proxy treats an upstream answer: pass it through, slow down and retry, or just retry. */
-export const classifyAnswer = ({ status, text }: Answer): 'ok' | 'rate-limited' | 'transient' => {
+/** How the proxy treats an upstream answer: pass it through, slow down and retry, retry, or retry on another upstream. */
+export const classifyAnswer = ({ status, text }: Answer): 'ok' | 'rate-limited' | 'transient' | 'internal-error' => {
     if (status === 429 || RATE_LIMIT_RE.test(text)) return 'rate-limited';
     if (status === 0 || status >= 500 || TRANSIENT_RE.test(text)) return 'transient';
+    if (INTERNAL_ERROR_RE.test(text)) return 'internal-error';
     return 'ok';
 };
 
@@ -91,10 +98,10 @@ const parseOptions = (argv: string[]): Options => {
         R.fromEntries()
     ) as Record<string, string | undefined>;
     if (!args.upstream)
-        throw new Error('usage: rpc-pacer --upstream <url> [--port] [--rps] [--max-rps] [--concurrency]');
+        throw new Error('usage: rpc-pacer --upstream <url>[,<url>...] [--port] [--rps] [--max-rps] [--concurrency]');
     const rps = Number(args.rps ?? 5);
     return {
-        upstream: args.upstream,
+        upstreams: args.upstream.split(',').filter(Boolean),
         port: Number(args.port ?? 8545),
         rps,
         maxRps: Number(args['max-rps'] ?? 50),
@@ -133,12 +140,13 @@ const startPacer = (options: Options) => {
         if (slot > now) await sleep(slot - now);
     };
 
-    const callUpstream = async (body: string): Promise<Answer & { retryAfter: string | null }> => {
+    const callUpstream = async (body: string, attempt: number): Promise<Answer & { retryAfter: string | null }> => {
         await acquire();
         try {
             await pace();
             stats.upstreamCalls++;
-            const response = await fetch(options.upstream, {
+            // each retry goes to the next upstream, so one flaky node cannot keep a request failing
+            const response = await fetch(options.upstreams[attempt % options.upstreams.length] as string, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body,
@@ -158,7 +166,7 @@ const startPacer = (options: Options) => {
 
     const forward = async (body: string): Promise<Answer> => {
         for (let attempt = 0; ; attempt++) {
-            const answer = await callUpstream(body);
+            const answer = await callUpstream(body, attempt);
             const kind = classifyAnswer(answer);
             if (kind === 'ok') {
                 rate.onSuccess();
@@ -168,7 +176,9 @@ const startPacer = (options: Options) => {
                 stats.rateLimited++;
                 rate.onRateLimited();
             }
-            if (attempt + 1 >= MAX_ATTEMPTS) {
+            const maxAttempts = kind === 'internal-error' ? INTERNAL_ERROR_ATTEMPTS : MAX_ATTEMPTS;
+            if (attempt + 1 >= maxAttempts) {
+                if (kind === 'internal-error') return answer;
                 stats.failures++;
                 return { status: answer.status || 502, text: answer.text };
             }
@@ -228,7 +238,9 @@ const startPacer = (options: Options) => {
             res.end(text);
         });
     }).listen(options.port, () => {
-        console.log(`pacing ${options.upstream} on http://localhost:${options.port} (start ${options.rps} req/s)`);
+        console.log(
+            `pacing ${options.upstreams.join(', ')} on http://localhost:${options.port} (start ${options.rps} req/s)`
+        );
     });
 
     setInterval(() => {

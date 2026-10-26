@@ -18,6 +18,9 @@ describe('rpc pacer', () => {
                 text: '{"error":{"code":-32603,"message":"failsafe timeout policy exceeded"}}',
             })
         ).toBe('transient');
+        expect(classifyAnswer({ status: 200, text: '{"error":{"code":-32603,"message":"Internal error"}}' })).toBe(
+            'internal-error'
+        );
         expect(classifyAnswer({ status: 200, text: '{"result":"0x1"}' })).toBe('ok');
         // a revert is the contract's answer, not something to retry
         expect(classifyAnswer({ status: 200, text: '{"error":{"code":3,"message":"execution reverted"}}' })).toBe('ok');

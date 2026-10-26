@@ -34,7 +34,9 @@ when they are stale). The `# generated` address blocks inside config.yaml are wr
 | `config.rpc.yaml` | RPC only | Postgres + ClickHouse | `pnpm start:rpc` | `pnpm codegen:rpc` |
 | `config.local.yaml` | RPC only | Postgres only | `pnpm dev:local` | `pnpm codegen:local` |
 
-The RPC scripts set `MAX_PARTITION_SIZE=250` (override with the env var) and need no `ENVIO_API_TOKEN`. `dev` and
+The RPC scripts set `MAX_PARTITION_SIZE=250` and `ENVIO_PG_MAX_CONNECTIONS=8` (override with the env vars) and need no
+`ENVIO_API_TOKEN`. The second one makes Envio run one worker process per chain (see "Multichain isolation" in
+[docs/architecture.md](docs/architecture.md)); production needs it too. `dev` and
 `start` run codegen for their config; the type check (`pnpm test:ts`) uses whichever codegen ran last, so finish with
 `pnpm codegen`. Switching configs on one Postgres schema requires `-r` (or a separate `ENVIO_PG_SCHEMA`).
 

@@ -181,6 +181,14 @@ Changing static addresses changes the stored config, which requires a reindex (`
 planning one, and commit the result. They are never fetched at deploy time. ERC-4626 adapters (not in the API) and
 contracts deployed after the last run are registered dynamically.
 
+Multichain isolation. Envio 3.14 runs every chain in one process unless `ENVIO_PG_MAX_CONNECTIONS` is 4 or more (default
+2); it then starts min(chains, connections / 2, 4) worker processes, dealing chains out in config order. In a single
+process, a slow or erroring chain stalled the healthy ones: Fraxtal and Lisk (public RPCs, no HyperSync) stopped fetching
+at about 72 000 processed events in total, for hours, while Monad crawled behind a flaky node (3 chains, 3 runs, also with
+`ENVIO_IN_MEMORY_OBJECTS_TARGET` and `ENVIO_INDEXING_MAX_BUFFER_SIZE` at 100 million, so not a buffer cap). With
+`ENVIO_PG_MAX_CONNECTIONS=8` the same three chains ran for 3 hours with no stall, Fraxtal and Lisk going well past the
+old stall points while Monad stayed slow. Set it in every environment; list the busiest chains first in config order.
+
 RPC partition size. With the known-contract lists, a chain's static addresses form one `eth_getLogs` address filter of
 up to 5 000 addresses by default, which rpc.beefy.com answers slower than Envio's 20 s query timeout (BSC with 926 and
 Arbitrum with 2 354 addresses timed out). The RPC scripts therefore set `MAX_PARTITION_SIZE=250`. Measured on Base, RPC

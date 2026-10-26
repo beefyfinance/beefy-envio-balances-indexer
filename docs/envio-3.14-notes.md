@@ -580,7 +580,8 @@ Per `rpc` entry: `initial_block_interval`, `backoff_multiplicative`, `accelerati
 `backoff_millis`, `query_timeout_millis`, `fallback_stall_timeout`, `polling_interval`, `ws`, `headers`, `for`. Env
 (every chain): `ENVIO_RPC_INITIAL_BLOCK_INTERVAL`, `ENVIO_RPC_BACKOFF_MULTIPLICATIVE`,
 `ENVIO_RPC_ACCELERATION_ADDITIVE`, `ENVIO_RPC_INTERVAL_CEILING`; partitioning: `MAX_PARTITION_SIZE`,
-`ENVIO_CLIENT_FILTER_ADDRESS_THRESHOLD`; buffering: `ENVIO_INDEXING_MAX_BUFFER_SIZE`. No knob caps the number of
+`ENVIO_CLIENT_FILTER_ADDRESS_THRESHOLD`; buffering: `ENVIO_INDEXING_MAX_BUFFER_SIZE`; processes: `ENVIO_PG_MAX_CONNECTIONS`
+(default 2 = one process for all chains; >= 4 splits into min(chains, connections / 2, 4) workers, chains dealt in config order). No knob caps the number of
 partitions or the per-chain concurrency. rpc.beefy.com (erpc) rejects `eth_getLogs` ranges above 30 000 blocks
 (`ErrGetLogsExceededMaxAllowedRange`) and some of its upstreams above 1 000, so the 10 000 default sits inside the
 limit.
