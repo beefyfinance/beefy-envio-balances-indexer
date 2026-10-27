@@ -90,8 +90,7 @@ Classic vault `Deposit` / `Withdraw` events are not indexed: they are share mint
 `config.yaml` stores event tables in ClickHouse only (the storage default). Entities that handlers read, and the
 current-state tables, opt into Postgres and ClickHouse with `@storage(postgres: true, clickhouse: true)`: `Contract`,
 `Token`, `Balance`, `TokenSupply`, `SwapperRoute`. Handlers can only read Postgres. ClickHouse tables are ordered for
-the wrapper's queries (`orderBy` on chain, token or contract, block, log index). `config.local.yaml` stores everything
-in Postgres, with `schema.local.graphql` (the schema without `@storage` directives).
+the wrapper's queries (`orderBy` on chain, token or contract, block, log index).
 
 ## Allowed eth_calls
 
@@ -149,20 +148,19 @@ share one read. This is the only read that scales with events.
 - LST vaults, swappers and `Token` share tokens (mooBIFI, beTokens, BIFI) are listed in config.yaml only. Never list
   want tokens as `Token` (volume).
 
-## Deployment modes and config generation
+## Deployment modes
 
-`config.yaml` is the hand-edited source, except its `# generated` address blocks (known contracts, below).
-`pnpm config:generate` (`scripts/configVariants.ts`) writes the variants from it; `scripts/configVariants.test.ts`
-fails when any generated file is stale.
+One `config.yaml` (hand-edited, except its `# generated` address blocks, known contracts below) and one
+`schema.graphql`. Storage is always Postgres + ClickHouse. The event source is an environment variable:
 
-| file | sync | storage | use |
-|---|---|---|---|
-| `config.yaml` | HyperSync with RPC fallback; hyperevm (999) and metis (1088) RPC only | Postgres + ClickHouse | production (`pnpm dev`, `pnpm start`) |
-| `config.rpc.yaml` | RPC only (`for: sync` on every chain) | Postgres + ClickHouse | production without HyperSync (`pnpm start:rpc`) |
-| `config.local.yaml` | RPC only | Postgres only (`schema.local.graphql`) | local and live test runs (`pnpm dev:local`) |
+| mode | how | sync |
+|---|---|---|
+| default | `pnpm dev`, `pnpm start` | HyperSync with RPC fallback; hyperevm (999) and metis (1088) RPC only |
+| RPC only | `pnpm start:rpc` or `ENVIO_RPC_FOR=sync` | every chain syncs over RPC (vendor-risk fallback) |
 
-The RPC variants build no HyperSync source and need no `ENVIO_API_TOKEN`. Unit tests simulate events and replay
-recorded RPC responses (`src/lib/rpcFixtures.ts`).
+Each chain's rpc entry has `for: ${ENVIO_RPC_FOR:-fallback}`; with `sync` no HyperSync source is used and
+`ENVIO_API_TOKEN` is not needed. Checked with a live run: `sync` makes only RPC `eth_getLogs` requests. Unit tests
+simulate events and replay recorded RPC responses (`src/lib/rpcFixtures.ts`).
 
 Known contracts. Static address lists only speed up a fresh index: Envio then starts each chain with a few address
 partitions instead of one per factory registration block. Factory events still write the `Contract` rows of known
@@ -215,6 +213,40 @@ speed; the sources were already shown to produce identical rows.
 RPC sync cost: one `eth_getBlockByNumber` per block with a handled event, one `eth_getTransactionByHash` per
 transaction (for `transaction.from`, and `input` on ClassicVaultFactory events). Details in
 `docs/envio-3.14-notes.md`, "RPC sync cost model".
+
+## Freshness: user action to API
+
+Measured on Base, live at the chain head, HyperSync + the production storage layout (events in ClickHouse), from a
+laptop with a **free HyperSync dev token** and a public RPC for the contract reads. The clock is the block timestamp
+(second resolution) against the moment the row is readable in ClickHouse.
+
+- **Floor, not rate limited:** 0.5 to 1.5 s from block time to a readable row. Once the indexer knows a block, processing
+  and the ClickHouse write take under 0.5 s: 571 HyperSync log queries took 22 s in total (about 39 ms each), the storage
+  writes 3.8 s in total.
+- **With the free token:** median head lag 7.8 s, p90 31.8 s, p99 40.9 s, maximum 43.3 s, with five stalls of 7 to 43 s in
+  five minutes. Cause: HyperSync answered 429 (264 "rate-limited, retry in 31 to 41 s" warnings in the indexer log), and
+  the indexer backs off for the whole delay. HyperSync's height endpoint itself is at most 1 s behind a public RPC
+  (210 blocks), so the source is not behind; the token tier is. A production token should remove these stalls; this is
+  not measured yet.
+- `MAX_PARTITION_SIZE=250` (the RPC-mode setting) on HyperSync split Base's ~2 700 static addresses into 16 partitions
+  that never completed on this token: leave it unset for HyperSync (one partition).
+- Sample sizes are small (4 to 5 event blocks per run: Beefy activity on Base is sparse at the block level); the head lag
+  figures come from 1 200 samples of the progress block time.
+
+End to end for a public, Cloudflare-fronted API, with a production HyperSync token (assumed) and a tail read live from the
+raw tables (no refresh interval in the path):
+
+| stage | adds |
+|---|---|
+| transaction waits for its block | up to one block time (Base 2 s, Ethereum 12 s) |
+| indexer to readable in ClickHouse | about 1 to 2 s (measured floor), more if the source is throttled |
+| ClickHouse query cache | its TTL (set to a few seconds) |
+| Cloudflare `s-maxage` on the tail endpoint | its TTL (set to 5 to 10 s) |
+| browser `max-age` | 0 to a few seconds |
+| prices | up to 15 minutes plus gaps; they only move the USD value, never the appearance of the position |
+
+So a position change shows up in the API after roughly 5 to 15 s with those TTLs, 30 s as a safe maximum, and the TTLs are
+the dial. Not measured: anything behind the indexer (no API, views or Cloudflare exist yet), and any production token.
 
 ## Wrapper responsibilities
 

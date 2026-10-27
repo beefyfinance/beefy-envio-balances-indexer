@@ -47,6 +47,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@beefy/clickhouse':
+        specifier: workspace:*
+        version: link:../../packages/clickhouse
       '@beefy/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -119,6 +122,25 @@ importers:
       '@beefy/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.6.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.5(@opentelemetry/api@1.9.0)(@types/node@25.6.2)(vite@7.3.1(@types/node@25.6.2)(tsx@4.21.0)(yaml@2.9.1))
+
+  packages/clickhouse:
+    dependencies:
+      '@beefy/config':
+        specifier: workspace:*
+        version: link:../config
+    devDependencies:
+      '@beefy/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
       '@types/node':
         specifier: 'catalog:'
         version: 25.6.2

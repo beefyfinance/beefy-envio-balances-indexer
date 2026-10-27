@@ -127,8 +127,8 @@ storage:
 - An entity is routed by `@storage(...)` (section 2.5) or by the `default` flags; one with neither is a codegen error.
   An entity stored in both is read from Postgres.
 - `@storage(clickhouse: {...})` is rejected by codegen when ClickHouse is not enabled ("Entities using storages not
-  enabled in config.yaml"). A Postgres-only config therefore needs its own schema file (`schema:`), which is how
-  `config.local.yaml` / `schema.local.graphql` work here.
+  enabled in config.yaml"). A Postgres-only config would therefore need its own schema file (`schema:`); this repo
+  no longer has one (local infra runs ClickHouse too, `pnpm infra:start`).
 - Do not run two indexers against one ClickHouse database.
 
 ### 1.7 Preload and multichain ordering
@@ -449,9 +449,10 @@ container; set `ENVIO_HASURA=false`.
 
 ### 6.3 Switching configs
 
-There is no env override for `storage`: use an alternate config (`--config config.local.yaml`). The stored config
-differs between configs, so switching on one Postgres schema requires `-r`; use a different `ENVIO_PG_SCHEMA` per
-config instead.
+There is no env override for `storage`: use an alternate config (`--config <file>`). The stored config differs between
+configs, so switching on one Postgres schema requires `-r`; use a different `ENVIO_PG_SCHEMA` per config instead. This
+repo has a single config: the only per-run switch is `${ENVIO_RPC_FOR:-fallback}` (the `for:` of every rpc entry;
+`${ENVIO_*}` interpolation with a default works for it, checked by a live run), which needs no `-r`.
 
 ### 6.4 Limiting the run
 
@@ -533,7 +534,7 @@ and live runs of this indexer.
 
 - A HyperSync source exists only when the resolved chain config has a HyperSync endpoint; every `rpc` entry becomes an
   RPC source with its `for` role. `config.yaml` resolves 20 chains with HyperSync + RPC `fallback` and 2 (999, 1088)
-  with RPC `sync`; `config.rpc.yaml` and `config.local.yaml` resolve no HyperSync source.
+  with RPC `sync`; with `ENVIO_RPC_FOR=sync` no chain resolves a HyperSync source.
 - `ENVIO_API_TOKEN` is only required by the HyperSync source constructors, so RPC-only configs do not need it (docs
   agree). UNVERIFIED end to end: no run of this repo without the token set.
 

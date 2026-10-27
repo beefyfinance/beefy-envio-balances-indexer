@@ -10,6 +10,7 @@ describe('clickhouseConfigFromEnv', () => {
             password: '',
             rawDatabase: 'beefy_raw',
             analyticsDatabase: 'beefy_analytics',
+            priceDatabase: 'dbt',
         });
     });
 

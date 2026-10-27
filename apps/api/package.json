@@ -10,9 +10,11 @@
     "test": "pnpm run test:ts && pnpm run test:unit && pnpm run test:lint",
     "test:ts": "tsc --noEmit",
     "test:unit": "vitest run",
-    "test:lint": "oxlint -c ../../.oxlintrc.json"
+    "test:lint": "oxlint -c ../../.oxlintrc.json",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@beefy/clickhouse": "workspace:*",
     "@beefy/config": "workspace:*",
     "@beefy/models": "workspace:*",
     "@hono/node-server": "2.1.5",

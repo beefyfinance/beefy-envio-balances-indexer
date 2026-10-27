@@ -33,21 +33,22 @@ not for this one (`src/lib/hex.ts` mirrors `@beefy/models`' hex helpers on purpo
 
 ## Configs
 
-`config.yaml` is the hand-edited source. `config.rpc.yaml`, `config.local.yaml` and `schema.local.graphql` are
-generated from it: run `pnpm config:generate` after any change to config.yaml or schema.graphql (a unit test fails
-when they are stale). The `# generated` address blocks inside config.yaml are written by `pnpm known-contracts`.
+One config (`config.yaml`) and one schema (`schema.graphql`), both hand-edited, except the `# generated` address
+blocks inside config.yaml, which `pnpm known-contracts` writes. Storage is Postgres + ClickHouse (events in ClickHouse,
+see the `@storage` directives); local infra comes from `pnpm infra:start` at the repo root.
 
-| config | sync | storage | run | codegen |
-|---|---|---|---|---|
-| `config.yaml` | HyperSync, RPC fallback (hyperevm, metis: RPC) | Postgres + ClickHouse | `pnpm dev`, `pnpm start` | `pnpm codegen` |
-| `config.rpc.yaml` | RPC only | Postgres + ClickHouse | `pnpm start:rpc` | `pnpm codegen:rpc` |
-| `config.local.yaml` | RPC only | Postgres only | `pnpm dev:local` | `pnpm codegen:local` |
+The event source is chosen per run with an environment variable, not a second file:
 
-The RPC scripts set `MAX_PARTITION_SIZE=250` and `ENVIO_PG_MAX_CONNECTIONS=8` (override with the env vars) and need no
-`ENVIO_API_TOKEN`. The second one makes Envio run one worker process per chain (see "Multichain isolation" in
-[docs/architecture.md](docs/architecture.md)); production needs it too. `dev` and
-`start` run codegen for their config; the type check (`pnpm test:ts`) uses whichever codegen ran last, so finish with
-`pnpm codegen`. Switching configs on one Postgres schema requires `-r` (or a separate `ENVIO_PG_SCHEMA`).
+| mode | how | sync |
+|---|---|---|
+| default | `pnpm dev`, `pnpm start` | HyperSync, RPC as fallback and for contract reads (hyperevm, metis: RPC only) |
+| RPC only | `pnpm start:rpc`, or `ENVIO_RPC_FOR=sync` | every chain syncs over its RPC; no HyperSync and no `ENVIO_API_TOKEN` |
+
+`ENVIO_RPC_FOR` fills the `for:` of each chain's rpc entry (`${ENVIO_RPC_FOR:-fallback}` in config.yaml). All scripts set
+`ENVIO_PG_MAX_CONNECTIONS=8` (override with the env var), which makes Envio run one worker process per chain (see
+"Multichain isolation" in [docs/architecture.md](../../docs/architecture.md)); production needs it too. `start:rpc` also
+sets `MAX_PARTITION_SIZE=250`. The type check (`pnpm test:ts`) uses whichever codegen ran last (`pnpm codegen`).
+Switching mode on one Postgres schema is fine; a changed config or schema needs `-r` (or a separate `ENVIO_PG_SCHEMA`).
 
 ## Known contracts
 
@@ -84,7 +85,7 @@ chain's `ENVIO_RPC_URL_<chainId>`). Commit new fixtures. `RPC_FIXTURES=off` uses
 After an indexing run, compare what is stored in Postgres with the chain at a fixed block:
 
 ```bash
-pnpm correctness --chain 1135 --schema raw_lisk --rpc http://localhost:8546 --config config.local.yaml
+pnpm correctness --chain 1135 --schema raw_lisk --rpc http://localhost:8546 --config config.yaml
 ```
 
 It checks every `TokenSupply` and `Balance` row against `totalSupply()` / `balanceOf()`, share-token, boost and CLM
@@ -118,7 +119,7 @@ and exits 1 on errors (missing active products, missing links or share tokens, l
 
 ## Other scripts
 
-- `pnpm format` (repo root): biome check with fixes.
+- `pnpm format` (repo root): oxfmt over the whole repo (the only format command).
 - `pnpm db:console`, `pnpm db:console:clickhouse`: database shells for the local Docker setup.
 - `pnpm stop`: delete the local Docker environment (including the effect cache, unless dumped).
 - `pnpm run deploy` (repo root): fast-forward the `prod` branch to `origin/main` and push it.
