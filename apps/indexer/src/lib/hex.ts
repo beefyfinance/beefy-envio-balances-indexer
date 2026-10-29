@@ -8,7 +8,7 @@ export type { Hex };
  */
 export const asHex = (hex: string): Hex => hex.toLowerCase() as Hex;
 
-export const ZERO_ADDRESS: Hex = '0x0000000000000000000000000000000000000000';
+const ZERO_ADDRESS: Hex = '0x0000000000000000000000000000000000000000';
 
 export const isZeroAddress = (address: string): boolean => asHex(address) === ZERO_ADDRESS;
 

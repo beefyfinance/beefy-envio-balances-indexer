@@ -119,7 +119,7 @@ In the order a request meets them:
    jittered by ±20 %. Expired entries are served while exactly one refresh runs.
 4. **Single-flight**: concurrent misses on one key share one query (the existing CLM API already does this for two
    minutes).
-5. **Concurrency limiter** for ClickHouse (8 in flight, queue of 64 waiting at most 250 ms); beyond it, `503` with
+5. **Concurrency limiter** for ClickHouse (4 in flight, queue of 64 waiting at most 250 ms); beyond it, `503` with
    `Retry-After`. **Circuit breaker**: after repeated ClickHouse failures, serve stale from memory and `503` otherwise.
 6. **Response** with the `Cache-Control` of the table above, the stored ETag, `generated_at`, and security headers.
 7. **Metrics**: cache hit rate per layer, ClickHouse queries per second and latency, sheds, rate-limited requests.
@@ -128,13 +128,17 @@ One instance with 512 MB to 1 GB is the starting point, two for availability. Th
 
 ## ClickHouse: account-first tables
 
+> **Superseded** by [timeline-redesign.md](timeline-redesign.md): the timeline is now read in place from Envio's `TimelineEvent`
+> table, and prices are stored per event below a watermark instead of stamped by views. This section describes the
+> previous pipeline.
+
 In `envio_analytics`, written by migrations and views only; the API user is `readonly` with `SELECT` on this database.
 Envio's tables are ordered by chain and token, which is wrong for "everything this account did", so the same facts are
 re-keyed by account.
 
 | table | sort key | rows | maintained by |
 |---|---|---|---|
-| `user_timeline` | `account, timestamp, chain_id, log_index` | one per balance change (share transfers, stakes, CLM deposits, withdrawals, reward claims), **unpriced**, with the amounts (`shares`, `shares_after`) and the price keys the row needs (share token, or the two CLM tokens, or the reward token); an `inserted_at` column | **insert-time views**, one per raw table (`BalanceChange`, `ClmDeposit`, `ClmWithdraw`, `RewardPaid`), that only project and re-key columns; rollback rows become tombstones (`ReplacingMergeTree(version)` with a plain `is_deleted` column: a deleted-flag engine would hide the tombstone from `FINAL`, and the stamping must see it to cancel the priced row; readers filter `is_deleted = 0`); partitioned by month so a catch-up can read one month |
+| `user_timeline` | `account, timestamp, chain_id, log_index` | one per balance change (share transfers, stakes, CLM deposits, withdrawals, reward claims), **unpriced**, with the amounts (`shares`, `shares_after`) and the price keys the row needs (share token, or the two CLM tokens, or the reward token); an `inserted_at` column | **insert-time views**, one per raw table (`BalanceChange`, `ClmDeposit`, `ClmWithdraw`, `RewardPaid`), that only project and re-key columns; rolled back rows are cancelled by tombstones written by the **reconcile views** (below) (`ReplacingMergeTree(version)` with a plain `is_deleted` column: a deleted-flag engine would hide the tombstone from `FINAL`, and the stamping must see it to cancel the priced row; readers filter `is_deleted = 0`; `version` is the insert time in ms shifted 20 bits plus the low bits of Envio's checkpoint id, so a tombstone beats the row it cancels and a replay beats the tombstone); partitioned by month so a catch-up can read one month |
 | `token_supply` (later, only if CLM underlying balances are needed) | `chain_id, token, timestamp` | one per mint or burn: total supply after | projection view over `ShareTransfer` |
 | `user_timeline_priced` | `account, timestamp, chain_id, log_index, kind, contract, event_id` | the same rows with prices, USD values and flags; **the only table the API reads**, grouped by transaction × product per request; **not partitioned, `index_granularity` 512** (a monthly partition split one account over a granule per month: measured 65 MB read for a 50 row account, now 1.3 MB) | the **stamping view** (below), into a `ReplacingMergeTree(version)` keyed by the event, version = stamp time |
 | `stamp_queue`, `flagged_rows` | by insert time / timestamp, TTL 1 day / 7 days | the keys of rows written to `user_timeline` in the last day, and of priced rows that were not `OK` | views on `user_timeline` and on `user_timeline_priced`; they exist so the stamping finds its window without scanning tables ordered by account |
@@ -159,14 +163,14 @@ deploys, worker outages and restarts:
 CREATE MATERIALIZED VIEW mv_stamp_recent
 REFRESH EVERY 10 SECOND APPEND TO user_timeline_priced   -- no overlap: the next run starts after the previous ends
 AS SELECT … FROM user_timeline <rows in stamp_queue from the last 3 hours> <two ASOF joins to the price table>
-   <only rows that are new or whose price, flag or tombstone changed>
+   <only rows that are new or whose price, flag, tombstone, product or decimals changed>
 ```
 
 A second view, `mv_stamp_repair` (every 10 minutes), re-stamps rows listed in `flagged_rows` (priced with a flag other than
 `OK` in the last 7 days). Both are in `packages/clickhouse/src/pricing.ts`.
 
 - **Stateless and idempotent.** No checkpoint. Each run looks at the rows queued in the last 3 hours and writes only
-  those that are new or whose price, flag or tombstone changed, so a run that finds nothing new writes nothing. Writing a
+  those that are new or whose price, flag, tombstone, product or decimals changed, so a run that finds nothing new writes nothing. Writing a
   row again with a newer version replaces it.
 - **Catch-up is the same SQL over an explicit range**, run by a command (`stamp <from> <to>` in `packages/clickhouse`) in
   chunks. It is used after a long outage, after a reindex (the view is stopped with `SYSTEM STOP VIEW` for the duration of
@@ -175,26 +179,57 @@ A second view, `mv_stamp_repair` (every 10 minutes), re-stamps rows listed in `f
   exported on `/health` and as a metric; alert above 60 s. If the view fails or stops, the API keeps serving what is
   priced; only new events are late.
 
-**Resource limits (the stamping must not take down the cluster).** Everything below applies to a dedicated ClickHouse user
-for the view (`SQL SECURITY DEFINER`, so the refresh runs as that user):
-- a **settings profile**: `max_threads` 2, `max_memory_usage` (a few GB, spills to disk beyond `max_bytes_before_external_*`),
-  `max_execution_time` 8 s, `max_rows_to_read` and `max_bytes_to_read` sized for one window, `max_concurrent_queries_for_user` 1;
-- a **quota** on queries, read rows and execution time per interval;
-- **query-level `SETTINGS`** on the view's `SELECT`, so the limits travel with the view and do not depend on which user
-  runs it;
-- **workload scheduling** (CPU and IO caps) if the databarn version supports it.
-A run that exceeds a limit fails and is retried at the next interval; the effect is `priced_lag_seconds` growing, never
-cluster load. The window query has to be cheap by itself, not only capped: the main tables are ordered by `account`, so a time
+**Resource limits (the stamping must not take down the cluster).** `access` (in `packages/clickhouse`, run once by an
+administrator, `PIPELINE_PASSWORD` and `API_PASSWORD` in the environment) creates two users; every view is created with
+`DEFINER = beefy_pipeline SQL SECURITY DEFINER` when `CLICKHOUSE_DEFINER` is set:
+
+| user | grants | settings profile | quota |
+|---|---|---|---|
+| `beefy_pipeline` (definer of all views) | `SELECT` on the indexer's and the price databases, `SELECT, INSERT` on ours | `max_threads` 2, `max_memory_usage` 4 GB, `max_execution_time` 30 s, `max_rows_to_read` 200 M (each with `MAX` constraints) | none: see below |
+| `beefy_api` | `SELECT` on `user_timeline_priced`, `contract_product`, `stamp_queue` only | `readonly = 1` (the client sends no settings), `max_execution_time` 3 s, `max_rows_to_read` 2 M, `max_bytes_to_read` 256 MB, `max_memory_usage` 1 GB, `max_threads` 4, 16 concurrent queries (each with `MAX` constraints: it cannot raise them) | 3 000 queries a minute |
+
+Each view's own `SELECT` also carries query-level `SETTINGS` (`max_threads` 2, `max_execution_time` 8 s, memory and rows
+caps), so the limits travel with the view. A run that exceeds a limit fails and is retried at the next interval; the
+effect is `priced_lag_seconds` growing, never cluster load. Verified on ClickHouse 25.10:
+- a refreshable view runs with its **definer's grants and settings profile** (without the grants it fails; with them the
+  profile's `max_threads` and `max_execution_time` apply);
+- **a `QUOTA` is not applied to the refresh queries** (a quota of 3 queries an hour did not stop a view that refreshed
+  every 2 seconds), so for the pipeline the profile and the `SETTINGS` in the views are the limits that count;
+- the indexer's own user needs **no access to our database**: the insert-time views run as the definer, so an insert by
+  a user with `INSERT` on the indexer's tables alone feeds them;
+- through a view with `SQL SECURITY DEFINER` the API user reads what the definer may read, and nothing else;
+- `CREATE OR REPLACE VIEW` with a definer leaves dependency records that block dropping the user, so views are dropped
+  and created, never replaced.
+
+The window query has to be cheap by itself, not only capped: the main tables are ordered by `account`, so a time
 window would scan them. The rows to stamp are therefore found through the two small queue tables (`stamp_queue`,
-`flagged_rows`), and the big table is then read by key.
-Whether the refresh really runs under the definer's profile and quota on the databarn version is **unverified** (below).
+`flagged_rows`), and the big table is then read by key. Nothing here is verified on the databarn cluster itself (Cloud
+or self-hosted, replicated or not): that is the first item to check there.
+
+**Monitoring.** `priced_lag_seconds` is the age of the oldest event in `stamp_queue` (last 15 minutes) that has no priced
+row yet, 0 when everything is stamped (`pricedLagSeconds` in `packages/clickhouse`, tested by stopping the stamping view).
+The API exposes it on `GET /health` (`status: degraded` above `LAG_WARN_SECONDS`, 60 by default, or when it cannot be
+read; still HTTP 200, because the origin keeps serving what is priced) and on `GET /metrics` in Prometheus format, with
+the cache size, queued and in-flight queries, and counters of requests by result (`hit`, `miss`, `stale`,
+`error_stale`, `unavailable`) and of rate-limited requests (`client`, `uncached`). Both need `Authorization: Bearer
+$OPS_TOKEN` when `OPS_TOKEN` is set. Alert on `beefy_priced_lag_seconds > 60` for a few minutes.
 
 **Freshness.** An event is readable in `user_timeline` 1 to 2 s after the block when HyperSync is not throttled
 (measured: 0.5 to 1.5 s), is priced up to 10 s later, and is served after the edge TTL (15 s). Worst case for a user:
 block time (Base 2 s) + 2 s + 10 s + 15 s ≈ 30 s.
 
 **Reorgs and reindex.**
-- Only recent rows can change on a reorg. Tombstones flow into the stamping view's window, and caches expire within 15 s.
+- **Envio deletes, it does not tombstone.** On a reorg its ClickHouse sink runs `DELETE FROM envio_history_<Entity> ...`
+  (lightweight deletes, and `ALTER TABLE ... DELETE` mutations; both strings are in the binary) on the rows of the rolled
+  back checkpoints. A materialized view never sees deletes, so the projected rows would stay for ever. Six refreshable
+  **reconcile views** (`mv_reconcile_<kind>`, every 30 s) take the rows projected in the last 3 hours (from
+  `stamp_queue`), look each one up again in its source table by primary key (chain, contract, account, block, log
+  index: a prefix of the sort key, so it is an index lookup) and write a tombstone for those that are gone. The stamping
+  view then carries the tombstone to the priced table. A replayed event is a new insert and wins over the tombstone.
+  This relies on `address_format: lowercase` in the indexer config (set), because the lookup compares addresses as stored.
+  On the Lisk data (73 589 rows) one reconcile pass takes under 100 ms per view and cancels nothing.
+- A ghost row lives for up to the reconcile interval plus the stamping interval plus the cache TTL (about a minute), and
+  caches expire within 15 s after that.
 - A reindex (Envio drops its raw database) is a new deployment writing a new raw database. The migration job rebuilds
   `user_timeline` and `token_supply` from it, stamps them with the catch-up command, then swaps them in; since we cannot
   purge Cloudflare, the TTL bounds how long old responses can be served.
@@ -202,12 +237,22 @@ block time (Base 2 s) + 2 s + 10 s + 15 s ≈ 30 s.
 
 ## Pricing a transaction
 
+> **Superseded** by [timeline-redesign.md](timeline-redesign.md): the timeline is now read in place from Envio's `TimelineEvent`
+> table, and prices are stored per event below a watermark instead of stamped by views. This section describes the
+> previous pipeline.
+
 **Where prices come from.** We never fetch a price from outside. The existing pipeline already lands cleaned prices into
 the databarn ClickHouse. The stamping view reads that table, from the same cluster. No HTTP call, no price sync job,
 nothing on the indexing path and nothing at request time.
 
+**CLM share prices** are not in that table (it only has classic vaults). They come from `dbt.int_beefy_oracle_price`
+(`CLICKHOUSE_CLM_PRICE_TABLE`), 15 minute prices by oracle key since 2024-04, under the CLM's
+`beefy_wants_price_oracle_key` found in `dbt.int_product_keys` (`CLICKHOUSE_PRODUCT_KEY_TABLE`). The stamping uses them
+only for rows whose product the indexer knows as a `CLM_MANAGER`: for a classic vault the same key prices its want (an
+LP token), not its share.
+
 **The price table** is `dbt.int_product_share_price`: one row per product per 15 minutes with the share price in USD already
-computed (`share_to_usd`, `Decimal(76, 20)`), keyed `chain_id, product_address, date_time` (that is also its sort key, and it
+computed (`share_token_price_usd`, `Decimal(76, 20)`; our views read it as `share_to_usd`), keyed `chain_id, product_address, date_time` (that is also its sort key, and it
 is partitioned by month). Other columns: `beefy_key`, `price_source` (text, where the price came from: coingecko, on chain, correction, …; for
 debugging) and `__rmt_version`. It is a
 `ReplacingMergeTree`, so a price can be corrected by a newer version: the stamping reads it deduplicated (`FINAL` on the
@@ -235,8 +280,11 @@ adding it later only adds fields to the response. Plan: ship without the balance
 balances when the frontend confirms it needs them.
 
 **Arithmetic.** `share_to_usd` is a 256-bit decimal and share amounts are wei integers: the stamping converts shares to a
-decimal using the token's decimals before multiplying, and stores USD values as `Float64` (they are for display and
-charting) so an overflow cannot fail a stamping run.
+decimal before multiplying, and stores USD values as `Float64` (they are for display and charting) so an overflow cannot
+fail a stamping run. The decimals are those the price is quoted in, which for a classic vault are its **want token's**,
+not the share token's: a USDC vault's `decimals()` is 18 but its price is per 10^6 share units (checked against the API
+on every Arbitrum vault). A CLM uses its share token's decimals. `contract_product` picks them, and falls back to the
+share token's when the indexer has no want link or no want decimals (a failed metadata read).
 
 **`price_source`** is exposed on each price as is, so the frontend and we can see where a price came from. The stamping
 does not interpret it.
@@ -285,7 +333,7 @@ second dependency on the hot path).
 |---|---|---|
 | cache busting (`?_=random`) | `308` to the canonical URL, answered from memory | nothing |
 | enumerating random addresses | per-IP and global miss rate limits at the origin; empty users cached 60 s; each miss is a few-granule read | a bounded trickle of tiny reads |
-| rare accounts with huge history | one response per account, cached; ClickHouse row and byte limits | one read per TTL per account |
+| rare accounts with huge history | one response per account, cached; above `MAX_TIMELINE_ROWS` (10 000) a cached `413` instead of a build; ClickHouse row and byte limits | one read per TTL per account, one per 5 minutes for a refused one |
 | the same popular address polled every second | edge `s-maxage`, origin cache, `304` | one refresh per TTL per key |
 | popular key expires, everyone misses | stale-while-revalidate at both layers, single-flight, jittered TTL | one query per key |
 | burn, zero or contract addresses | rejected before any lookup | nothing |
@@ -304,7 +352,7 @@ a quota per interval, and the query cache on with a TTL of a few seconds.
 | Per-account read cost at production size | load synthetic Base-sized `user_timeline_priced` (hundreds of millions of rows), time the response query for a typical user and the largest account, read granules and rows from `system.query_log` |
 | Cost of one stamping run, steady state and catch-up | on the same synthetic data plus a price table of the real resolution and sort key: run time, rows read and memory from `system.query_log`, with the limits of the stamping profile applied |
 | Refreshable materialized views on the databarn ClickHouse | `SELECT version()`, Cloud or self-hosted, replicated or not; create a test `REFRESH EVERY … APPEND` view, check it does not overlap itself, and that it runs under the definer's profile and quota (read `system.query_log`, `system.view_refreshes`); check `SYSTEM STOP VIEW` |
-| Envio's ClickHouse sink under a real reorg | follow a chain head across a reorg (or force one) and check the history tables and tombstones |
+| Envio's real reorg behaviour | the deletes are inferred from strings in Envio's binary and simulated in the tests (`DELETE FROM ... SETTINGS lightweight_deletes_sync = 1`); follow a chain head across a real reorg (or force one) and check the history tables, `envio_checkpoints` and our rows; also whether checkpoint ids are reused after a rollback (the versions do not depend on it) |
 | Cloudflare really caches 200 JSON by `Cache-Control` and honours `stale-while-revalidate` | request a test URL repeatedly and read `CF-Cache-Status` and `Age` |
 | Cloudflare collapses concurrent misses | fire concurrent requests for one new URL and count origin hits |
 | `308` redirects are cached by Cloudflare | same, for a redirected URL |
@@ -339,7 +387,7 @@ after a deploy. Pass criteria:
 Built in `packages/clickhouse` (nothing deployed): the tables, the projection views, the stamping and repair views, the
 catch-up command, a synthetic data generator, and tests. 16 integration tests run against a local ClickHouse 25.10 and
 cover: one row per raw event (real Lisk data, 46 229 balance changes), the sums of the raw amounts, the running sum of
-`delta` equals the indexer's balance for every account and token, rollback tombstones, backfill over rows the views
+`delta` equals the indexer's balance for every account and token, rollback by physical delete (cancelled, then restored by a replay, and carried to the priced table), tombstones, backfill over rows the views
 already saw, interpolation and every flag, price corrections, tombstones reaching the priced table, and idempotence.
 
 Measured on synthetic data (3 000 000 events, 10.5 M prices, 300 products, local single node; not production numbers):
@@ -352,8 +400,59 @@ Measured on synthetic data (3 000 000 events, 10.5 M prices, 300 products, local
 | API read, whale (30 000 rows) / busiest account (50 000 rows) | 120 ms / 200 ms |
 | API read before removing the monthly partitions | 15 ms but 204 800 rows and 65 MB for the same 50 row account |
 
-Not measured: Base scale (hundreds of millions of rows), the real price table's cost, refreshable views under the
-databarn cluster's profile and quota, and concurrent load.
+Not measured here: the real price table's cost and refreshable views under the databarn cluster's profile and quota
+(the Base-scale run is below).
+
+### Base-scale load test (200 million rows)
+
+Local single-node ClickHouse 25.10 in Docker, one Node process for the origin started with `--max-old-space-size=384`
+(no CPU limit on this machine: CPU is reported as CPU seconds used), the load generator on the same machine. Synthetic
+data: 200 000 000 timeline rows over 3 million accounts and 1 500 products, 52.5 M 15 minute prices (365 days), skewed so
+a few accounts are huge. Disk: `user_timeline` 8.7 GiB, `user_timeline_priced` 12.5 GiB, prices 0.5 GiB.
+
+**Catch-up stamping of all 200 M rows**: 25 chunks of 15 days, 10 to 24 s each (about 7 minutes in total, 251 580 rows
+flagged not `OK`, the first days of half the products having no price). Seeding 200 M rows took about 9 minutes.
+
+| scenario | result |
+|---|---|
+| 30 000 cache-busting URLs, 200 concurrent | all `308`, 47 000 requests/s, p99 9.5 ms, **0 ClickHouse queries** |
+| random address enumeration, 100 concurrent, 20 s, default limits | 806 000 requests: 571 reached ClickHouse (the 100 burst plus 1 500 a minute), the rest `429`; p99 4.9 ms |
+| the same with the global miss limit removed | ClickHouse served about 400 tiny queries a second (p99 29 ms, 28 MiB each) and the origin shed 98 % with `503` once the queue was full; origin RSS 380 MB, no errors beyond `503` |
+| one popular address, 500 concurrent clients, 20 s | 893 000 requests, all `HIT`, p99 21 ms, **0 ClickHouse queries** |
+| 300 addresses at once, 500 concurrent, default limits | 82 % hits, the cold ones `429` until cached (miss limit), p99 26 ms |
+| account of 7 300 rows (382 KB gzip) hammered | first request 97 ms; then 10 500 requests/s from memory (4 GB/s out), p99 9.6 ms; one ClickHouse query reading 12 642 rows / 4 MB |
+| 3 000 distinct accounts requested at once after a deploy, 300 concurrent | 66 to 82 served, the rest `429` (default) or `503` (no miss limit) with `Retry-After`; ClickHouse never saw more than the limiter allows (p99 31 ms, 33 MiB); the edge cache is what absorbs a real deploy |
+| ClickHouse unreachable | cold accounts `503` in 26 ms p99; cached accounts `HIT` then `STALE` (200) after the fresh lifetime; `/health` `degraded` with `priced_lag_seconds: null`; first success **10.0 s** after ClickHouse came back (the breaker's open time) |
+| one client over its limit, 20 concurrent | 6 of 253 000 served after the burst, `429` p99 1.1 ms |
+
+Pass criteria of the section above: queries per second flat as clients grow **met** (0 to 215 a minute whatever the
+client count); p99 on hits below 100 ms **met** (under 25 ms at 40 000 requests/s on one core); p99 on misses below
+300 ms **met** for normal accounts; no query over its profile **not yet shown** (this run used the default user; the
+profile and quota were verified separately on the small data set); one instance on 512 MB **met only after the two
+fixes below**; ClickHouse stopped **met**.
+
+What the run found and what changed:
+
+1. **One request could kill the process.** The busiest synthetic account has 357 073 rows (about 100 times the busiest
+   real one, 5 432 items); building its response ran the 384 MB heap out of memory within 2 s and the process exited, so
+   a retrying client would have crash-looped the instance. The origin now asks for `MAX_TIMELINE_ROWS` + 1 rows (default
+   10 000, twice the busiest real account) and answers **`413`** (`Cache-Control: public, s-maxage=300`, remembered in
+   memory for 5 minutes) for anything larger: a bot or an aggregator gets a cheap refusal instead of a response. This
+   departs from "no limit" for those accounts only; it needs a decision if a legitimate account ever exceeds it.
+2. **Memory per build.** A cold build of a 19 000 row account took 280 ms and about 165 MB of resident memory (the
+   JSON text of the rows, the row objects, the response string and its gzip), and 12 of them at once crashed the
+   process. With the 10 000 row cap and 4 queries in flight (was 8), 12 simultaneous cold builds of 9 500 row accounts
+   peaked at 454 MB resident and all requests ended `200` or `503`. The miss limit (1 500 a minute) makes that
+   simultaneity hard to reach from outside.
+3. **Cached hits copied the body.** A hit built a new `Uint8Array` copy of the cached gzip bytes (600 KB to 1.2 MB) for
+   every request; it is now a view over the cached buffer. CPU for the same work went from 11 s to 5.9 s and peak
+   resident memory from 729 MB to 560 MB.
+
+Still open from this run: an account over 2 M rows hits the API profile's `max_rows_to_read` and answers `503` on every
+miss (it is not remembered like a `413`); the breaker's 10 s open time is the recovery time after an outage; the load
+generator shared the machine with ClickHouse and the origin, so absolute requests per second are not production
+numbers. Not run: the same scenarios behind Cloudflare, with the `beefy_api` user's profile and quota, and on the
+databarn cluster.
 
 ### The timeline route, as built
 
@@ -368,8 +467,15 @@ breaker, ETag and `304`). The response is compressed once when it is built and t
   projected as zero-delta `MINT` and `BURN` rows next to the balance rows) and CLM deposit and withdraw events;
   `stake` / `unstake` are boost moves; `transfer_in` / `transfer_out` are shares moving between accounts. The share
   movement that comes with a deposit, withdrawal, stake or unstake is folded into it. A deposit made through a zap or
-  router mints to the router, which then transfers to the user, so it reaches the user as `transfer_in`; telling those
-  apart needs the transaction's sender or the router list, not yet done.
+  router mints the shares to the router, which forwards them to the user in the same transaction (a withdrawal is the
+  reverse: the user sends shares to the router, which burns them). `mv_routed_markers` (refreshable, every 30 s, 3 hour
+  window; once over everything when attached) finds those pairs in the raw transfers (same transaction and token, the
+  router is minted an amount and forwards exactly that amount, or receives it and burns it) and writes the same `MINT` /
+  `BURN` marker for the user. It is structural: no router list, no use of the transaction sender, and a transfer between
+  two people is never marked. A fee taken between the mint and the forward breaks the exact amount match, and that
+  deposit stays a `transfer_in`. On the Lisk and Fraxtal data 7 647 of 15 417 plain transfers are the forward half of
+  such a deposit and 1 943 are the first half of a withdrawal. A rolled back forward is cancelled by the ordinary
+  `mint` / `burn` reconcile views.
 - `product_key`, `display_name`, per-token underlying amounts in whole units, and the USD value of claims are not in the
   response yet (they need the Beefy API or token decimals and the `int_token_price` table). `underlying` and `claims`
   carry raw integer amounts in the meantime.

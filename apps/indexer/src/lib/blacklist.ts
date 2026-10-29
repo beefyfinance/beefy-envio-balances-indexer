@@ -7,7 +7,7 @@ import { asHex } from './hex';
  * Malformed or abandoned product contracts: factory registrations of these addresses are skipped and none of their
  * events produce rows.
  */
-export const rawVaultBlacklist =
+const rawVaultBlacklist =
     // rg -Ni '\[BLACKLIST\]' ./hyperindex.log | jq -c '{chainId, address: .contractAddress}'
     [
         { chainId: 10, address: '0x07ae77025feaf04f915375bc5f02c07545160db8' },

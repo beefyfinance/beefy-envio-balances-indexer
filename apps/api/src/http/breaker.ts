@@ -7,15 +7,18 @@ export class BreakerOpenError extends Error {
 
 /**
  * Opens after `failureThreshold` consecutive failures and refuses calls for `openMs`; then lets one probe through
- * (half open): a success closes it, a failure opens it again.
+ * (half open): a success closes it, a failure opens it again. An error `isFailure` rejects (an answer about the request,
+ * or a refusal before the database was reached) is passed on and changes nothing.
  */
 export const createCircuitBreaker = ({
     failureThreshold,
     openMs,
+    isFailure = () => true,
     now = Date.now,
 }: {
     failureThreshold: number;
     openMs: number;
+    isFailure?: (error: unknown) => boolean;
     now?: () => number;
 }) => {
     let failures = 0;
@@ -34,6 +37,7 @@ export const createCircuitBreaker = ({
                 openedAt = undefined;
                 return value;
             } catch (error) {
+                if (!isFailure(error)) throw error;
                 failures += 1;
                 if (openedAt !== undefined || failures >= failureThreshold) openedAt = now();
                 throw error;

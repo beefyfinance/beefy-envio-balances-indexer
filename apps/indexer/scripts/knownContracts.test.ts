@@ -1,16 +1,17 @@
 import * as R from 'remeda';
 import { describe, expect, it } from 'vitest';
 
-import { classifyClassicProxyReads } from '../src/lib/classify';
+import { classifyClassicProxyReads } from '../src/lib/classify.ts';
 import {
     type Candidate,
     candidatesFromApi,
-    READ_FUNCTIONS,
+    type ReadFunction,
     type Reads,
+    readFunctions,
     readDetection,
     strategiesToRead,
     verifyCandidates,
-} from './knownContracts';
+} from './knownContracts.ts';
 
 const address = (tag: number) => `0x${tag.toString(16).padStart(40, '0')}`;
 const VAULT = address(1);
@@ -188,7 +189,7 @@ describe('known contracts: on-chain verification', () => {
             multicall: async ({ contracts }: { contracts: Array<{ address: string; functionName: string }> }) => {
                 multicalls.push(contracts.length);
                 return R.map(contracts, ({ address: at, functionName }) => {
-                    const value = reads.get(at)?.[functionName as (typeof READ_FUNCTIONS)[number]];
+                    const value = reads.get(at)?.[functionName as ReadFunction];
                     return value === null || value === undefined
                         ? { status: 'failure' as const }
                         : { status: 'success' as const, result: value };
@@ -196,9 +197,19 @@ describe('known contracts: on-chain verification', () => {
             },
         };
         const result = await readDetection(client, [VAULT, MANAGER, POOL]);
-        expect(multicalls).toEqual([3 * READ_FUNCTIONS.length]);
+        expect(multicalls).toEqual([3 * readFunctions().length]);
         expect(result.get(VAULT)).toEqual(reads.get(VAULT));
         expect(result.get(MANAGER)).toEqual(reads.get(MANAGER));
         expect(result.get(POOL)).toEqual(reads.get(POOL));
+    });
+
+    it('treats an answer that is not an address (pair) as a failed call', async () => {
+        const hostile: unknown[] = ['0xnot-an-address', `${VAULT}\n`, { toLowerCase: () => VAULT }, [TOKEN], 42];
+        const client = {
+            multicall: async ({ contracts }: { contracts: Array<{ address: string; functionName: string }> }) =>
+                R.map(contracts, (_, index) => ({ status: 'success' as const, result: hostile[index] })),
+        };
+        const result = await readDetection(client, [VAULT]);
+        expect(result.get(VAULT)).toEqual(none);
     });
 });

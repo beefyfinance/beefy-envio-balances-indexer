@@ -4,19 +4,22 @@ import { handleBoostStake } from '../lib/balances';
 import { eventColumns } from '../lib/event';
 import { asHex } from '../lib/hex';
 import { ensureContract } from '../lib/registry';
+import { writeTimelineEvent } from '../lib/timeline';
 
 indexer.onEvent({ contract: 'ClassicBoost', event: 'Initialized' }, async ({ event, context }) => {
     await ensureContract(context, event, 'BOOST');
 });
 
 indexer.onEvent({ contract: 'ClassicBoost', event: 'Staked' }, async ({ event, context }) => {
-    if (!(await ensureContract(context, event, 'BOOST'))) return;
-    await handleBoostStake(context, event, 'STAKE');
+    const contract = await ensureContract(context, event, 'BOOST');
+    if (!contract) return;
+    await handleBoostStake(context, event, contract, 'STAKE');
 });
 
 indexer.onEvent({ contract: 'ClassicBoost', event: 'Withdrawn' }, async ({ event, context }) => {
-    if (!(await ensureContract(context, event, 'BOOST'))) return;
-    await handleBoostStake(context, event, 'UNSTAKE');
+    const contract = await ensureContract(context, event, 'BOOST');
+    if (!contract) return;
+    await handleBoostStake(context, event, contract, 'UNSTAKE');
 });
 
 indexer.onEvent({ contract: 'ClassicBoost', event: 'RewardAdded' }, async ({ event, context }) => {
@@ -32,7 +35,8 @@ indexer.onEvent({ contract: 'ClassicBoost', event: 'RewardAdded' }, async ({ eve
 });
 
 indexer.onEvent({ contract: 'ClassicBoost', event: 'RewardPaid' }, async ({ event, context }) => {
-    if (!(await ensureContract(context, event, 'BOOST'))) return;
+    const contract = await ensureContract(context, event, 'BOOST');
+    if (!contract) return;
     context.RewardPaid.set({
         ...eventColumns(event),
         contract: asHex(event.srcAddress),
@@ -40,5 +44,8 @@ indexer.onEvent({ contract: 'ClassicBoost', event: 'RewardPaid' }, async ({ even
         user: asHex(event.params.user),
         rewardToken: undefined,
         amount: event.params.reward,
+    });
+    writeTimelineEvent(context, event, contract, event.params.user, 'CLAIM', {
+        rewardAmount: event.params.reward,
     });
 });

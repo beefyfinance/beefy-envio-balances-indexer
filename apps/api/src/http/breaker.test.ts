@@ -29,4 +29,19 @@ describe('circuit breaker', () => {
         time = 200;
         await expect(breaker.run(() => Promise.resolve(3))).resolves.toBe(3);
     });
+
+    it('passes on the errors that are not failures without counting them', async () => {
+        const breaker = createCircuitBreaker({
+            failureThreshold: 1,
+            openMs: 100,
+            isFailure: (error) => !(error instanceof RangeError),
+            now: () => 0,
+        });
+        for (let i = 0; i < 3; i += 1) {
+            await expect(breaker.run(() => Promise.reject(new RangeError('too large')))).rejects.toThrow('too large');
+        }
+        expect(breaker.state).toBe('closed');
+        await expect(breaker.run(fail)).rejects.toThrow('down');
+        expect(breaker.state).toBe('open');
+    });
 });

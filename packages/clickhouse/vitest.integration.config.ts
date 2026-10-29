@@ -1,4 +1,4 @@
 import { defineConfig } from 'vitest/config';
 
-// Needs a ClickHouse with data in CLICKHOUSE_TEST_RAW_DATABASE (a database the indexer wrote); see the test file.
+// Needs a scratch ClickHouse (CLICKHOUSE_URL=http://localhost:18123); every test creates and drops its own databases.
 export default defineConfig({ test: { include: ['src/**/*.integration.test.ts'], testTimeout: 60_000 } });

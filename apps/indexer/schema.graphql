@@ -53,6 +53,16 @@ type Contract @storage(postgres: true, clickhouse: true) {
   "block of the event at which the one-time facts (read at latest: links, token metadata) were last read"
   factsBlock: BigInt @config(precision: 20)
   factsStatus: FactsStatus
+  """
+  Price facts (docs/timeline-redesign.md "Price facts on Contract", the rule of productFactsSelect): the product whose
+  share price prices this contract's rows (the contract itself for a vault or CLM manager, the staked product for a
+  boost or reward pool), and the decimals that price is per (want decimals for a classic vault, share decimals
+  otherwise), and the product's kind. `productAddress` is set as soon as known; `priceDecimals` and `productKind`
+  together once the product is registered (and, for a vault, its want's decimals read). Never set for other kinds.
+  """
+  productAddress: String
+  priceDecimals: Int
+  productKind: ContractKind
 }
 
 enum TokenMetadataStatus {
@@ -121,35 +131,6 @@ type ShareTransfer
   value: BigInt!
   "token total supply after this transfer; set on mints (from 0x0) and burns (to 0x0) only"
   totalSupplyAfter: BigInt
-  blockNumber: BigInt! @config(precision: 20)
-  blockTimestamp: Timestamp!
-  trxHash: String!
-  trxFrom: String
-  logIndex: Int!
-}
-
-enum BalanceChangeSource {
-  TRANSFER
-  BOOST_STAKE
-}
-
-type BalanceChange
-  @index(fields: ["token", "account", "blockNumber", "logIndex"])
-  @storage(
-    clickhouse: {
-      orderBy: ["chainId", "token", "account", "blockNumber", "logIndex"]
-      skippingIndexes: [{ name: "idx_account", expr: "account", type: "bloom_filter", granularity: 4 }]
-    }
-  )
-{
-  "chainId-trxHash-logIndex-account"
-  id: ID!
-  "share token, or the boost address for boost stakes"
-  token: String!
-  account: String! @index
-  delta: BigInt!
-  balanceAfter: BigInt!
-  source: BalanceChangeSource!
   blockNumber: BigInt! @config(precision: 20)
   blockTimestamp: Timestamp!
   trxHash: String!
@@ -304,6 +285,85 @@ type RewardPaid @storage(clickhouse: { orderBy: ["chainId", "contract", "blockNu
   trxHash: String!
   trxFrom: String
   logIndex: Int!
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# User timeline (docs/timeline-redesign.md)
+# ---------------------------------------------------------------------------------------------------------------------
+
+enum TimelineKind {
+  BALANCE
+  CLM_DEPOSIT
+  CLM_WITHDRAW
+  CLAIM
+  MINT
+  BURN
+}
+
+"""
+Everything an account did, sorted by account so ClickHouse reads it in place. Only BALANCE rows move a share balance;
+MINT and BURN mark a balance change as a deposit or a withdrawal (shares created from or destroyed to 0x0, directly or
+through a router in the same transaction), the CLM rows carry the underlying amounts, CLAIM the reward paid.
+Fields that do not apply to a kind are '' or 0.
+"""
+type TimelineEvent
+  # Postgres only (config.local.yaml): the balance checks of scripts/correctness.ts read BALANCE rows per token
+  @index(fields: ["contract", "account", "blockNumber", "logIndex"])
+  @storage(clickhouse: { orderBy: ["account", "chainId", "blockNumber", "logIndex"] })
+{
+  "chainId-trxHash-logIndex-account-kind"
+  id: ID!
+  account: String!
+  kind: TimelineKind!
+  "share token (or boost) for BALANCE, MINT and BURN, the CLM manager for CLM_*, the reward pool or boost for CLAIM"
+  contract: String!
+  "BALANCE only: TRANSFER or BOOST_STAKE"
+  source: String!
+  "BALANCE only: signed share change and the account's balance of `contract` after it"
+  delta: BigInt!
+  sharesAfter: BigInt!
+  "CLM_* only: underlying token amounts"
+  amount0: BigInt!
+  amount1: BigInt!
+  "CLAIM only; '' for boosts (see the BOOST_REWARD link)"
+  rewardToken: String!
+  rewardAmount: BigInt!
+  blockNumber: BigInt! @config(precision: 20)
+  blockTimestamp: Timestamp!
+  logIndex: Int!
+  trxHash: String!
+  """
+  Indexer price (docs/timeline-redesign.md "Indexer prices"): the Beefy API share price of `headProduct` cached when
+  the handler ran, per 10^headDecimals share units, fetched at `headPriceAt`. Set only on events indexed within 10
+  minutes of their block with a price at most 15 minutes old (and known price facts); not deterministic (a reindex
+  writes another value or none).
+  """
+  headPrice: Float
+  headPriceAt: Timestamp
+  """
+  Price facts of `contract` when the handler ran (as productFactsSelect: the product, the decimals its price is per,
+  the product's kind and the contract's kind: VAULT, CLM_MANAGER, BOOST or REWARD_POOL), whether or not the event got
+  a price; unset while the contract's price facts are not known.
+  """
+  headProduct: String
+  headDecimals: Int
+  headProductKind: String
+  headContractKind: String
+}
+
+"""
+Zap attribution state, per share token: the mints and the transfers between two non-zero accounts of the latest
+transaction that moved the token, in log order (one entry per index of the lists). Replaced by the next transaction.
+"""
+type ShareFlow @storage(postgres: true, clickhouse: false) {
+  "chainId-token"
+  id: ID!
+  trxHash: String!
+  "0x0 for a mint"
+  fromAddresses: [String!]!
+  toAddresses: [String!]!
+  values: [BigInt!]!
+  logIndexes: [Int!]!
 }
 
 # ---------------------------------------------------------------------------------------------------------------------

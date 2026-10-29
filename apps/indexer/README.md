@@ -26,6 +26,11 @@ pnpm codegen              # .envio/types.d.ts from config.yaml + schema.graphql
 pnpm dev                  # production config: HyperSync, Postgres + ClickHouse
 ```
 
+Configuration comes from the environment, parsed and validated in one place each: `src/lib/config.ts` for the
+indexer (RPC URLs and transport, multicall batching, Beefy API and head price ages, RPC fixtures; checked when the
+handlers load, so a bad value stops the indexer at startup) and `scripts/lib/config.ts` for the scripts. Every variable
+and its default is in `.env.example`. The scripts are commander CLIs: `pnpm <script> --help` lists their options.
+
 The app is deliberately self-contained: it depends on no other workspace package and its `package.json` and
 `tsconfig.json` do not extend anything outside this directory. Envio Cloud deploys an indexer from a root directory and
 warns that imports from outside it can break the deployment, so shared code lives in `packages/` for the other apps,
@@ -96,7 +101,7 @@ re-reads, and contract / token coverage. The block defaults to the indexer's las
 ## Rate-limited RPCs
 
 Envio's RPC source has no request-rate setting. For RPC-only runs against public or shared endpoints, put the pacer in
-front of the RPC and point `ENVIO_RPC_URL_<chain>` at it:
+front of the RPC and point `ENVIO_RPC_URL_<chain>` at it (`http://127.0.0.1:<port>`; it listens on loopback only):
 
 ```bash
 pnpm rpc-pacer --upstream https://rpc.api.lisk.com --port 8546 --rps 10 --max-rps 12 --concurrency 8

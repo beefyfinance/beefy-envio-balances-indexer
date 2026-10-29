@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { classifyAnswer, createRateController, retryDelayMs } from './rpcPacer';
+import { throwingCommand } from './lib/cli.ts';
+import {
+    classifyAnswer,
+    createRateController,
+    findTransaction,
+    pacerCommand,
+    parseOptions,
+    readResult,
+    retryDelayMs,
+} from './rpcPacer.ts';
+
+const parse = (argv: string[]) => parseOptions(argv, throwingCommand(pacerCommand()));
+const HASH = `0x${'ab'.repeat(32)}`;
 
 describe('rpc pacer', () => {
     it('classifies rate limits, transient failures and normal answers', () => {
@@ -54,5 +67,46 @@ describe('rpc pacer', () => {
         expect(rate.rate).toBe(1.5);
         for (let i = 0; i < 20 * 50; i++) rate.onSuccess();
         expect(rate.rate).toBe(10);
+    });
+
+    it('parses and validates the command line', () => {
+        expect(parse(['--upstream', 'https://a.example/rpc,http://b.example'])).toEqual({
+            upstreams: ['https://a.example/rpc', 'http://b.example'],
+            port: 8545,
+            rps: 5,
+            maxRps: 50,
+            minRps: 0.2,
+            concurrency: 4,
+        });
+        expect(parse(['--upstream', 'http://a', '--port', '9000', '--rps', '2.5', '--concurrency', '8'])).toMatchObject(
+            {
+                port: 9000,
+                rps: 2.5,
+                concurrency: 8,
+            }
+        );
+        expect(() => parse([])).toThrow('--upstream');
+        expect(() => parse(['--upstream', 'file:///etc/passwd'])).toThrow('http(s) URL');
+        expect(() => parse(['--upstream', 'http://a', '--port', '80; rm -rf /'])).toThrow('integer');
+        expect(() => parse(['--upstream', 'http://a', '--rps', '-1'])).toThrow('--rps');
+        expect(() => parse(['--upstream', 'http://a', '--rps', '100'])).toThrow('--min-rps <= --rps <= --max-rps');
+        expect(() => parse(['--upstream', 'http://a', '--bogus', '1'])).toThrow('--bogus');
+    });
+
+    it('reads only well-formed upstream answers and transactions', () => {
+        const receipt = z.object({ blockNumber: z.string() }).nullable();
+        expect(readResult('{"jsonrpc":"2.0","id":1,"result":{"blockNumber":"0x10"}}', receipt)).toEqual({
+            blockNumber: '0x10',
+        });
+        expect(readResult('{"jsonrpc":"2.0","id":1,"result":null}', receipt)).toBeNull();
+        expect(readResult('{"jsonrpc":"2.0","id":1,"result":{"blockNumber":16}}', receipt)).toBeUndefined();
+        expect(readResult('not json', receipt)).toBeUndefined();
+        expect(readResult('[1,2]', receipt)).toBeUndefined();
+
+        const transaction = { hash: HASH, from: '0x01', input: '0x' };
+        expect(findTransaction({ transactions: ['0xabc', null, { hash: 1 }, transaction] }, HASH)).toEqual(transaction);
+        expect(findTransaction({ transactions: [{ hash: `${HASH}"` }] }, HASH)).toBeNull();
+        expect(findTransaction({ transactions: 'all' }, HASH)).toBeNull();
+        expect(findTransaction(null, HASH)).toBeNull();
     });
 });

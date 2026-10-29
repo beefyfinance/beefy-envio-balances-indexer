@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { BEGIN_MARKER, END_MARKER, extractKnownContracts, knownAddresses, mergeKnownContracts } from './knownConfig.ts';
+import { extractKnownContracts, generatedMarkers, knownAddresses, mergeKnownContracts } from './knownConfig.ts';
+
+const { begin: BEGIN_MARKER, end: END_MARKER } = generatedMarkers();
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 /** `${ENVIO_RPC_URL_<id>}` as written in config.yaml */
@@ -85,6 +87,13 @@ describe('known contracts merge', () => {
         expect(mergeKnownContracts(merged, known)).toBe(merged);
         // dropping the known contracts restores the hand-written lists
         expect(mergeKnownContracts(merged, new Map())).toBe(config);
+    });
+
+    it('refuses to write anything but a lowercase address into the YAML', () => {
+        const hostile = new Map([
+            [8453, new Map([['ClassicVault', ['0x1111111111111111111111111111111111111111\n  - id: 1']]])],
+        ]);
+        expect(() => mergeKnownContracts(config, hostile)).toThrow('not a lowercase address');
     });
 
     it('routes strategies to the StratHarvest ABI variant', () => {

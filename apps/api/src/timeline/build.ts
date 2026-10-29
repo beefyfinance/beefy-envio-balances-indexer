@@ -1,8 +1,9 @@
+import type { TimelinePriceFlag, TimelinePriceResolution } from '@beefy/clickhouse';
 import { chainById } from '@beefy/models';
 
 import { formatUnits } from './units.ts';
 
-/** One row of `user_timeline_priced`, as the repository returns it (64 bit integers arrive as strings). */
+/** One row of `user_timeline_api`, as the repository returns it (64 bit integers arrive as strings). */
 export type PricedRow = {
     chain_id: number;
     timestamp_ms: string;
@@ -23,8 +24,11 @@ export type PricedRow = {
     contract_kind: string;
     decimals: number;
     share_to_usd: number;
-    price_flag: string;
+    price_flag: TimelinePriceFlag;
+    /** The price source of the 5 minute table, `indexer` for the indexer's latest Beefy API price, '' when MISSING or PENDING. */
     price_source: string;
+    /** Which price table the price came from, `latest` for the indexer's price; empty when MISSING or PENDING. */
+    price_resolution: TimelinePriceResolution | '';
     price_before_at: number | null;
     price_after_at: number | null;
     usd_delta: number;
@@ -46,8 +50,10 @@ export type TimelineItem = {
     contracts: { address: string; kind: string; balance: string; diff: string }[];
     price: {
         share_to_usd: number;
-        flag: string;
+        flag: TimelinePriceFlag;
         source: string;
+        /** 5m: the 5 minute price table; latest: the indexer's price; null when MISSING or PENDING. */
+        resolution: TimelinePriceResolution | null;
         as_of: string | null;
         as_of_next: string | null;
     };
@@ -168,6 +174,7 @@ export const buildTimeline = (rows: readonly PricedRow[]): TimelineItem[] => {
                 share_to_usd: priced.share_to_usd,
                 flag: priced.price_flag,
                 source: priced.price_source,
+                resolution: priced.price_resolution === '' ? null : priced.price_resolution,
                 as_of: iso(priced.price_before_at),
                 as_of_next: iso(priced.price_after_at),
             },

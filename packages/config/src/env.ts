@@ -1,3 +1,5 @@
+import * as R from 'remeda';
+
 export type Env = Readonly<Record<string, string | undefined>>;
 
 /** Thrown with every problem at once, so a misconfigured deploy is fixed in one round. */
@@ -50,7 +52,7 @@ export const integer =
     (env, problems) => {
         const raw = present(env, name);
         if (raw === undefined) return fallback;
-        const value = Number(raw);
+        const value = /^-?\d{1,16}$/.test(raw) ? Number(raw) : Number.NaN;
         if (!Number.isInteger(value) || value < min || value > max) {
             problems.push(`${name} must be an integer between ${min} and ${max}`);
             return fallback;
@@ -102,9 +104,7 @@ export const group =
         extraChecks: (value: Parsed<S>, problems: string[]) => void = () => {}
     ): Reader<Parsed<S>> =>
     (env, problems) => {
-        const value = Object.fromEntries(
-            Object.entries(shape).map(([key, read]) => [key, read(env, problems)])
-        ) as Parsed<S>;
+        const value = R.mapValues(shape, (read) => read(env, problems)) as Parsed<S>;
         extraChecks(value, problems);
         return value;
     };
@@ -121,13 +121,14 @@ export const parseEnv = <S extends Shape>(
     return value;
 };
 
-/** Connection strings and secrets must never reach a log line. */
+/**
+ * A URL as scheme and host only, for a log line: credentials, path and query never reach one (RPC providers put their
+ * key in the path or the query).
+ */
 export const redact = (value: string): string => {
     try {
         const url = new URL(value);
-        if (url.password) url.password = '***';
-        if (url.username) url.username = '***';
-        return url.toString();
+        return `${url.protocol}//${url.host}`;
     } catch {
         return '***';
     }

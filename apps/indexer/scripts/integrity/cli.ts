@@ -1,7 +1,7 @@
 /**
  * Post-sync integrity audit: Beefy catalog coverage, then structural and sanity checks.
  *
- * Usage:
+ * Usage (`pnpm integrity --help`):
  *   pnpm integrity --chains 4326,4663,8453,9745,42161,43114
  *
  * Reads indexed rows from ClickHouse (ENVIO_CLICKHOUSE_HOST, default http://localhost:8123).
@@ -13,73 +13,47 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { Command } from 'commander';
+import * as R from 'remeda';
+
+import { describeError } from '../../src/lib/errors.ts';
+import { chainIdListArg, integerArg } from '../lib/cli.ts';
+import { scriptsConfig } from '../lib/config.ts';
 import {
-    COVERAGE_ENTITIES,
     configuredLstProducts,
     configuredSwapperProducts,
-    ENTITY_KINDS,
+    coverageEntities,
+    entityKinds,
     fetchCatalog,
     type IndexedEntity,
     loadActiveChainIds,
     loadVaultBlacklist,
     productId,
-} from './catalog';
-import { type Finding, runIntegrityChecks, type Section, type Severity } from './checks';
-import { clickHouseConfigFromEnv, createClickHouseClient, fetchContractIds } from './clickhouse';
+} from './catalog.ts';
+import { type Finding, runIntegrityChecks, type Section, type Severity } from './checks.ts';
+import { type ClickHouseClient, createClickHouseClient, fetchContractIds } from './clickhouse.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
-const HELP = `Usage: pnpm integrity [--chains 8453,42161] [--sample 20]
+type CliOptions = {
+    chains?: number[];
+    sample: number;
+};
 
-Env:
+const command = new Command('integrity')
+    .description('Post-sync integrity audit: Beefy catalog coverage, then structural and sanity checks (ClickHouse).')
+    .option('--chains <ids>', 'comma-separated chain ids (default: every chain in config.yaml)', chainIdListArg)
+    .option('--sample <n>', 'ids shown per finding', integerArg({ min: 0, max: 10_000 }), 20)
+    .addHelpText(
+        'after',
+        `
+Environment (scripts/lib/config.ts):
   ENVIO_CLICKHOUSE_HOST          ClickHouse HTTP URL (default http://localhost:8123)
   ENVIO_CLICKHOUSE_DATABASE      Database (default default)
   ENVIO_CLICKHOUSE_USERNAME      User (default default)
   ENVIO_CLICKHOUSE_PASSWORD      Password (default empty)
-  BEEFY_API_URL                  Catalog base URL (default https://api.beefy.finance)
-`;
-
-type CliOptions = {
-    chainIds: number[];
-    sampleSize: number;
-};
-
-const parseArgs = (argv: string[]): CliOptions => {
-    const options: CliOptions = { chainIds: [], sampleSize: 20 };
-    for (let index = 0; index < argv.length; index++) {
-        const arg = argv[index];
-        const next = argv[index + 1];
-        if (arg === '--help' || arg === '-h') {
-            console.log(HELP);
-            process.exit(0);
-        }
-        if (arg === '--chains') {
-            if (!next) {
-                throw new Error('--chains requires a comma-separated list of chain ids');
-            }
-            options.chainIds = next.split(',').map((part) => {
-                const chainId = Number(part.trim());
-                if (!Number.isInteger(chainId)) {
-                    throw new Error(`Invalid chain id: ${part}`);
-                }
-                return chainId;
-            });
-            index += 1;
-            continue;
-        }
-        if (arg === '--sample') {
-            const value = Number(next);
-            if (!Number.isInteger(value) || value < 0) {
-                throw new Error(`${arg} requires a non-negative integer`);
-            }
-            options.sampleSize = value;
-            index += 1;
-            continue;
-        }
-        throw new Error(`Unknown argument: ${arg}\n${HELP}`);
-    }
-    return options;
-};
+  BEEFY_API_URL                  Catalog base URL (default https://api.beefy.finance)`
+    );
 
 const printFinding = (item: Finding) => {
     const label = item.severity.toUpperCase().padEnd(7, ' ');
@@ -110,32 +84,32 @@ const printReport = (findings: Finding[]) => {
 const countSeverity = (findings: Finding[], severity: Severity) =>
     findings.filter((item) => item.severity === severity).length;
 
-const loadIndexed = async (client: ReturnType<typeof createClickHouseClient>, chainIds: number[]) => {
+const loadIndexed = async (client: ClickHouseClient, chainIds: readonly number[]) => {
     const indexed = new Map<IndexedEntity, Set<string>>();
-    for (const entity of COVERAGE_ENTITIES) {
+    for (const entity of coverageEntities()) {
         console.error(`loading ${entity} contract ids`);
-        indexed.set(entity, await fetchContractIds(client, ENTITY_KINDS[entity], chainIds));
+        indexed.set(entity, await fetchContractIds(client, entityKinds(entity), chainIds));
     }
     return indexed;
 };
 
 const main = async () => {
-    const options = parseArgs(process.argv.slice(2));
+    const options = command.parse().opts<CliOptions>();
+    const config = scriptsConfig();
     const configYaml = readFileSync(join(repoRoot, 'config.yaml'), 'utf8');
     const blacklistSource = readFileSync(join(repoRoot, 'src/lib/blacklist.ts'), 'utf8');
-    const chainIds = options.chainIds.length > 0 ? options.chainIds : loadActiveChainIds(configYaml);
+    const chainIds = options.chains ?? loadActiveChainIds(configYaml);
     if (chainIds.length === 0) {
         throw new Error('No chain ids. Pass --chains or add chains to config.yaml');
     }
 
-    const clickHouse = clickHouseConfigFromEnv();
-    const client = createClickHouseClient(clickHouse);
+    const client = createClickHouseClient(config.clickhouse);
 
     console.error(`chains: ${chainIds.join(', ')}`);
-    console.error(`clickhouse: ${clickHouse.url} db=${clickHouse.database}`);
+    console.error(`clickhouse: ${new URL(config.clickhouse.url).host} db=${config.clickhouse.database}`);
     console.error('fetching Beefy catalog');
     const [apiProducts, indexedByEntity] = await Promise.all([
-        fetchCatalog(chainIds, process.env.BEEFY_API_URL),
+        fetchCatalog(chainIds, config.beefyApiUrl, (message) => console.error(message)),
         loadIndexed(client, chainIds),
     ]);
     const catalog = [
@@ -144,12 +118,12 @@ const main = async () => {
         ...configuredSwapperProducts(configYaml, chainIds),
     ];
     const blacklist = new Set(
-        loadVaultBlacklist(blacklistSource).map((entry) => productId(entry.chainId, entry.address))
+        R.map(loadVaultBlacklist(blacklistSource), (entry) => productId(entry.chainId, entry.address))
     );
 
     const findings = await runIntegrityChecks(client, {
         chainIds,
-        sampleSize: options.sampleSize,
+        sampleSize: options.sample,
         catalog,
         indexedByEntity,
         blacklist,
@@ -166,6 +140,6 @@ const main = async () => {
 };
 
 main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(describeError(error));
     process.exit(1);
 });

@@ -5,13 +5,21 @@
  * `/cow-vaults`, gov/reward pools from `/gov-vaults`, and launchpool boosts from `/boosts`.
  * LST contracts and swappers are not separate API types; the expected sets are
  * the uncommented `LstVault` and `BeefySwapper` addresses in config.yaml.
+ *
+ * API answers are validated (zod): an entry of the wrong shape is dropped and logged, an answer that is not a list
+ * fails the fetch. Imported by scripts/knownContracts.ts under node's type stripping: imports carry their extension.
  */
+import * as R from 'remeda';
+import { zeroAddress } from 'viem';
+import { z } from 'zod';
+
+import { fetchWithRetry, type RetryOptions } from '../../src/lib/fetch.ts';
 
 /** Product category of the catalog; indexed as `Contract` rows of the kinds in `ENTITY_KINDS`. */
 export type IndexedEntity = 'Classic' | 'Clm' | 'RewardPool' | 'ClassicBoost' | 'LstVault' | 'Swapper';
 
 /** `Contract.kind` values that satisfy a catalog product of each category. */
-export const ENTITY_KINDS: Record<IndexedEntity, readonly string[]> = {
+const ENTITY_KINDS: Record<IndexedEntity, readonly string[]> = {
     Classic: ['VAULT'],
     Clm: ['CLM_MANAGER'],
     // the gov-vaults list includes old gov vaults, indexed as launchpool-style boosts
@@ -21,7 +29,7 @@ export const ENTITY_KINDS: Record<IndexedEntity, readonly string[]> = {
     Swapper: ['SWAPPER'],
 };
 
-export const COVERAGE_ENTITIES: IndexedEntity[] = [
+const COVERAGE_ENTITIES: readonly IndexedEntity[] = [
     'Classic',
     'Clm',
     'RewardPool',
@@ -29,6 +37,12 @@ export const COVERAGE_ENTITIES: IndexedEntity[] = [
     'LstVault',
     'Swapper',
 ];
+
+/** `Contract.kind` values that satisfy a catalog product of `entity`. */
+export const entityKinds = (entity: IndexedEntity): readonly string[] => ENTITY_KINDS[entity];
+
+/** Every catalog category, in report order. */
+export const coverageEntities = (): readonly IndexedEntity[] => COVERAGE_ENTITIES;
 
 export type CatalogProduct = {
     entity: IndexedEntity;
@@ -42,10 +56,8 @@ export type CatalogProduct = {
     live: boolean;
 };
 
-export const BEEFY_API_URL = 'https://api.beefy.finance';
-
 /** Beefy `chain` / `network` name → EVM chain id. */
-export const BEEFY_NETWORK_TO_CHAIN_ID: Record<string, number> = {
+const BEEFY_NETWORK_TO_CHAIN_ID: Readonly<Record<string, number>> = {
     arbitrum: 42161,
     aurora: 1313161554,
     avax: 43114,
@@ -90,6 +102,9 @@ export const BEEFY_NETWORK_TO_CHAIN_ID: Record<string, number> = {
     zksync: 324,
 };
 
+/** Every Beefy network name and its chain id. */
+export const beefyNetworkChainIds = (): Readonly<Record<string, number>> => BEEFY_NETWORK_TO_CHAIN_ID;
+
 export const productId = (chainId: number, address: string) => `${chainId}-${address.toLowerCase()}`;
 
 export const isLiveStatus = (status: string | undefined) => {
@@ -109,9 +124,12 @@ export const loadActiveChainIds = (configYaml: string): number[] => {
     return ids;
 };
 
-/** `{chainId, address}` pairs from `rawVaultBlacklist` in src/lib/blacklist.ts. */
+/**
+ * `{chainId, address}` pairs from `rawVaultBlacklist` in src/lib/blacklist.ts (read as text: that module's imports do
+ * not resolve under node's type stripping).
+ */
 export const loadVaultBlacklist = (source: string): Array<{ chainId: number; address: string }> => {
-    const start = source.indexOf('export const rawVaultBlacklist');
+    const start = source.indexOf('const rawVaultBlacklist');
     const end = source.indexOf('const vaultBlacklist', start);
     if (start < 0 || end < 0) {
         throw new Error('Could not locate rawVaultBlacklist in src/lib/blacklist.ts');
@@ -136,6 +154,7 @@ export const loadConfiguredContracts = (
     configYaml: string,
     contractName: string
 ): Array<{ chainId: number; address: string }> => {
+    if (!/^\w+$/.test(contractName)) throw new Error(`invalid contract name: ${JSON.stringify(contractName)}`);
     const namePattern = new RegExp(`\\s-\\sname:\\s+${contractName}\\b`);
     const entries: Array<{ chainId: number; address: string }> = [];
     let chainId: number | null = null;
@@ -169,7 +188,7 @@ export const loadConfiguredContracts = (
     return entries;
 };
 
-export const ADDRESSBOOK_CONFIG_FACTORIES = [
+const ADDRESSBOOK_CONFIG_FACTORIES = [
     { contract: 'ClassicVaultFactory', field: 'vaultFactory' },
     { contract: 'ClassicStrategyFactory', field: 'strategyFactory' },
     { contract: 'ClmManagerFactory', field: 'clmFactory' },
@@ -179,10 +198,11 @@ export const ADDRESSBOOK_CONFIG_FACTORIES = [
     { contract: 'BeefySwapper', field: 'beefySwapper' },
 ] as const;
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+/** The config.yaml factory contracts and the addressbook field each one's address comes from. */
+export const addressbookConfigFactories = () => ADDRESSBOOK_CONFIG_FACTORIES;
 
 export const isConfiguredAddress = (address: string | undefined): address is string =>
-    Boolean(address && address.toLowerCase() !== ZERO_ADDRESS);
+    Boolean(address && address.toLowerCase() !== zeroAddress);
 
 /** Uncommented LstVault contract addresses, associated with the enclosing chain id. */
 export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: number; address: string }> =>
@@ -192,18 +212,25 @@ export const loadConfiguredLstVaults = (configYaml: string): Array<{ chainId: nu
 export const loadConfiguredSwappers = (configYaml: string): Array<{ chainId: number; address: string }> =>
     loadConfiguredContracts(configYaml, 'BeefySwapper');
 
-/** The fields this repo reads from the Beefy API product lists. */
-export type BeefyApiProduct = {
-    id?: string;
-    chain?: string;
-    network?: string;
-    status?: string;
-    earnContractAddress?: string | null;
+const optionalAddress = z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .nullish();
+
+/** The fields this repo reads from the Beefy API product lists; an entry with any of them malformed is dropped. */
+const beefyApiProductSchema = z.object({
+    id: z.string().optional(),
+    chain: z.string().optional(),
+    network: z.string().optional(),
+    status: z.string().optional(),
+    earnContractAddress: optionalAddress,
     /** current strategy (`/vaults`, `/cow-vaults`) */
-    strategy?: string | null;
+    strategy: optionalAddress,
     /** `/gov-vaults`: 2 = reward pool, unset = launchpool-style gov vault; `/boosts`: launchpool version */
-    version?: number | null;
-};
+    version: z.number().int().nullish(),
+});
+
+export type BeefyApiProduct = z.infer<typeof beefyApiProductSchema>;
 
 export type BeefyApiLists = {
     /** classic vaults (including CLM wrappers) */
@@ -216,17 +243,33 @@ export type BeefyApiLists = {
     boosts: BeefyApiProduct[];
 };
 
-const fetchJson = async <T>(url: string): Promise<T> => {
-    const response = await fetch(url, {
-        headers: {
-            accept: 'application/json',
-            'user-agent': 'beefy-envio-indexer',
-        },
-    });
+/** `path` of the API: a list whose valid products are kept; a failed request or a non-list answer throws. */
+const fetchProducts = async (
+    apiUrl: string,
+    path: string,
+    onInvalid: (message: string) => void,
+    retry: RetryOptions
+): Promise<BeefyApiProduct[]> => {
+    const url = new URL(path, `${apiUrl.replace(/\/+$/, '')}/`);
+    const response = await fetchWithRetry(
+        url,
+        { headers: { accept: 'application/json', 'user-agent': 'beefy-envio-indexer' } },
+        retry
+    );
     if (!response.ok) {
-        throw new Error(`GET ${url} failed: ${response.status} ${response.statusText}`);
+        throw new Error(`GET ${url.href} failed: ${response.status} ${response.statusText}`);
     }
-    return (await response.json()) as T;
+    const list = z.array(z.unknown()).safeParse(await response.json());
+    if (!list.success) throw new Error(`GET ${url.href}: expected a list`);
+    const results = R.map(list.data, (entry) => beefyApiProductSchema.safeParse(entry));
+    const valid = R.pipe(
+        results,
+        R.filter((result) => result.success),
+        R.map((result) => result.data)
+    );
+    if (valid.length < results.length)
+        onInvalid(`GET ${url.href}: dropped ${results.length - valid.length} invalid entries`);
+    return valid;
 };
 
 const addProduct = (products: Map<string, CatalogProduct>, product: CatalogProduct) => {
@@ -262,13 +305,17 @@ const collectVaults = (
     }
 };
 
-/** `/vaults`, `/cow-vaults`, `/gov-vaults`, `/boosts`. */
-export const fetchBeefyApiLists = async (apiUrl = BEEFY_API_URL): Promise<BeefyApiLists> => {
+/** `/vaults`, `/cow-vaults`, `/gov-vaults`, `/boosts` of the API at `apiUrl` (BEEFY_API_URL). */
+export const fetchBeefyApiLists = async (
+    apiUrl: string,
+    onInvalid: (message: string) => void = (message) => console.warn(message),
+    retry: RetryOptions = {}
+): Promise<BeefyApiLists> => {
     const [vaults, cows, govs, boosts] = await Promise.all([
-        fetchJson<BeefyApiProduct[]>(`${apiUrl}/vaults`),
-        fetchJson<BeefyApiProduct[]>(`${apiUrl}/cow-vaults`),
-        fetchJson<BeefyApiProduct[]>(`${apiUrl}/gov-vaults`),
-        fetchJson<BeefyApiProduct[]>(`${apiUrl}/boosts`),
+        fetchProducts(apiUrl, 'vaults', onInvalid, retry),
+        fetchProducts(apiUrl, 'cow-vaults', onInvalid, retry),
+        fetchProducts(apiUrl, 'gov-vaults', onInvalid, retry),
+        fetchProducts(apiUrl, 'boosts', onInvalid, retry),
     ]);
     return { vaults, cows, govs, boosts };
 };
@@ -276,12 +323,20 @@ export const fetchBeefyApiLists = async (apiUrl = BEEFY_API_URL): Promise<BeefyA
 /** Chain id of an API product, when the network is known. */
 export const apiChainId = (product: BeefyApiProduct): number | undefined => {
     const network = product.chain ?? product.network;
-    return network ? BEEFY_NETWORK_TO_CHAIN_ID[network] : undefined;
+    // own keys only: a network named `__proto__` or `constructor` is unknown, not an object
+    return network !== undefined && Object.hasOwn(BEEFY_NETWORK_TO_CHAIN_ID, network)
+        ? BEEFY_NETWORK_TO_CHAIN_ID[network]
+        : undefined;
 };
 
-export const fetchCatalog = async (chainIds: number[], apiUrl = BEEFY_API_URL): Promise<CatalogProduct[]> => {
+export const fetchCatalog = async (
+    chainIds: readonly number[],
+    apiUrl: string,
+    onInvalid?: (message: string) => void,
+    retry?: RetryOptions
+): Promise<CatalogProduct[]> => {
     const selected = new Set(chainIds);
-    const { vaults, cows, govs, boosts } = await fetchBeefyApiLists(apiUrl);
+    const { vaults, cows, govs, boosts } = await fetchBeefyApiLists(apiUrl, onInvalid, retry);
 
     const products = new Map<string, CatalogProduct>();
     collectVaults(products, vaults, 'Classic', selected);
@@ -293,7 +348,7 @@ export const fetchCatalog = async (chainIds: number[], apiUrl = BEEFY_API_URL): 
 
 const configuredProducts = (
     entries: Array<{ chainId: number; address: string }>,
-    chainIds: number[],
+    chainIds: readonly number[],
     entity: IndexedEntity,
     beefyId: string
 ): CatalogProduct[] => {
@@ -311,8 +366,8 @@ const configuredProducts = (
         }));
 };
 
-export const configuredLstProducts = (configYaml: string, chainIds: number[]): CatalogProduct[] =>
+export const configuredLstProducts = (configYaml: string, chainIds: readonly number[]): CatalogProduct[] =>
     configuredProducts(loadConfiguredLstVaults(configYaml), chainIds, 'LstVault', 'config.yaml LstVault');
 
-export const configuredSwapperProducts = (configYaml: string, chainIds: number[]): CatalogProduct[] =>
+export const configuredSwapperProducts = (configYaml: string, chainIds: readonly number[]): CatalogProduct[] =>
     configuredProducts(loadConfiguredSwappers(configYaml), chainIds, 'Swapper', 'config.yaml BeefySwapper');

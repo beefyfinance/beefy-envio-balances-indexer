@@ -4,11 +4,14 @@ import { describe, expect, it } from 'vitest';
 import {
     blockRanges,
     type ChainLog,
+    checkNames,
     classifyLog,
+    correctnessCommand,
     countMismatches,
     diffKeys,
-    EVENT_TABLES,
     eventKey,
+    eventTables,
+    eventTopics,
     expectedRowFields,
     fieldMismatches,
     formatResult,
@@ -17,10 +20,15 @@ import {
     parseArgs,
     parseChainConfig,
     parseCsv,
+    parseLogs,
+    psqlArgs,
     result,
     sampleSizes,
-    TOPICS,
-} from './correctness';
+} from './correctness.ts';
+import { throwingCommand } from './lib/cli.ts';
+import { loadScriptsConfig } from './lib/config.ts';
+
+const TOPICS = eventTopics();
 
 const address = (tag: number) => `0x${tag.toString(16).padStart(40, '0')}`;
 const TOKEN = address(1);
@@ -31,15 +39,16 @@ const BOB = address(11);
 const HASH = `0x${'ab'.repeat(32)}`;
 
 describe('parseArgs', () => {
-    const env = { ENVIO_RPC_URL_4326: 'https://rpc.example/4326', ENVIO_PG_SCHEMA: 'envschema' };
+    const config = loadScriptsConfig({ ENVIO_RPC_URL_4326: 'https://rpc.example/4326', ENVIO_PG_SCHEMA: 'envschema' });
+    const parse = (argv: string[]) => parseArgs(argv, config, throwingCommand(correctnessCommand()));
 
     it('applies defaults from the environment', () => {
-        expect(parseArgs(['--chain', '4326'], env)).toEqual({
+        expect(parse(['--chain', '4326'])).toEqual({
             chainId: 4326,
             block: undefined,
             schema: 'envschema',
             rpc: 'https://rpc.example/4326',
-            only: ['supply', 'balances', 'events', 'fields', 'clm-pool-state', 'coverage'],
+            only: [...checkNames()],
             sample: 100,
             concurrency: 3,
             config: 'config.yaml',
@@ -47,13 +56,10 @@ describe('parseArgs', () => {
     });
 
     it('reads every flag', () => {
-        const args = parseArgs(
-            [
-                ...['--chain', '4326', '--block', '123', '--schema', 'raw_megaeth', '--rpc', 'https://other'],
-                ...['--only', 'supply, events', '--sample', '20', '--concurrency', '2'],
-            ],
-            env
-        );
+        const args = parse([
+            ...['--chain', '4326', '--block', '123', '--schema', 'raw_megaeth', '--rpc', 'https://other'],
+            ...['--only', 'supply, events', '--sample', '20', '--concurrency', '2'],
+        ]);
         expect(args).toMatchObject({
             block: 123n,
             schema: 'raw_megaeth',
@@ -65,12 +71,17 @@ describe('parseArgs', () => {
     });
 
     it('rejects bad input', () => {
-        expect(() => parseArgs([], env)).toThrow('--chain');
-        expect(() => parseArgs(['--chain', '1'], env)).toThrow('ENVIO_RPC_URL_1');
-        expect(() => parseArgs(['--chain', '4326', '--schema', 'a"; drop'], env)).toThrow('--schema');
-        expect(() => parseArgs(['--chain', '4326', '--only', 'nope'], env)).toThrow('nope');
-        expect(() => parseArgs(['--chain', '4326', '--bogus', '1'], env)).toThrow('--bogus');
-        expect(() => parseArgs(['--chain', '4326', '--block'], env)).toThrow('--block');
+        expect(() => parse([])).toThrow('--chain');
+        expect(() => parse(['--chain', '1'])).toThrow('ENVIO_RPC_URL_1');
+        expect(() => parse(['--chain', '4326', '--schema', 'a"; drop'])).toThrow('--schema');
+        expect(() => parse(['--chain', '4326', '--schema', 'public.x'])).toThrow('--schema');
+        expect(() => parse(['--chain', '4326', '--only', 'nope'])).toThrow('nope');
+        expect(() => parse(['--chain', '4326', '--bogus', '1'])).toThrow('--bogus');
+        expect(() => parse(['--chain', '4326', '--block'])).toThrow('--block');
+        expect(() => parse(['--chain', '4326', '--block', '1; select 1'])).toThrow('--block');
+        expect(() => parse(['--chain', '4326 or 1=1'])).toThrow('--chain');
+        expect(() => parse(['--chain', '4326', '--rpc', 'javascript:alert(1)'])).toThrow('--rpc');
+        expect(() => parse(['--chain', '4326', '--sample', '1e3'])).toThrow('--sample');
     });
 });
 
@@ -279,8 +290,8 @@ describe('sampling and output', () => {
     });
 
     it('declares the expected events of every event table', () => {
-        expect(EVENT_TABLES.ShareTransfer?.topics).toEqual([TOPICS.transfer]);
-        expect(EVENT_TABLES.Harvest?.topics).toHaveLength(5);
+        expect(eventTables().ShareTransfer?.topics).toEqual([TOPICS.transfer]);
+        expect(eventTables().Harvest?.topics).toHaveLength(5);
     });
 
     it('fails a check with mismatches and truncates the list', () => {
@@ -316,5 +327,50 @@ describe('sampling and output', () => {
                 value: ['0x0000000000000000000000000000000000000000', '0x4200000000000000000000000000000000000006'],
             })
         ).toBe(true);
+    });
+});
+
+describe('psql and RPC inputs', () => {
+    const pg = loadScriptsConfig({}).postgres;
+
+    it('passes values as psql variables, apart from the SQL', () => {
+        const args = psqlArgs(pg, { chain: 4326, block: 123n, zero: "0x0'; drop table x; --" });
+        expect(args).toEqual([
+            ...['-X', '-q', '--csv', '-v', 'ON_ERROR_STOP=1'],
+            ...['-h', 'localhost', '-p', '5433', '-U', 'postgres', '-d', 'envio-dev'],
+            ...['-v', 'chain=4326', '-v', 'block=123', '-v', "zero=0x0'; drop table x; --"],
+            ...['-f', '-'],
+        ]);
+    });
+
+    it('refuses variable names and values psql would misread', () => {
+        expect(() => psqlArgs(pg, { 'x=1 -c': 1 })).toThrow('invalid psql variable');
+        expect(() => psqlArgs(pg, { ON_ERROR_STOP: 0 })).toThrow('invalid psql variable');
+        expect(() => psqlArgs(pg, { value: 'a\n\\! rm -rf /' })).toThrow('invalid value');
+    });
+
+    it('validates eth_getLogs answers', () => {
+        const log = {
+            address: TOKEN,
+            topics: [TOPICS.transfer, pad(ALICE as Hex), pad(BOB as Hex)],
+            data: '0x01',
+            blockNumber: '0x10',
+            transactionHash: HASH,
+            logIndex: '0x2',
+        };
+        expect(parseLogs([log, { ...log, logIndex: '0x3', removed: true }])).toEqual([
+            {
+                address: TOKEN,
+                topics: [TOPICS.transfer, pad(ALICE as Hex), pad(BOB as Hex)],
+                data: '0x01',
+                blockNumber: 16n,
+                transactionHash: HASH,
+                logIndex: 2,
+            },
+        ]);
+        expect(() => parseLogs({ logs: [log] })).toThrow('unexpected answer');
+        expect(() => parseLogs([{ ...log, blockNumber: null }])).toThrow('unexpected answer');
+        expect(() => parseLogs([{ ...log, address: "0x'; drop" }])).toThrow('unexpected answer');
+        expect(() => parseLogs([{ ...log, topics: [...log.topics, ...log.topics] }])).toThrow('unexpected answer');
     });
 });

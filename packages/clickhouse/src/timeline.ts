@@ -1,233 +1,248 @@
-import { type Databases, qualified } from './sql.ts';
+import * as R from 'remeda';
+
+import { committedFrontier, eventColumns, productFactsCtes, timelineEventsCtes } from './events.ts';
+import { type PriceColumn, type PriceFlag, priceColumns, priceFlags, storedPriceResolution } from './pricing.ts';
+import {
+    type Schema,
+    type Sql,
+    definerClause,
+    ident,
+    int,
+    join,
+    literal,
+    qualified,
+    sql,
+    versionNumber,
+} from './sql.ts';
+
+/** The API view's columns, in order: the event, then its price. */
+export const timelineColumns = (): string[] => [...eventColumns(), ...priceColumns()];
 
 /**
- * `user_timeline`: every balance change, CLM deposit and withdrawal, and reward claim, re-keyed by account and unpriced.
- * Envio's tables are ordered by chain and token; this one answers "everything this account did" with one range read.
- *
- * Only `BALANCE` rows move a share balance. The other kinds are markers with a zero `delta`: `MINT` and `BURN` say a
- * balance change was a deposit or a withdrawal (shares created from or destroyed to the zero address, which is what
- * the vault does), and the CLM rows carry the underlying token amounts of those events.
+ * The flags the API view returns: a stored row's ({@link priceFlags}), `PROVISIONAL` for the indexer's price, and
+ * `PENDING` for an event with neither (USD values 0) until the next advance gives it a provisional row.
  */
-export const USER_TIMELINE = 'user_timeline';
+export type TimelinePriceFlag = PriceFlag | 'PENDING';
+export const timelinePriceFlags = (): TimelinePriceFlag[] => [...priceFlags(), 'PENDING'];
 
-export const userTimelineTable = (db: Databases): string => `
-CREATE TABLE IF NOT EXISTS ${qualified(db.analytics, USER_TIMELINE)}
+/** `price_source` and `price_resolution` of a row priced by the indexer (the Beefy API's latest price). */
+const INDEXER_PRICE_SOURCE = 'indexer';
+const INDEXER_PRICE_RESOLUTION = 'latest';
+export const indexerPriceSource = (): string => INDEXER_PRICE_SOURCE;
+export type TimelinePriceResolution = ReturnType<typeof storedPriceResolution> | typeof INDEXER_PRICE_RESOLUTION;
+/** The `price_resolution` values the API view returns besides '' (MISSING or PENDING). */
+export const timelinePriceResolutions = (): TimelinePriceResolution[] => [
+    storedPriceResolution(),
+    INDEXER_PRICE_RESOLUTION,
+];
+
+/** The tables of version N, in our stable database. Dropping a version is dropping these. */
+export const eventPriceTable = (version: number): string => `event_price_${versionNumber(version)}`;
+export const priceWatermarkTable = (version: number): string => `price_watermark_${versionNumber(version)}`;
+export const versionTables = (version: number): string[] => [eventPriceTable(version), priceWatermarkTable(version)];
+
+/** The version a table of ours belongs to (`event_price_<N>`, `price_watermark_<N>`), undefined for any other table. */
+export const versionOfTable = (name: string): number | undefined => {
+    const match = /^(?:event_price|price_watermark)_([1-9]\d{0,6})$/.exec(name);
+    return match?.[1] === undefined ? undefined : Number(match[1]);
+};
+
+/**
+ * `event_price_<N>`: the stored price of events, written by the reprice job (never by the indexer): every event older
+ * than the watermark (final, whatever its flag), and the events above it the indexer did not price (provisional,
+ * replaced by the final row when the watermark passes them). Keyed by the event; a reprice writes the rows again with a
+ * higher `version`, and `FINAL` keeps the latest. `facts_complete` says whether `decimals` rests on the product facts
+ * rather than on a fallback: with a flag other than `OK` or `STALE`, such a row is not final and is retried for a week.
+ * A row whose event no longer exists in Envio (a rollback deep enough to cross the watermark) is never shown: the read
+ * starts from Envio's events and only looks prices up.
+ *
+ * Partitioned by month so a reprice writes and rereads only the months it prices; small granules, because an account
+ * has tens of rows per month and the read should touch about one granule per partition.
+ */
+export const eventPriceTableStatement = (schema: Pick<Schema, 'database'>, version: number): Sql => sql`
+CREATE TABLE IF NOT EXISTS ${qualified(schema.database, eventPriceTable(version))}
 (
     account String,
     chain_id UInt32,
-    timestamp DateTime64(3, 'UTC'),
-    block_number UInt64,
-    log_index UInt32,
-    trx_hash String,
-    kind Enum8('BALANCE' = 1, 'CLM_DEPOSIT' = 2, 'CLM_WITHDRAW' = 3, 'CLAIM' = 4, 'MINT' = 5, 'BURN' = 6),
-    -- the share token (or boost) for BALANCE, MINT and BURN, the CLM manager for CLM_*, the reward pool or boost for CLAIM
-    contract String,
-    -- BALANCE only: TRANSFER or BOOST_STAKE
-    source LowCardinality(String),
-    -- BALANCE only: signed share change and the contract's balance after it
-    delta Int256,
-    shares_after UInt256,
-    -- CLM_DEPOSIT, CLM_WITHDRAW: underlying token amounts
-    amount0 UInt256,
-    amount1 UInt256,
-    -- CLAIM only; the token is empty for boosts (resolved through the BOOST_REWARD link when valued)
-    reward_token String,
-    reward_amount UInt256,
-    -- Envio's id of the row this one projects, so a rollback tombstone replaces exactly it
     event_id String,
-    inserted_at DateTime64(3, 'UTC') DEFAULT now64(3),
-    version UInt64,
-    is_deleted UInt8,
-    INDEX idx_inserted_at inserted_at TYPE minmax GRANULARITY 1
+    timestamp DateTime64(3, 'UTC'),
+    -- the product (vault or CLM manager) the shares belong to, its kind and this row's contract kind, and the decimals
+    -- the share price counts shares in, as they were when the row was priced
+    product_address String,
+    product_kind LowCardinality(String),
+    contract_kind LowCardinality(String),
+    decimals UInt8,
+    -- USD per whole share at the event time
+    share_to_usd Float64,
+    price_flag Enum8('OK' = 1, 'PROVISIONAL' = 2, 'EXTRAPOLATED' = 3, 'STALE' = 4, 'MISSING' = 5),
+    price_source LowCardinality(String),
+    -- 5m; empty when MISSING
+    price_resolution LowCardinality(String),
+    -- the prices used: the last at or before the event and the first at or after it (NULL when there is none)
+    price_before_at Nullable(DateTime('UTC')),
+    price_after_at Nullable(DateTime('UTC')),
+    usd_delta Float64,
+    usd_after Float64,
+    facts_complete UInt8,
+    version UInt64
 )
--- is_deleted is a plain column on purpose: FINAL would hide a tombstone, and the stamping must see it to cancel the priced row
--- partitioned by month so the catch-up command can stamp one month and read only that partition; nothing reads this
--- table per account (the API reads user_timeline_priced), so the granule-per-partition cost does not matter here
 ENGINE = ReplacingMergeTree(version)
 PARTITION BY toYYYYMM(timestamp)
-ORDER BY (account, timestamp, chain_id, log_index, kind, contract, event_id)
-`;
+ORDER BY (account, timestamp, event_id)
+SETTINGS index_granularity = 256`;
 
-type Projection = {
-    /** Also the name of the materialized view, `mv_user_timeline_<name>`. */
-    name: string;
-    /** The Envio history table it reads, without database. */
-    source: string;
-    /** The SELECT list: one expression per `user_timeline` column. */
-    columns: string;
-    /** A filter on the source rows, without the keyword. */
-    where?: string;
+/**
+ * `price_watermark_<N>`: one logical row (the latest `moved_at` wins under `FINAL`). Events older than `watermark` have
+ * their final price in `event_price_<N>`; newer ones have the indexer's price or a provisional stored row.
+ * `checkpoints` is the Envio frontier per chain the stored rows were read at: a row committed later with an old
+ * timestamp (a chain Envio is still catching up on, a zap update) is above it, and the next advance stores it.
+ */
+export const priceWatermarkTableStatement = (schema: Pick<Schema, 'database'>, version: number): Sql => sql`
+CREATE TABLE IF NOT EXISTS ${qualified(schema.database, priceWatermarkTable(version))}
+(
+    watermark DateTime64(3, 'UTC'),
+    checkpoints Map(Int32, UInt64),
+    moved_at DateTime64(6, 'UTC') DEFAULT now64(6)
+)
+ENGINE = ReplacingMergeTree(moved_at)
+ORDER BY tuple()`;
+
+/** What the API views name: the active version and its Envio database. */
+export type ActiveVersion = { version: number; envioDatabase: string };
+
+/** The API's views, in our stable database, recreated by a switch. */
+const API_VIEWS = ['user_timeline_api', 'product_contracts_api', 'api_status'] as const;
+export type ApiViewName = (typeof API_VIEWS)[number];
+export const apiViewNames = (): ApiViewName[] => [...API_VIEWS];
+export const userTimelineApi = (): ApiViewName => 'user_timeline_api';
+export const productContractsApi = (): ApiViewName => 'product_contracts_api';
+export const apiStatusView = (): ApiViewName => 'api_status';
+
+/**
+ * The price columns of the view: the stored row's (`s.found = 1`), else the indexer's (`e.head_price` set), else none;
+ * the product facts of a row not stored come from the event's head_* columns ('' and 18 decimals when unknown).
+ */
+const priceSelect = (): Sql => {
+    const indexer = sql`e.head_price IS NOT NULL`;
+    const usd = (amount: 'delta' | 'shares_after'): Sql =>
+        sql`multiIf(s.found = 1, s.${ident(amount === 'delta' ? 'usd_delta' : 'usd_after')}, ${indexer},
+            if(e.kind = 'BALANCE', ifNull(toFloat64(e.${ident(amount)}) / pow(10, ifNull(e.head_decimals, 18)) * e.head_price, 0.), 0.), 0.)`;
+    const columns: Record<PriceColumn, Sql> = {
+        // no product facts are read: without a stored row, the facts the indexer wrote on the event (priced or not)
+        product_address: sql`if(s.found = 1, s.product_address, ifNull(e.head_product, ''))`,
+        product_kind: sql`if(s.found = 1, s.product_kind, ifNull(e.head_product_kind, ''))`,
+        contract_kind: sql`if(s.found = 1, s.contract_kind, ifNull(e.head_contract_kind, ''))`,
+        decimals: sql`if(s.found = 1, s.decimals, ifNull(e.head_decimals, toUInt8(18)))`,
+        share_to_usd: sql`multiIf(s.found = 1, s.share_to_usd, ${indexer}, ifNull(e.head_price, 0.), 0.)`,
+        price_flag: sql`multiIf(s.found = 1, s.price_flag, ${indexer}, 'PROVISIONAL', 'PENDING')`,
+        price_source: sql`multiIf(s.found = 1, s.price_source, ${indexer}, ${literal(INDEXER_PRICE_SOURCE)}, '')`,
+        price_resolution: sql`multiIf(s.found = 1, s.price_resolution, ${indexer}, ${literal(INDEXER_PRICE_RESOLUTION)}, '')`,
+        price_before_at: sql`multiIf(s.found = 1, s.price_before_at, ${indexer}, e.head_price_at, NULL)`,
+        price_after_at: sql`if(s.found = 1, s.price_after_at, NULL)`,
+        usd_delta: usd('delta'),
+        usd_after: usd('shares_after'),
+    };
+    return join(
+        R.map(priceColumns(), (column) => sql`${columns[column]} AS ${ident(column)}`),
+        sql`,\n    `
+    );
 };
 
-const ZERO = 'toUInt256(0)';
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-// Amounts are decimal strings in Envio's tables. The OrZero variants keep a malformed value from failing an insert
-// into the indexer's own table (a materialized view that throws blocks the source insert); the integrity query in the
-// tests compares the totals so a zero cannot hide.
-const common = (accountColumn: string): string => `
-    lower(${accountColumn}) AS account,
-    toUInt32(chain_id) AS chain_id,
-    block_timestamp AS timestamp,
-    toUInt64(block_number) AS block_number,
-    toUInt32(log_index) AS log_index,
-    trx_hash,
-    id AS event_id,
-    envio_checkpoint_id AS version,
-    toUInt8(envio_change = 'DELETE') AS is_deleted`;
-
-const projections: Projection[] = [
-    {
-        name: 'balance',
-        source: 'envio_history_BalanceChange',
-        columns: `${common('account')},
-    'BALANCE' AS kind,
-    lower(token) AS contract,
-    toString(source) AS source,
-    toInt256OrZero(delta) AS delta,
-    toUInt256OrZero(balance_after) AS shares_after,
-    ${ZERO} AS amount0,
-    ${ZERO} AS amount1,
-    '' AS reward_token,
-    ${ZERO} AS reward_amount`,
-    },
-    ...[
-        { name: 'clm_deposit', source: 'envio_history_ClmDeposit', kind: 'CLM_DEPOSIT' },
-        { name: 'clm_withdraw', source: 'envio_history_ClmWithdraw', kind: 'CLM_WITHDRAW' },
-    ].map(({ name, source, kind }) => ({
-        name,
-        source,
-        columns: `${common('user')},
-    '${kind}' AS kind,
-    lower(manager) AS contract,
-    '' AS source,
-    toInt256(0) AS delta,
-    ${ZERO} AS shares_after,
-    toUInt256OrZero(amount0) AS amount0,
-    toUInt256OrZero(amount1) AS amount1,
-    '' AS reward_token,
-    ${ZERO} AS reward_amount`,
-    })),
-    ...[
-        { name: 'mint', kind: 'MINT', account: 'to_address', where: `from_address = '${ZERO_ADDRESS}'` },
-        { name: 'burn', kind: 'BURN', account: 'from_address', where: `to_address = '${ZERO_ADDRESS}'` },
-    ].map(({ name, kind, account, where }) => ({
-        name,
-        source: 'envio_history_ShareTransfer',
-        where,
-        columns: `${common(account)},
-    '${kind}' AS kind,
-    lower(token) AS contract,
-    '' AS source,
-    toInt256(0) AS delta,
-    ${ZERO} AS shares_after,
-    ${ZERO} AS amount0,
-    ${ZERO} AS amount1,
-    '' AS reward_token,
-    ${ZERO} AS reward_amount`,
-    })),
-    {
-        name: 'claim',
-        source: 'envio_history_RewardPaid',
-        columns: `${common('user')},
-    'CLAIM' AS kind,
-    lower(contract) AS contract,
-    '' AS source,
-    toInt256(0) AS delta,
-    ${ZERO} AS shares_after,
-    ${ZERO} AS amount0,
-    ${ZERO} AS amount1,
-    lower(ifNull(reward_token, '')) AS reward_token,
-    toUInt256OrZero(amount) AS reward_amount`,
-    },
-];
-
-export const projectionNames = projections.map(({ name }) => name);
-
-const viewName = (name: string): string => `mv_user_timeline_${name}`;
-
-const select = (db: Databases, projection: Projection): string => `
-SELECT ${projection.columns}
-FROM ${qualified(db.raw, projection.source)}${projection.where === undefined ? '' : `\nWHERE ${projection.where}`}`;
-
 /**
- * One insert-time view per raw history table. They only project and re-key columns (no join, no aggregation), so they
- * add about one column projection per inserted row to the indexer's writes. They fire on inserts only: rows that
- * already exist are loaded with {@link backfillStatements}.
+ * `user_timeline_api(account)`: the API's only timeline query, `SELECT ... FROM user_timeline_api(account = {...})`.
+ * One row per event of the account ({@link timelineColumns}), unordered. Events come from the active version's Envio
+ * database ({@link timelineEventsCtes}); each takes its price from:
+ * 1. its `event_price_<N>` row if it has one, final or provisional (the timestamp is part of the match, so a row stored
+ *    for an event that a rollback replayed at another time is not used);
+ * 2. else the indexer's price (`PROVISIONAL`, `price_source = 'indexer'`, `price_resolution = 'latest'`, `price_before_at`
+ *    when the indexer fetched it); USD values for `BALANCE` rows, as the reprice job computes them;
+ * 3. else nothing: `PENDING`, USD values 0.
+ *
+ * No price table and no product facts are read: a lookup only, so the planning stays small. Each source is one CTE,
+ * referenced once (ClickHouse inlines a CTE at every reference, and plans it again each time).
+ *
+ * Runs as the definer when one is configured, so the API user needs no grant on what it reads. Heavy accounts are
+ * stopped by the API user's settings profile (rows, bytes, time).
  */
-export const projectionViews = (db: Databases): string[] =>
-    projections.map(
-        (projection) => `
-CREATE MATERIALIZED VIEW IF NOT EXISTS ${qualified(db.analytics, viewName(projection.name))}
-TO ${qualified(db.analytics, USER_TIMELINE)}
-AS ${select(db, projection)}`
-    );
-
-export const dropProjectionViews = (db: Databases): string[] =>
-    projections.map(({ name }) => `DROP VIEW IF EXISTS ${qualified(db.analytics, viewName(name))}`);
-
-/** Loads what the raw tables already hold. Idempotent: the table is a ReplacingMergeTree keyed by the event. */
-export const backfillStatements = (db: Databases): string[] =>
-    projections.map(
-        (projection) => `
-INSERT INTO ${qualified(db.analytics, USER_TIMELINE)}
-(account, chain_id, timestamp, block_number, log_index, trx_hash, event_id, version, is_deleted, kind, contract, source,
- delta, shares_after, amount0, amount1, reward_token, reward_amount)
-${select(db, projection)}`
-    );
-
-/**
- * Which product (vault or CLM manager) a contract's shares belong to: itself for vaults and managers, the staked
- * token for boosts and reward pools. `kind` is the kind of the contract, `product_kind` of the product (`VAULT` or
- * `CLM_MANAGER`), `decimals` those of the product's share token. Small, read by the stamping view and the API.
- */
-export const CONTRACT_PRODUCT = 'contract_product';
-
-export const contractProductView = (db: Databases): string => `
-CREATE OR REPLACE VIEW ${qualified(db.analytics, CONTRACT_PRODUCT)} AS
-SELECT m.chain_id AS chain_id, m.contract AS contract, m.product_address AS product_address, m.kind AS kind,
-    ifNull(p.product_kind, 'UNKNOWN') AS product_kind, ifNull(t.decimals, 18) AS decimals
-FROM
+export const userTimelineApiView = (
+    schema: Schema,
+    active: ActiveVersion,
+    name: string = userTimelineApi()
+): Sql => sql`
+CREATE VIEW ${qualified(schema.database, name)}${definerClause(schema)} AS
+WITH
+${timelineEventsCtes(active.envioDatabase, 'events', {
+    where: sql`account = {account:String}`,
+    frontier: committedFrontier(active.envioDatabase),
+})},
+stored AS
 (
-    SELECT chain_id, lower(address) AS contract, lower(address) AS product_address, toString(kind) AS kind
-    FROM ${qualified(db.raw, 'Contract')}
-    WHERE kind IN ('VAULT', 'CLM_MANAGER')
-    UNION ALL
-    SELECT chain_id, lower(from_address) AS contract, lower(to_address) AS product_address,
-        if(relation = 'BOOST_STAKED', 'BOOST', 'REWARD_POOL') AS kind
-    FROM ${qualified(db.raw, 'ContractLink')}
-    WHERE relation IN ('BOOST_STAKED', 'REWARD_POOL_STAKED')
-) AS m
-LEFT JOIN
-(
-    SELECT chain_id, lower(address) AS address, toString(kind) AS product_kind FROM ${qualified(db.raw, 'Contract')}
-) AS p ON p.chain_id = m.chain_id AND p.address = m.product_address
-LEFT JOIN ${qualified(db.raw, 'Token')} AS t ON t.chain_id = m.chain_id AND lower(t.address) = m.product_address
-SETTINGS join_use_nulls = 1`;
+    -- an unmatched event gets found = 0 (the column's default), without join_use_nulls: the API user may set nothing
+    SELECT event_id, timestamp, toUInt8(1) AS found, product_address, toString(product_kind) AS product_kind,
+        toString(contract_kind) AS contract_kind, decimals, share_to_usd, toString(price_flag) AS price_flag,
+        toString(price_source) AS price_source, toString(price_resolution) AS price_resolution, price_before_at,
+        price_after_at, usd_delta, usd_after
+    FROM ${qualified(schema.database, eventPriceTable(active.version))} FINAL
+    WHERE account = {account:String}
+)
+SELECT ${join(R.map(eventColumns(), (column) => sql`e.${ident(column)} AS ${ident(column)}`))},
+    ${priceSelect()}
+FROM events AS e
+LEFT JOIN stored AS s ON s.event_id = e.event_id AND s.timestamp = e.timestamp`;
+
+/** Every contract of a Beefy product (vaults, managers, boosts, reward pools): their "timelines" are not a user's. */
+export const productContractsApiView = (
+    schema: Schema,
+    active: ActiveVersion,
+    name: string = productContractsApi()
+): Sql => sql`
+CREATE VIEW ${qualified(schema.database, name)}${definerClause(schema)} AS
+WITH
+${productFactsCtes(active.envioDatabase, 'facts')}
+SELECT DISTINCT contract FROM facts`;
 
 /**
- * Small queues that make the stamping cheap, because the main tables are ordered by account and a time window would
- * otherwise scan them:
- * - `stamp_queue`: the key of every row written to `user_timeline` in the last day, filled by a view on that table
- *   (so it covers all four projections and the backfill);
- * - `flagged_rows`: the key of every priced row that was not `OK` when written, kept for the repair window.
+ * One row: the active version (for the API's cache keys, so a switch does not serve timelines of the old one), its
+ * watermark and how old it is. Both are NULL before the version's first advance: there is no watermark yet (nothing is
+ * stored), which is not the same as a watermark stuck at the epoch. The version is a checked integer
+ * ({@link versionNumber}): a view's definition cannot take a query parameter (it would become a view parameter).
  */
-export const STAMP_QUEUE = 'stamp_queue';
-export const FLAGGED_ROWS = 'flagged_rows';
+export const apiStatusViewStatement = (
+    schema: Schema,
+    active: ActiveVersion,
+    name: string = apiStatusView()
+): Sql => sql`
+CREATE VIEW ${qualified(schema.database, name)}${definerClause(schema)} AS
+WITH
+latest AS
+(
+    SELECT if(count() = 0, NULL, toNullable(max(watermark))) AS watermark
+    FROM ${qualified(schema.database, priceWatermarkTable(active.version))} FINAL
+)
+SELECT toUInt32(${int(versionNumber(active.version))}) AS version, watermark,
+    dateDiff('second', watermark, now64(3)) AS watermark_age_seconds
+FROM latest`;
 
-export const queueTables = (db: Databases): string[] => [
-    `CREATE TABLE IF NOT EXISTS ${qualified(db.analytics, STAMP_QUEUE)}
-     (inserted_at DateTime64(3, 'UTC'), account String, event_id String)
-     ENGINE = MergeTree ORDER BY inserted_at TTL toDateTime(inserted_at) + INTERVAL 1 DAY`,
-    `CREATE TABLE IF NOT EXISTS ${qualified(db.analytics, FLAGGED_ROWS)}
-     (timestamp DateTime64(3, 'UTC'), account String, event_id String)
-     ENGINE = MergeTree ORDER BY timestamp TTL toDateTime(timestamp) + INTERVAL 7 DAY`,
+/** The API views and how to create each under a given name (a switch creates them aside, then swaps them in). */
+export const apiViews = (
+    schema: Schema,
+    active: ActiveVersion
+): { name: ApiViewName; create: (name: string) => Sql }[] => [
+    { name: userTimelineApi(), create: (name) => userTimelineApiView(schema, active, name) },
+    { name: productContractsApi(), create: (name) => productContractsApiView(schema, active, name) },
+    { name: apiStatusView(), create: (name) => apiStatusViewStatement(schema, active, name) },
 ];
 
-export const queueViews = (db: Databases, pricedTable: string): string[] => [
-    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${qualified(db.analytics, 'mv_stamp_queue')}
-     TO ${qualified(db.analytics, STAMP_QUEUE)}
-     AS SELECT now64(3) AS inserted_at, account, event_id FROM ${qualified(db.analytics, USER_TIMELINE)}`,
-    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${qualified(db.analytics, 'mv_flagged_rows')}
-     TO ${qualified(db.analytics, FLAGGED_ROWS)}
-     AS SELECT timestamp, account, event_id FROM ${qualified(db.analytics, pricedTable)} WHERE price_flag != 'OK'`,
-];
+/** What the API selects from `api_status` (one row: `version`, `watermark_at` as a string or NULL, `watermark_age_seconds`). */
+export const apiStatusSelect = (database: string): Sql =>
+    sql`SELECT version, toString(watermark) AS watermark_at, watermark_age_seconds FROM ${qualified(database, apiStatusView())}`;
+
+/** What the API selects from `product_contracts_api`. */
+export const productContractsSelect = (database: string): Sql =>
+    sql`SELECT contract FROM ${qualified(database, productContractsApi())}`;
+
+/** Validates a database name for use in a statement (Envio's are given by an operator) and returns it as it is. */
+export const databaseName = (name: string): string => {
+    ident(name);
+    return name;
+};

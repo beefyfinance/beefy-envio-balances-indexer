@@ -2,7 +2,7 @@ import { createTestIndexer } from 'envio';
 import type { Hex } from 'viem';
 import { describe, expect, it } from 'vitest';
 
-import { latestById, rowsOf, tx, USER_A, USER_B, USER_C, ZERO } from '../../test/helpers/simulate';
+import { balanceRowsOf, latestById, rowsOf, tx, USER_A, USER_B, USER_C, ZERO } from '../../test/helpers/simulate';
 
 // mooBIFI on Base, configured as a `Token` share token in config.yaml
 const MOO_BIFI = '0xc55e93c62874d8100dbd2dfe307edc1036ad5434' as const;
@@ -63,11 +63,8 @@ describe('share token transfers', () => {
             undefined,
         ]);
 
-        const changes = rowsOf<{ id: string; account: string; delta: bigint; balanceAfter: bigint; source: string }>(
-            result,
-            'BalanceChange'
-        );
-        expect(changes.map(({ account, delta, balanceAfter }) => [account, delta, balanceAfter])).toEqual([
+        const changes = balanceRowsOf(result);
+        expect(changes.map(({ account, delta, sharesAfter }) => [account, delta, sharesAfter])).toEqual([
             [USER_A, 100n, 100n],
             [USER_A, -30n, 70n],
             [USER_B, 30n, 30n],
@@ -75,7 +72,11 @@ describe('share token transfers', () => {
             [USER_B, -5n, 25n],
             [ZAP, 5n, 5n],
         ]);
-        expect(changes[0]).toMatchObject({ id: `8453-${tx(1).hash}-1-${USER_A}`, token: MOO_BIFI, source: 'TRANSFER' });
+        expect(changes[0]).toMatchObject({
+            id: `8453-${tx(1).hash}-1-${USER_A}-BALANCE`,
+            contract: MOO_BIFI,
+            source: 'TRANSFER',
+        });
 
         const balances = latestById<{ id: string; balance: bigint }>(result, 'Balance');
         expect([...balances.values()].map(({ id, balance }) => [id, balance])).toEqual([

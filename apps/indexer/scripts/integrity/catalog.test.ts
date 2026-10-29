@@ -9,7 +9,7 @@ import {
     loadConfiguredContracts,
     loadVaultBlacklist,
     productId,
-} from './catalog';
+} from './catalog.ts';
 
 const SAMPLE_YAML = `
 networks:
@@ -183,10 +183,75 @@ describe('fetchCatalog', () => {
         ]);
     });
 
-    it('throws when a catalog endpoint fails', async () => {
-        vi.stubGlobal('fetch', async () => ({ ok: false, status: 503, statusText: 'Unavailable' }) as Response);
-        await expect(fetchCatalog([8453], 'https://api.example')).rejects.toThrow(
+    it('drops malformed entries (logged) and never trusts hostile values', async () => {
+        const vault = '0x1111111111111111111111111111111111111111';
+        vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+            const url = input instanceof Request ? input.url : input.toString();
+            if (url.endsWith('/vaults')) {
+                return jsonResponse([
+                    { id: 'ok', chain: 'base', status: 'active', earnContractAddress: vault },
+                    {
+                        id: 'sql',
+                        chain: 'base',
+                        status: 'active',
+                        earnContractAddress: "0x1'; DROP TABLE Contract; --",
+                    },
+                    { id: 'proto', chain: '__proto__', status: 'active', earnContractAddress: vault },
+                    { id: 'ctor', chain: 'constructor', status: 'active', earnContractAddress: vault },
+                    { id: 42, chain: 'base', earnContractAddress: vault },
+                    { id: 'strategy', chain: 'base', earnContractAddress: vault, strategy: { $ne: null } },
+                    'not an object',
+                    null,
+                ]);
+            }
+            if (url.endsWith('/cow-vaults')) return jsonResponse({ not: 'a list' });
+            return jsonResponse([]);
+        });
+        await expect(fetchCatalog([8453], 'https://api.example', () => undefined)).rejects.toThrow(
+            'GET https://api.example/cow-vaults: expected a list'
+        );
+
+        vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+            const url = input instanceof Request ? input.url : input.toString();
+            if (url.endsWith('/vaults')) {
+                return jsonResponse([
+                    { id: 'ok', chain: 'base', status: 'active', earnContractAddress: vault },
+                    { id: 'sql', chain: 'base', earnContractAddress: "0x1'; DROP TABLE Contract; --" },
+                    { id: 'proto', chain: '__proto__', earnContractAddress: vault },
+                    { id: 42, chain: 'base', earnContractAddress: vault },
+                    'not an object',
+                ]);
+            }
+            return jsonResponse([]);
+        });
+        const messages: string[] = [];
+        const products = await fetchCatalog([8453], 'https://api.example', (message) => messages.push(message));
+        expect(products).toEqual([expect.objectContaining({ beefyId: 'ok', id: `8453-${vault}` })]);
+        expect(messages).toEqual(['GET https://api.example/vaults: dropped 3 invalid entries']);
+    });
+
+    it('retries a failing catalog endpoint, then throws', async () => {
+        const calls: string[] = [];
+        vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+            calls.push(input instanceof Request ? input.url : input.toString());
+            return { ok: false, status: 503, statusText: 'Unavailable' } as Response;
+        });
+        await expect(fetchCatalog([8453], 'https://api.example', undefined, { retryDelaysMs: [0, 0] })).rejects.toThrow(
             'GET https://api.example/vaults failed'
         );
+        // three attempts before giving up
+        expect(calls.filter((url) => url.endsWith('/vaults'))).toHaveLength(3);
+    });
+
+    it('recovers when a retry succeeds', async () => {
+        let calls = 0;
+        vi.stubGlobal('fetch', async () => {
+            calls += 1;
+            if (calls === 1) throw new TypeError('fetch failed');
+            return jsonResponse([]);
+        });
+        await expect(
+            fetchCatalog([8453], 'https://api.example', undefined, { retryDelaysMs: [0, 0] })
+        ).resolves.toEqual([]);
     });
 });

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { CLOUDFLARE_RANGES, inRanges, parseCidr, resolveClientIp } from './clientIp.ts';
+import { clientKey, cloudflareRanges, inRanges, parseCidr, resolveClientIp } from './clientIp.ts';
 
-const cloudflare = CLOUDFLARE_RANGES.map(parseCidr);
+const cloudflare = cloudflareRanges().map(parseCidr);
 
 describe('client ip', () => {
     it('matches IPv4 and IPv6 ranges, including mapped addresses', () => {
@@ -19,18 +19,42 @@ describe('client ip', () => {
         expect(() => parseCidr('nope/8')).toThrow('invalid CIDR');
     });
 
+    const resolve = (overrides: Partial<Parameters<typeof resolveClientIp>[0]>) =>
+        resolveClientIp({
+            source: 'cloudflare',
+            socketIp: '104.16.0.1',
+            forwardedFor: undefined,
+            connectingIp: '203.0.113.7',
+            cloudflare,
+            ...overrides,
+        });
+
     it('believes CF-Connecting-IP only when the hop is Cloudflare', () => {
-        expect(resolveClientIp({ socketIp: '104.16.0.1', connectingIpHeader: '203.0.113.7', cloudflare })).toBe(
-            '203.0.113.7'
-        );
-        expect(resolveClientIp({ socketIp: '198.51.100.9', connectingIpHeader: '203.0.113.7', cloudflare })).toBe(
+        expect(resolve({})).toBe('203.0.113.7');
+        expect(resolve({ socketIp: '198.51.100.9' })).toBe('198.51.100.9');
+        expect(resolve({ connectingIp: 'garbage' })).toBe('104.16.0.1');
+        expect(resolve({ source: 'socket' })).toBe('104.16.0.1');
+    });
+
+    it('behind Heroku, takes the hop from the last X-Forwarded-For entry, never an earlier one', () => {
+        const heroku = { source: 'heroku-cloudflare', socketIp: '10.1.2.3' } as const;
+        // Cloudflare reached the router: its CF-Connecting-IP is the client
+        expect(resolve({ ...heroku, forwardedFor: '203.0.113.7, 104.16.0.1' })).toBe('203.0.113.7');
+        // the Heroku hostname reached directly: a forged CF-Connecting-IP and forged earlier entries are ignored
+        expect(resolve({ ...heroku, forwardedFor: '104.16.0.1, 198.51.100.9', connectingIp: '1.1.1.1' })).toBe(
             '198.51.100.9'
         );
-        expect(resolveClientIp({ socketIp: '104.16.0.1', connectingIpHeader: 'garbage', cloudflare })).toBe(
-            '104.16.0.1'
-        );
-        expect(
-            resolveClientIp({ socketIp: '104.16.0.1', connectingIpHeader: '203.0.113.7', cloudflare: undefined })
-        ).toBe('104.16.0.1');
+        // no usable header: the socket
+        expect(resolve({ ...heroku, forwardedFor: 'garbage' })).toBe('10.1.2.3');
+        expect(resolve({ ...heroku, forwardedFor: undefined })).toBe('10.1.2.3');
+    });
+
+    it('keys IPv4 by address and IPv6 by /64', () => {
+        expect(clientKey('203.0.113.7')).toBe('203.0.113.7');
+        expect(clientKey('::ffff:203.0.113.7')).toBe('203.0.113.7');
+        expect(clientKey('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64');
+        expect(clientKey('2001:db8:1:2:ffff:ffff:ffff:ffff')).toBe('2001:db8:1:2::/64');
+        expect(clientKey('2001:db8:1:3::1')).toBe('2001:db8:1:3::/64');
+        expect(clientKey('unknown')).toBe('unknown');
     });
 });

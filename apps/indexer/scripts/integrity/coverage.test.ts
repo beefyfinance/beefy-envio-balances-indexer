@@ -2,16 +2,17 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { param, sql } from '@beefy/clickhouse';
 import { addressBookByChainId } from '@beefyfinance/blockchain-addressbook';
 import * as R from 'remeda';
 import { describe, expect, it } from 'vitest';
 
 import {
-    ADDRESSBOOK_CONFIG_FACTORIES,
-    BEEFY_NETWORK_TO_CHAIN_ID,
+    addressbookConfigFactories,
+    beefyNetworkChainIds,
     type CatalogProduct,
-    COVERAGE_ENTITIES,
-    ENTITY_KINDS,
+    coverageEntities,
+    entityKinds,
     type IndexedEntity,
     isConfiguredAddress,
     loadActiveChainIds,
@@ -20,20 +21,20 @@ import {
     loadConfiguredSwappers,
     loadVaultBlacklist,
     productId,
-} from './catalog';
+} from './catalog.ts';
 import {
-    ALL_PROBES,
+    allProbes,
     diffCoverage,
-    int,
+    int256,
+    probeQueries,
     probeWhere,
-    REQUIRED_LINKS,
-    SANITY_PROBES,
-    SHARE_TOKEN_KINDS,
-    STRUCTURE_PROBES,
+    requiredLinks,
+    sanityProbes,
+    shareTokenKinds,
+    structureProbes,
     scopePredicate,
     tokenKey,
-} from './checks';
-import { sqlStringIn } from './clickhouse';
+} from './checks.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -56,7 +57,7 @@ describe('integrity catalog parsers', () => {
         expect(chainIds).toContain(4663);
         expect(chainIds).not.toContain(250);
         for (const chainId of chainIds) {
-            expect(R.values(BEEFY_NETWORK_TO_CHAIN_ID)).toContain(chainId);
+            expect(R.values(beefyNetworkChainIds())).toContain(chainId);
         }
     });
 
@@ -114,7 +115,7 @@ describe('integrity catalog parsers', () => {
             if (!beefy) {
                 continue;
             }
-            for (const { contract, field } of ADDRESSBOOK_CONFIG_FACTORIES) {
+            for (const { contract, field } of addressbookConfigFactories()) {
                 const address = beefy[field];
                 if (!isConfiguredAddress(address)) {
                     continue;
@@ -134,7 +135,7 @@ describe('integrity catalog parsers', () => {
 describe('integrity coverage diff', () => {
     const indexed = (entries: Partial<Record<IndexedEntity, string[]>>) => {
         const map = new Map<IndexedEntity, Set<string>>();
-        for (const entity of COVERAGE_ENTITIES) {
+        for (const entity of coverageEntities()) {
             map.set(entity, new Set(entries[entity] ?? []));
         }
         return map;
@@ -224,7 +225,7 @@ describe('integrity coverage diff', () => {
             new Set(),
             20
         );
-        expect(findings).toHaveLength(COVERAGE_ENTITIES.length);
+        expect(findings).toHaveLength(coverageEntities().length);
         expect(findings.every((item) => item.check.endsWith('.summary'))).toBe(true);
         expect(findings.every((item) => item.severity === 'info')).toBe(true);
     });
@@ -233,55 +234,80 @@ describe('integrity coverage diff', () => {
 describe('probe scoping', () => {
     const ids = ['8453-0xaaa', '8453-0xbbb'];
 
-    it('scopes contract probes on ids and ledger probes on chainId-token', () => {
-        const contractProbe = STRUCTURE_PROBES.find((probe) => probe.id === 'Contract.facts-partial');
-        const ledgerProbe = SANITY_PROBES.find((probe) => probe.id === 'Balance.negative');
-        if (!contractProbe || !ledgerProbe) throw new Error('missing probe');
-        expect(scopePredicate(contractProbe, ids)).toBe("t.id IN ('8453-0xaaa','8453-0xbbb')");
-        expect(scopePredicate(ledgerProbe, ids)).toBe(`${tokenKey('t')} IN ('8453-0xaaa','8453-0xbbb')`);
-        expect(probeWhere(ledgerProbe, [8453, 10], [])).toBe(
-            `t.chain_id IN (8453,10) AND 0 AND (${ledgerProbe.where})`
+    it('scopes contract probes on ids and ledger probes on chainId-token, both as parameters', () => {
+        const contractProbe = structureProbes().find((probe) => probe.id === 'Contract.facts-partial');
+        const ledgerProbe = sanityProbes().find((probe) => probe.id === 'Balance.negative');
+        const chainProbe = structureProbes().find((probe) => probe.id === 'Contract.id-mismatch');
+        if (!contractProbe || !ledgerProbe || !chainProbe) throw new Error('missing probe');
+        expect(scopePredicate(contractProbe, ids).text).toBe('has({p_0:Array(String)}, toString(t.id))');
+        expect(scopePredicate(ledgerProbe, ids)).toEqual(sql`has(${param('Array(String)', ids)}, ${tokenKey('t')})`);
+        expect(probeWhere(ledgerProbe, [8453], ids).text).toBe(
+            `has({p_0:Array(Int64)}, toInt64(\`t\`.chain_id)) AND ${scopePredicate(ledgerProbe, ids).text.replace('p_0', 'p_1')} AND (${ledgerProbe.where.text})`
         );
+        const queries = probeQueries(contractProbe, [8453, 10], ids, 5);
+        expect(R.values(queries.sample.params)).toEqual([[8453, 10], ids, 'PARTIAL', 5]);
+        expect(queries.sample.text).toMatch(/LIMIT \{p_3:UInt32\}$/);
+        // the (large) catalog is only sent to the probes that read it
+        expect(R.values(probeQueries(chainProbe, [8453], ids, 5).count.params)).toEqual([[8453]]);
     });
 
-    it('rejects literals that would need escaping', () => {
-        expect(sqlStringIn('t.id', [])).toBe('0');
-        expect(() => sqlStringIn('t.id', ["8453-0x'; DROP"])).toThrow('Unexpected SQL literal');
+    it('keeps hostile ids and values out of the SQL text', () => {
+        const hostile = ["8453-0x'; DROP TABLE Contract; --", "8453-0x\\' OR 1=1", "') OR ('1'='1"];
+        for (const probe of allProbes()) {
+            const queries = probeQueries(probe, [8453], hostile, 5);
+            for (const value of hostile) {
+                expect(queries.count.text).not.toContain(value);
+                expect(queries.sample.text).not.toContain(value);
+            }
+            // every value of the probe is a parameter: no quoted literal other than the '-' separator of tokenKey
+            expect(queries.count.text.replaceAll("'-'", '')).not.toMatch(/'[^']*'/);
+        }
     });
 });
 
 describe('probe catalog', () => {
     it('keeps probe ids unique and every probe on the aliased main table', () => {
-        const ids = ALL_PROBES.map((probe) => probe.id);
+        const ids = allProbes().map((probe) => probe.id);
         expect(new Set(ids).size).toBe(ids.length);
-        for (const probe of ALL_PROBES) {
-            expect(probe.from).toMatch(/\bAS t\b/);
+        for (const probe of allProbes()) {
+            expect(probe.from.text).toMatch(/\bAS t\b/);
         }
     });
 
     it('checks every required registry link and share token kind', () => {
-        for (const { kind, relation } of REQUIRED_LINKS) {
-            const probe = STRUCTURE_PROBES.find((item) => item.id === `${kind}.missing-${relation}`);
-            expect(probe?.where).toContain(`relation = '${relation}'`);
+        for (const { kind, relation } of requiredLinks()) {
+            const probe = structureProbes().find((item) => item.id === `${kind}.missing-${relation}`);
+            expect(probe?.where.params).toEqual({ p_0: kind });
+            expect(probe?.ctes?.[0]?.[1].text).toContain('toString(relation) = {p_0:String}');
+            expect(probe?.ctes?.[0]?.[1].params).toEqual({ p_0: relation });
+            expect(probe?.from.text).toContain('LEFT ANTI JOIN linked');
         }
-        const shareProbe = STRUCTURE_PROBES.find((probe) => probe.id === 'Token.missing-share-token');
-        for (const kind of SHARE_TOKEN_KINDS) {
-            expect(shareProbe?.where).toContain(`'${kind}'`);
-        }
+        const shareProbe = structureProbes().find((probe) => probe.id === 'Token.missing-share-token');
+        expect(shareProbe?.where.params).toEqual({ p_0: shareTokenKinds() });
         // the coverage kinds are all registry kinds
-        for (const kinds of R.values(ENTITY_KINDS)) {
-            for (const kind of kinds) {
+        for (const entity of coverageEntities()) {
+            for (const kind of entityKinds(entity)) {
                 expect(['VAULT', 'CLM_MANAGER', 'REWARD_POOL', 'BOOST', 'LST_VAULT', 'SWAPPER']).toContain(kind);
             }
         }
     });
 
-    it('compares raw amounts as Int256 and orders changes on-chain', () => {
-        expect(int('t.balance')).toBe('toInt256OrZero(toString(t.balance))');
-        const continuity = SANITY_PROBES.find((probe) => probe.id === 'BalanceChange.discontinuity');
-        expect(continuity?.from).toContain('ORDER BY block_number, log_index');
-        expect(continuity?.where).toContain('ifNull');
-        const drift = SANITY_PROBES.find((probe) => probe.id === 'Balance.drift-from-last-change');
-        expect(drift?.from).toContain('argMax(balance_after, (c.block_number, c.log_index))');
+    it('compares raw amounts as Int256 and orders changes on-chain, in named CTEs', () => {
+        expect(int256(sql`t.balance`).text).toBe('toInt256OrZero(toString(t.balance))');
+        const continuity = sanityProbes().find((probe) => probe.id === 'TimelineEvent.balance-discontinuity');
+        if (!continuity) throw new Error('missing probe');
+        expect(continuity.from.text).toBe('previous_after AS t');
+        expect(continuity.where.text).toContain('ifNull');
+        const continuitySql = probeQueries(continuity, [8453], [], 5).count.text;
+        expect(continuitySql).toMatch(/^WITH `balance_steps` AS \(/);
+        expect(continuitySql).toContain('`previous_after` AS (');
+        expect(continuitySql).toContain('ORDER BY block_number, log_index');
+        const drift = sanityProbes().find((probe) => probe.id === 'Balance.drift-from-last-change');
+        expect(drift?.ctes?.map(([name]) => name)).toEqual(['balance_steps', 'last_change']);
+        expect(drift?.ctes?.[1]?.[1].text).toContain('argMax(balance_after, (block_number, log_index))');
+        // no sub-select left in a probe: every derived table is a named CTE
+        for (const probe of allProbes()) {
+            expect(`${probe.from.text} ${probe.where.text}`).not.toMatch(/\(\s*SELECT/i);
+        }
     });
 });

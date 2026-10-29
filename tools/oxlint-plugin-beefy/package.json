@@ -1,0 +1,24 @@
+{
+  "name": "@beefy/oxlint-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repo-specific oxlint rules (beefy/no-untagged-sql and the conventions in conventions.js), loaded by .oxlintrc.json through jsPlugins",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "test": "pnpm run test:unit && pnpm run test:lint",
+    "test:unit": "vitest run",
+    "test:lint": "oxlint -c ../../.oxlintrc.json",
+    "clean": "rm -rf .turbo"
+  },
+  "devDependencies": {
+    "oxlint": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": "^26.13.0"
+  }
+}

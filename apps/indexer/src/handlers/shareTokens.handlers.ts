@@ -9,8 +9,9 @@ indexer.onEvent({ contract: 'LstVault', event: 'Initialized' }, async ({ event, 
 });
 
 indexer.onEvent({ contract: 'LstVault', event: 'Transfer' }, async ({ event, context }) => {
-    if (!(await ensureContract(context, event, 'LST_VAULT'))) return;
-    await handleShareTransfer(context, event);
+    const contract = await ensureContract(context, event, 'LST_VAULT');
+    if (!contract) return;
+    await handleShareTransfer(context, event, contract);
 });
 
 indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Initialized' }, async ({ event, context }) => {
@@ -18,8 +19,9 @@ indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Initialized' }, async ({ e
 });
 
 indexer.onEvent({ contract: 'Erc4626Adapter', event: 'Transfer' }, async ({ event, context }) => {
-    if (!(await ensureContract(context, event, 'ERC4626_ADAPTER'))) return;
-    await handleShareTransfer(context, event);
+    const contract = await ensureContract(context, event, 'ERC4626_ADAPTER');
+    if (!contract) return;
+    await handleShareTransfer(context, event, contract);
 });
 
 indexer.onEvent({ contract: 'Token', event: 'Initialized' }, async ({ event, context }) => {
@@ -27,6 +29,7 @@ indexer.onEvent({ contract: 'Token', event: 'Initialized' }, async ({ event, con
 });
 
 indexer.onEvent({ contract: 'Token', event: 'Transfer' }, async ({ event, context }) => {
-    if (!(await ensureContract(context, event, 'TOKEN'))) return;
-    await handleShareTransfer(context, event);
+    const contract = await ensureContract(context, event, 'TOKEN');
+    if (!contract) return;
+    await handleShareTransfer(context, event, contract);
 });

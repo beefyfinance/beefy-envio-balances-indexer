@@ -2,7 +2,7 @@ import * as R from 'remeda';
 
 import { asHex, type Hex } from '../../lib/hex';
 /** Legacy vaults whose on-chain `want`/`token` reads return wrong hardcoded values. */
-export const staticVaults = [
+const staticVaults = [
     // very old vault https://bscscan.com/address/0x83dfD1C2F553E8026eA8626399fe26Ce419dFDaC
     // where `want` field was hardcoded to `wbnb`
     {
@@ -72,7 +72,7 @@ export const staticVaults = [
 const byChain = R.groupBy(staticVaults, R.prop('chainId'));
 
 /** chainId -> vault address -> static facts (lowercase hex). */
-export const staticVaultsMap: Partial<Record<number, Record<Hex, { want: Hex }>>> = R.mapValues(byChain, (vaults) =>
+const staticVaultsMap: Partial<Record<number, Record<Hex, { want: Hex }>>> = R.mapValues(byChain, (vaults) =>
     R.pipe(
         vaults,
         R.map((vault) => [asHex(vault.vaultAddress), { want: asHex(vault.underlyingTokenAddress) }] as const),
@@ -81,10 +81,18 @@ export const staticVaultsMap: Partial<Record<number, Record<Hex, { want: Hex }>>
 );
 
 /** chainId -> strategy address -> vault address (lowercase hex). */
-export const staticStrategyVaultMap: Partial<Record<number, Record<Hex, Hex>>> = R.mapValues(byChain, (vaults) =>
+const staticStrategyVaultMap: Partial<Record<number, Record<Hex, Hex>>> = R.mapValues(byChain, (vaults) =>
     R.pipe(
         vaults,
         R.map((vault) => [asHex(vault.strategyAddress), asHex(vault.vaultAddress)] as const),
         R.fromEntries()
     )
 );
+
+/** The static facts of a legacy vault, undefined for any other address. */
+export const staticVaultFacts = (chainId: number, vaultAddress: string): { want: Hex } | undefined =>
+    staticVaultsMap[chainId]?.[asHex(vaultAddress)];
+
+/** The vault of a legacy vault's strategy, undefined for any other address. */
+export const staticStrategyVault = (chainId: number, strategyAddress: string): Hex | undefined =>
+    staticStrategyVaultMap[chainId]?.[asHex(strategyAddress)];

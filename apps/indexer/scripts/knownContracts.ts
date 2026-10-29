@@ -12,15 +12,19 @@
  * planning one, and commit the result. Chains whose reads fail keep their current list.
  *
  * Usage: pnpm known-contracts [chainId ...]   (default: every chain in config.yaml; needs ENVIO_RPC_URL_<chainId>)
+ *        pnpm known-contracts --help
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { Command } from 'commander';
 import * as R from 'remeda';
-import { createPublicClient, type Hex, http, parseAbi } from 'viem';
+import { createPublicClient, type Hex, http, parseAbi, zeroAddress } from 'viem';
+import { z } from 'zod';
 
 import { classifyClassicProxyReads } from '../src/lib/classify.ts';
+import { describeError } from '../src/lib/errors.ts';
 import {
     apiChainId,
     type BeefyApiLists,
@@ -29,17 +33,18 @@ import {
     loadVaultBlacklist,
 } from './integrity/catalog.ts';
 import {
+    configFileName,
     extractKnownContracts,
     type KnownAddresses,
     type KnownContract,
     type KnownKind,
     knownAddresses,
     mergeKnownContracts,
-    CONFIG_FILE,
 } from './knownConfig.ts';
+import { chainIdArg } from './lib/cli.ts';
+import { scriptsConfig } from './lib/config.ts';
 
 const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const CALLS_PER_MULTICALL = 500;
 const PARALLEL_MULTICALLS = 4;
 
@@ -106,10 +111,15 @@ export type Reads = {
     wants: readonly [string, string] | null;
 };
 
-export const READ_FUNCTIONS = ['vault', 'strategy', 'rewardToken', 'stakedToken', 'wants'] as const;
+const READ_FUNCTIONS = ['vault', 'strategy', 'rewardToken', 'stakedToken', 'wants'] as const;
+
+export type ReadFunction = (typeof READ_FUNCTIONS)[number];
+
+/** The detection calls made on every address, in order. */
+export const readFunctions = (): readonly ReadFunction[] => READ_FUNCTIONS;
 
 const nonZero = (value: string | null | undefined): string | undefined =>
-    value && value.toLowerCase() !== ZERO_ADDRESS ? value.toLowerCase() : undefined;
+    value && value.toLowerCase() !== zeroAddress ? value.toLowerCase() : undefined;
 
 const classicKind = (reads: Reads | undefined) =>
     reads
@@ -244,9 +254,18 @@ type MulticallClient = {
         multicallAddress: Hex;
         allowFailure: true;
         batchSize: number;
-        contracts: Array<{ address: Hex; abi: typeof detectionAbi; functionName: (typeof READ_FUNCTIONS)[number] }>;
+        contracts: Array<{ address: Hex; abi: typeof detectionAbi; functionName: ReadFunction }>;
     }) => Promise<Array<{ status: 'success' | 'failure'; result?: unknown }>>;
 };
+
+const addressAnswer = z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .transform((value) => value.toLowerCase());
+const addressPairAnswer = z
+    .tuple([addressAnswer, addressAnswer])
+    .rest(z.unknown())
+    .transform(([a, b]) => [a, b] as const);
 
 /** The detection calls on every address, at latest, in multicalls of CALLS_PER_MULTICALL calls. */
 export const readDetection = async (client: MulticallClient, addresses: readonly string[]) => {
@@ -277,11 +296,18 @@ export const readDetection = async (client: MulticallClient, addresses: readonly
         const result = results[index];
         return result?.status === 'success' ? result.result : null;
     };
+    // decoded by viem from the ABI, validated anyway: anything but an address (pair) counts as a failed call
+    const asAddress = (value: unknown) => {
+        const parsed = addressAnswer.safeParse(value);
+        return parsed.success ? parsed.data : null;
+    };
+    const asAddressPair = (value: unknown) => {
+        const parsed = addressPairAnswer.safeParse(value);
+        return parsed.success ? parsed.data : null;
+    };
     return new Map(
         R.map(addresses, (address, index): [string, Reads] => {
             const base = index * READ_FUNCTIONS.length;
-            const asAddress = (value: unknown) => (typeof value === 'string' ? value.toLowerCase() : null);
-            const wants = answer(base + 4);
             return [
                 address,
                 {
@@ -289,9 +315,7 @@ export const readDetection = async (client: MulticallClient, addresses: readonly
                     strategy: asAddress(answer(base + 1)),
                     rewardToken: asAddress(answer(base + 2)),
                     stakedToken: asAddress(answer(base + 3)),
-                    wants: Array.isArray(wants)
-                        ? [String(wants[0]).toLowerCase(), String(wants[1]).toLowerCase()]
-                        : null,
+                    wants: asAddressPair(answer(base + 4)),
                 },
             ];
         })
@@ -325,10 +349,29 @@ const summary = (contracts: readonly KnownContract[]) =>
         R.countBy((contract) => contract.kind)
     );
 
+const command = new Command('known-contracts')
+    .description(
+        'Verifies the Beefy API products on chain and writes the confirmed ones into the generated blocks of config.yaml.'
+    )
+    .argument(
+        '[chainIds...]',
+        'chain ids (default: every chain in config.yaml)',
+        (value: string, previous: number[] | undefined) => [...(previous ?? []), chainIdArg(value)]
+    )
+    .addHelpText(
+        'after',
+        `
+Environment (scripts/lib/config.ts):
+  ENVIO_RPC_URL_<chainId>   RPC of each chain (a chain without one keeps its current list)
+  BEEFY_API_URL             Beefy API (default https://api.beefy.finance)`
+    );
+
 const main = async () => {
     const startedAt = Date.now();
+    const selected = (command.parse().processedArgs[0] as number[] | undefined) ?? [];
+    const config = scriptsConfig();
     const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-    const configYaml = readFileSync(join(root, CONFIG_FILE), 'utf8');
+    const configYaml = readFileSync(join(root, configFileName()), 'utf8');
     const blacklist = new Set(
         R.map(
             loadVaultBlacklist(readFileSync(join(root, 'src/lib/blacklist.ts'), 'utf8')),
@@ -336,9 +379,8 @@ const main = async () => {
         )
     );
     const blacklisted = (chainId: number, address: string) => blacklist.has(`${chainId}-${address}`);
-    const args = R.map(process.argv.slice(2), Number);
-    const chainIds = args.length > 0 ? args : loadActiveChainIds(configYaml);
-    const candidates = candidatesFromApi(await fetchBeefyApiLists(), chainIds);
+    const chainIds = selected.length > 0 ? R.unique(selected) : loadActiveChainIds(configYaml);
+    const candidates = candidatesFromApi(await fetchBeefyApiLists(config.beefyApiUrl), chainIds);
     console.log(
         `Beefy API: ${candidates.length} candidates on ${chainIds.length} chains (${Date.now() - startedAt} ms)`
     );
@@ -347,7 +389,7 @@ const main = async () => {
     const results = await Promise.all(
         R.map(chainIds, async (chainId) => {
             const chainCandidates = R.filter(candidates, (candidate) => candidate.chainId === chainId);
-            const url = process.env[`ENVIO_RPC_URL_${chainId}`];
+            const url = config.rpcUrls.get(chainId);
             if (!url) return { chainId, error: `ENVIO_RPC_URL_${chainId} is not set` };
             const client = createPublicClient({
                 transport: http(url, { retryCount: 6, retryDelay: 1_000, timeout: 60_000 }),
@@ -359,7 +401,7 @@ const main = async () => {
                     ...(await verifyChain(client, chainCandidates, blacklisted)),
                 };
             } catch (error) {
-                return { chainId, error: error instanceof Error ? error.message.split('\n')[0] : String(error) };
+                return { chainId, error: describeError(error) };
             }
         })
     );
@@ -379,13 +421,13 @@ const main = async () => {
         }
     }
 
-    writeFileSync(join(root, CONFIG_FILE), mergeKnownContracts(configYaml, known));
-    console.log(`wrote config.yaml in ${Math.round((Date.now() - startedAt) / 1000)} s`);
+    writeFileSync(join(root, configFileName()), mergeKnownContracts(configYaml, known));
+    console.log(`wrote ${configFileName()} in ${Math.round((Date.now() - startedAt) / 1000)} s`);
 };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     main().catch((error: unknown) => {
-        console.error(error);
+        console.error(describeError(error));
         process.exit(1);
     });
 }

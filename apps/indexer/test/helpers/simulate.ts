@@ -5,11 +5,20 @@
  * Do not put test-only addresses in config.yaml.
  */
 
+import type { TimelineEvent } from 'envio';
+
 type ProcessResult = { changes: ReadonlyArray<Record<string, unknown>> };
 
 /** Every row `set` for `entity` across the processed blocks, in processing order. */
 export const rowsOf = <T = Record<string, unknown>>(result: ProcessResult, entity: string): T[] =>
     result.changes.flatMap((change) => (change[entity] as { sets?: T[] } | undefined)?.sets ?? []);
+
+/**
+ * BALANCE `TimelineEvent` rows (the running balance step function) in processing order: `contract` is the share token
+ * (or the boost), `sharesAfter` the account's balance after the change.
+ */
+export const balanceRowsOf = (result: ProcessResult) =>
+    rowsOf<TimelineEvent>(result, 'TimelineEvent').filter(({ kind }) => kind === 'BALANCE');
 
 /** Latest `set` per id for `entity` (current state after the run). */
 export const latestById = <T extends { id: string }>(result: ProcessResult, entity: string): Map<string, T> =>

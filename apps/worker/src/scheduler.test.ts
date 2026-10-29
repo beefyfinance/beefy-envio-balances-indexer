@@ -1,19 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Job } from './jobs/job.ts';
-import { type LogEvent, startScheduler } from './scheduler.ts';
+import { captureLog } from './lib/log.testing.ts';
+import { startScheduler } from './scheduler.ts';
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
 describe('scheduler', () => {
-    beforeEach(() => vi.useFakeTimers());
-    afterEach(() => vi.useRealTimers());
+    beforeEach(() => {
+        vi.useFakeTimers();
+        // nothing written by the tests that do not look at the lines
+        captureLog();
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
 
     const make = (run: Job['run']): Job => ({ name: 'j', intervalMs: 1000, run });
 
     it('runs a job at start and again an interval after each run finished', async () => {
         const run = vi.fn<Job['run']>(async () => {});
-        const scheduler = startScheduler([make(run)], () => {});
+        const scheduler = startScheduler([make(run)]);
         await flush();
         expect(run).toHaveBeenCalledTimes(1);
         await vi.advanceTimersByTimeAsync(999);
@@ -32,7 +40,7 @@ describe('scheduler', () => {
             await new Promise((resolve) => setTimeout(resolve, 5000));
             active--;
         };
-        const scheduler = startScheduler([make(run)], () => {});
+        const scheduler = startScheduler([make(run)]);
         await vi.advanceTimersByTimeAsync(20_000);
         expect(peak).toBe(1);
         const stopping = scheduler.stop();
@@ -41,11 +49,11 @@ describe('scheduler', () => {
     });
 
     it('logs a failure and keeps going', async () => {
-        const events: LogEvent[] = [];
+        const events = captureLog();
         const run = vi.fn<Job['run']>(async () => {
             throw new Error('boom');
         });
-        const scheduler = startScheduler([make(run)], (event) => events.push(event));
+        const scheduler = startScheduler([make(run)]);
         await vi.advanceTimersByTimeAsync(1000);
         expect(run).toHaveBeenCalledTimes(2);
         expect(events.filter((event) => event.event === 'job-failed').map((event) => event.error)).toEqual([
@@ -66,7 +74,7 @@ describe('scheduler', () => {
                     });
                 })
         );
-        const scheduler = startScheduler([make(run)], () => {});
+        const scheduler = startScheduler([make(run)]);
         await flush();
         await scheduler.stop();
         expect(aborted).toBe(true);

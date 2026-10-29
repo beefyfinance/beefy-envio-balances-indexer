@@ -44,3 +44,7 @@ existing-apis
 dist/
 *.tsbuildinfo
 coverage/
+# local editor, OS and agent files
+.DS_Store
+.cursor/
+.claude/

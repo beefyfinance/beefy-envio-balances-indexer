@@ -5,8 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ierc20Abi } from '../effects/abis/IERC20/IERC20';
 import { getViemClient } from './viem';
 
-// Exercise the real batching path against a local JSON-RPC stub instead of a live node.
-process.env.RPC_FIXTURES = 'off';
+// Exercise the real batching path against a local JSON-RPC stub instead of a live node: hoisted above the imports,
+// so src/lib/config.ts reads it when it loads.
+vi.hoisted(() => {
+    process.env.RPC_FIXTURES = 'off';
+});
 
 const DEAD = '0x000000000000000000000000000000000000dead';
 const decimalsAbi = [
@@ -14,6 +17,8 @@ const decimalsAbi = [
 ] as const;
 /** Returns a 160-bit value (an address) where a uint8 is expected: decoding fails on the client. */
 const ADDRESS_RETURNER = '0x00000000000000000000000000000000000000aa';
+/** Any request that reads it is refused with a JSON-RPC rate limit error, as public RPCs answer. */
+const RATE_LIMITED = '0x00000000000000000000000000000000000000cc' as const;
 const TOKENS = [
     '0xca3f508b8e4dd382ee878a314789373d80a5190a',
     '0x55d398326f99059ff775485246999027b3197955',
@@ -34,6 +39,12 @@ vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
     const calls = args[0] as readonly { target: string }[];
     ethCalls.push(calls.length);
     ethCallBlocks.push(request.params[1]);
+    if (calls.some(({ target }) => target.toLowerCase() === RATE_LIMITED)) {
+        return new Response(
+            JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code: 429, message: 'Too Many Requests' } }),
+            { headers: { 'content-type': 'application/json' } }
+        );
+    }
     const result = encodeFunctionResult({
         abi: multicall3Abi,
         functionName: 'aggregate3',
@@ -133,6 +144,23 @@ describe('getViemClient multicall batching', () => {
         });
         expect(ok?.status).toBe('success');
         expect(reverted?.status).toBe('failure');
+    });
+
+    it('rejects a rate-limited request instead of reporting its calls as reverted', async () => {
+        // regression: readContract wraps the request error like a revert, so every token read in a rate-limited
+        // request was stored as INVALID metadata
+        const client = getViemClient(56, logger);
+        const read = (count: number) =>
+            client.multicall({
+                allowFailure: true,
+                contracts: Array.from({ length: count }, () => ({
+                    address: RATE_LIMITED,
+                    abi: decimalsAbi,
+                    functionName: 'decimals' as const,
+                })),
+            });
+        await expect(read(3)).rejects.toThrow(/Too Many Requests|429/);
+        await expect(read(1)).rejects.toThrow(/Too Many Requests|429/);
     });
 
     it('merges concurrent unpinned (latest) multicalls into one eth_call at latest', async () => {

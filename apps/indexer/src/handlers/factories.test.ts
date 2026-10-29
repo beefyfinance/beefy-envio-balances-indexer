@@ -2,7 +2,7 @@ import { createTestIndexer } from 'envio';
 import { encodeFunctionData, type Hex, stringToHex } from 'viem';
 import { describe, expect, it } from 'vitest';
 
-import { latestById, registrationsOf, rowsOf, tx, USER_A, ZERO } from '../../test/helpers/simulate';
+import { balanceRowsOf, latestById, registrationsOf, rowsOf, tx, USER_A, ZERO } from '../../test/helpers/simulate';
 import { classicVaultFactoryAbi } from '../effects/abis/beefy/classic/ClassicVaultFactory';
 import { classifyFromInput, decodeBytes32Name } from '../lib/register';
 
@@ -72,6 +72,9 @@ describe('ClassicVaultFactory classification', () => {
                 // facts read at the creation event; this fake proxy has no code
                 factsBlock: BigInt(BLOCK),
                 factsStatus: 'PARTIAL',
+                // a vault is its own product; no want read, so no price decimals
+                productAddress: PROXY,
+                priceDecimals: undefined,
             },
         ]);
     });
@@ -250,7 +253,7 @@ describe('other factories', () => {
             },
           ]
         `);
-        expect(rowsOf(result, 'BalanceChange')).toHaveLength(1);
+        expect(balanceRowsOf(result)).toHaveLength(1);
     });
 });
 
@@ -300,7 +303,7 @@ describe('blacklist', () => {
                 },
             },
         });
-        for (const entity of ['Contract', 'Token', 'ShareTransfer', 'BalanceChange', 'Balance', 'TokenSupply']) {
+        for (const entity of ['Contract', 'Token', 'ShareTransfer', 'TimelineEvent', 'Balance', 'TokenSupply']) {
             expect(rowsOf(result, entity)).toEqual([]);
         }
     });

@@ -1,6 +1,8 @@
 import type { EvmChainId, Logger } from 'envio';
 import {
-    ContractFunctionExecutionError,
+    BaseError,
+    ContractFunctionRevertedError,
+    ContractFunctionZeroDataError,
     createPublicClient,
     defineChain,
     http,
@@ -31,8 +33,8 @@ import {
     zksync,
 } from 'viem/chains';
 
-import { RPC_URL } from './config';
-import { createFixtureFetch, getRpcFixtureMode } from './rpcFixtures';
+import { indexerConfig } from './config';
+import { createFixtureFetch } from './rpcFixtures';
 
 const hyperevm = defineChain({
     id: 999,
@@ -84,11 +86,9 @@ const chainMap: Record<EvmChainId, ViemChain> = {
     324: zksync,
 };
 
-// Max sub-calls merged into one aggregate3: keeps an eth_call under node gas caps (swapper
-// quotes are the heaviest sub-calls); a lone group larger than this still runs as one call.
-const MAX_CALLS_PER_AGGREGATE = 64;
-// Window during which multicalls for the same block are collected into a shared eth_call.
-const MULTICALL_MERGE_WAIT_MS = 16;
+// Merging knobs (src/lib/config.ts): RPC_MULTICALL_MAX_CALLS keeps an eth_call under node gas caps (swapper quotes
+// are the heaviest sub-calls), RPC_MULTICALL_MERGE_WAIT_MS is the window during which multicalls for the same block are
+// collected into a shared eth_call.
 // Never let viem split a group: calls of one group must run in a single eth_call (see below).
 const UNSPLIT = Number.MAX_SAFE_INTEGER;
 
@@ -102,23 +102,33 @@ type PendingGroup = {
     reject: (error: unknown) => void;
 };
 
+/** A sub-call's own answer: it reverted, or returned no data (no code, or out of gas). */
+const isContractAnswer = (error: unknown) =>
+    error instanceof BaseError &&
+    error.walk(
+        (cause) => cause instanceof ContractFunctionRevertedError || cause instanceof ContractFunctionZeroDataError
+    ) !== null;
+
 /**
- * viem reports a failed aggregate3 request (gas cap, timeout, HTTP error) by giving every sub-call of the chunk
- * the same transport error. A sub-call that reverted or returned undecodable data gets its own
- * ContractFunctionExecutionError instead: that is the contract's answer and must not be retried.
+ * viem reports a failed aggregate3 request (rate limit, gas cap, timeout, HTTP error) by giving every sub-call of the
+ * chunk the same error object, which `readContract` has wrapped in a ContractFunctionExecutionError like a revert. A
+ * sub-call that reverted or returned undecodable data gets its own error object instead: that is the contract's answer
+ * and must not be retried. One shared object over several sub-calls is therefore a failed request; for a lone sub-call,
+ * the cause tells them apart.
  */
 const isWholeRequestFailure = (results: MulticallResultEntry[]) => {
     const first = results[0];
-    if (!first || first.status !== 'failure' || first.error instanceof ContractFunctionExecutionError) return false;
-    return results.every((res) => res.status === 'failure' && res.error === first.error);
+    if (!first || first.status !== 'failure') return false;
+    if (!results.every((res) => res.status === 'failure' && res.error === first.error)) return false;
+    return results.length > 1 || !isContractAnswer(first.error);
 };
 
-const packGroups = (groups: PendingGroup[]) => {
+const packGroups = (groups: PendingGroup[], maxCalls: number) => {
     const chunks: PendingGroup[][] = [];
     let current: PendingGroup[] = [];
     let size = 0;
     for (const group of groups) {
-        if (current.length > 0 && size + group.contracts.length > MAX_CALLS_PER_AGGREGATE) {
+        if (current.length > 0 && size + group.contracts.length > maxCalls) {
             chunks.push(current);
             current = [];
             size = 0;
@@ -145,10 +155,14 @@ const createBlockMulticallBatcher = ({
     client,
     mergeGroups,
     deploylessAt,
+    maxCalls,
+    mergeWaitMs,
 }: {
     client: PublicClient;
     mergeGroups: boolean;
     deploylessAt: (blockNumber: bigint) => boolean;
+    maxCalls: number;
+    mergeWaitMs: number;
 }) => {
     const queues = new Map<BlockKey, PendingGroup[]>();
 
@@ -194,7 +208,7 @@ const createBlockMulticallBatcher = ({
     const flush = (blockNumber: BlockKey) => {
         const groups = queues.get(blockNumber) ?? [];
         queues.delete(blockNumber);
-        for (const chunk of packGroups(groups)) {
+        for (const chunk of packGroups(groups, maxCalls)) {
             void executeWithFallback(blockNumber, chunk);
         }
     };
@@ -213,18 +227,19 @@ const createBlockMulticallBatcher = ({
                 return;
             }
             queues.set(blockNumber, [group]);
-            setTimeout(() => flush(blockNumber), MULTICALL_MERGE_WAIT_MS);
+            setTimeout(() => flush(blockNumber), mergeWaitMs);
         });
 };
 
 export const getViemClient = (chainId: EvmChainId, logger: Logger) => {
-    const rpcUrl = RPC_URL[chainId];
-
     if (clients.has(chainId)) {
         return clients.get(chainId) as PublicClient;
     }
 
-    const fixtureMode = getRpcFixtureMode();
+    const config = indexerConfig();
+    // unset only under vitest: a missing fixture is then recorded from the chain's public RPC
+    const rpcUrl = config.rpcUrls.get(chainId);
+    const fixtureMode = config.rpcFixtures;
 
     const transport = http(rpcUrl, {
         ...(fixtureMode !== 'off' ? { fetchFn: createFixtureFetch(chainId, fixtureMode) } : {}),
@@ -238,11 +253,11 @@ export const getViemClient = (chainId: EvmChainId, logger: Logger) => {
         },
         // the RPC proxy (erpc) batches requests, and multicalls are merged by createBlockMulticallBatcher
         batch: false,
-        // up to ~15.5 s of retries (500 ms doubling, 5 times)
-        retryCount: 5,
-        retryDelay: 500,
-        // erpc handles upstream retries and fallbacks: wait longer for an answer rather than fail
-        timeout: 30_000,
+        // defaults: up to ~15.5 s of retries (500 ms doubling, 5 times), and a 30 s timeout (erpc handles upstream
+        // retries and fallbacks: wait longer for an answer rather than fail)
+        retryCount: config.rpc.retryCount,
+        retryDelay: config.rpc.retryDelayMs,
+        timeout: config.rpc.timeoutMs,
     });
 
     const baseClient = createPublicClient({
@@ -260,6 +275,8 @@ export const getViemClient = (chainId: EvmChainId, logger: Logger) => {
         client: baseClient,
         mergeGroups: fixtureMode === 'off',
         deploylessAt,
+        maxCalls: config.rpc.multicallMaxCalls,
+        mergeWaitMs: config.rpc.multicallMergeWaitMs,
     });
 
     const client = baseClient.extend((innerClient) => ({

@@ -1,7 +1,7 @@
 import { createTestIndexer } from 'envio';
 import { describe, expect, it } from 'vitest';
 
-import { latestById, rowsOf, tx, USER_A, USER_B, ZERO } from '../../test/helpers/simulate';
+import { balanceRowsOf, latestById, rowsOf, tx, USER_A, USER_B, ZERO } from '../../test/helpers/simulate';
 
 describe('classic boost', () => {
     // Base launchpool listed in config.yaml (mooBaseSwap cbETH-WETH staked, ALB rewards)
@@ -61,10 +61,13 @@ describe('classic boost', () => {
             expect.objectContaining({ boost: BOOST, user: USER_A, amount: 40n, direction: 'UNSTAKE' }),
         ]);
         expect(
-            rowsOf<{ account: string; token: string; delta: bigint; balanceAfter: bigint; source: string }>(
-                result,
-                'BalanceChange'
-            ).map(({ account, token, delta, balanceAfter, source }) => [account, token, delta, balanceAfter, source])
+            balanceRowsOf(result).map(({ account, contract, delta, sharesAfter, source }) => [
+                account,
+                contract,
+                delta,
+                sharesAfter,
+                source,
+            ])
         ).toEqual([
             [USER_A, BOOST, 100n, 100n, 'BOOST_STAKE'],
             [USER_B, BOOST, 50n, 50n, 'BOOST_STAKE'],

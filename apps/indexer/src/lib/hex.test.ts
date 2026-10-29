@@ -1,6 +1,7 @@
+import { zeroAddress as ZERO_ADDRESS } from 'viem';
 import { describe, expect, it } from 'vitest';
 
-import { asHex, isZeroAddress, nonZeroAddress, ZERO_ADDRESS } from './hex';
+import { asHex, isZeroAddress, nonZeroAddress } from './hex';
 
 const ADDRESS = '0xc55e93c62874d8100dbd2dfe307edc1036ad5434';
 const CHECKSUM = '0xC55E93C62874d8100dBd2dFE307EdC1036Ad5434';

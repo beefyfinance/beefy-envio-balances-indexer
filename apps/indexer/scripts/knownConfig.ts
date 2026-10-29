@@ -4,13 +4,18 @@
  */
 import * as R from 'remeda';
 
-import { CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN } from '../src/config/classic/stratHarvest1/chains.ts';
+import { classicStratHarvest1Addresses } from '../src/config/classic/stratHarvest1/chains.ts';
 
-export const CONFIG_FILE = 'config.yaml';
+const CONFIG_FILE = 'config.yaml';
 
-export const BEGIN_MARKER =
-    '# generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker';
-export const END_MARKER = '# end generated';
+const BEGIN_MARKER = '# generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker';
+const END_MARKER = '# end generated';
+
+/** The config file the known contracts are written to (relative to apps/indexer). */
+export const configFileName = () => CONFIG_FILE;
+
+/** The comment lines around a generated block. */
+export const generatedMarkers = () => ({ begin: BEGIN_MARKER, end: END_MARKER });
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Known contracts
@@ -27,10 +32,9 @@ export const contractsForKind = (chainId: number, kind: KnownKind, address: stri
         case 'VAULT':
             return ['ClassicVault'];
         case 'STRATEGY': {
-            const harvest1 = (CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN as Record<number, readonly string[]>)[
-                chainId
-            ];
-            const usesHarvest1 = harvest1?.some((item) => item.toLowerCase() === address.toLowerCase()) ?? false;
+            const usesHarvest1 = classicStratHarvest1Addresses(chainId).some(
+                (item) => item.toLowerCase() === address.toLowerCase()
+            );
             return ['ClassicStrategy', usesHarvest1 ? 'ClassicStrategyStratHarvest1' : 'ClassicStrategyStratHarvest0'];
         }
         case 'BOOST':
@@ -92,6 +96,12 @@ export const knownAddresses = (contracts: KnownContract[]): KnownAddresses =>
 
 const ADDRESS_LINE = /^ {10}- (0x[0-9a-fA-F]{40})\b/;
 
+/** Only lowercase addresses are written into the YAML: anything else (a newline, a `#`, a key) would change its shape. */
+const yamlAddress = (address: string) => {
+    if (!/^0x[0-9a-f]{40}$/.test(address)) throw new Error(`not a lowercase address: ${JSON.stringify(address)}`);
+    return address;
+};
+
 /**
  * Rewrites the generated block of every `chains[].contracts[].address` list: hand-listed addresses stay first and
  * untouched; known addresses not already hand-listed follow between the markers. Idempotent.
@@ -145,7 +155,7 @@ export const mergeKnownContracts = (configYaml: string, known: KnownAddresses): 
         if (generated.length > 0) {
             out.push(
                 `          ${BEGIN_MARKER}`,
-                ...generated.map((address) => `          - ${address}`),
+                ...generated.map((address) => `          - ${yamlAddress(address)}`),
                 `          ${END_MARKER}`
             );
         }

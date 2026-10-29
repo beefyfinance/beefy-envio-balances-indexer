@@ -3,15 +3,16 @@
  *
  * One-time on-chain facts (src/effects/facts.effects.ts) are read at `latest`, keyed on the address only, as soon
  * as the contract is known: at its factory creation event, or at the first handled event of an address listed in
- * config.yaml. They write the READ links and the Token rows and stamp `factsBlock`. An incomplete read (PARTIAL) is
- * retried by a later event, at most once per FACTS_RETRY_BLOCKS. Later events only cost one `Contract.get`.
+ * config.yaml. They write the READ links and the Token rows and stamp `factsBlock`. An incomplete read (PARTIAL: a
+ * missing link, or token metadata that could not be read) is retried by a later event, at most once per
+ * FACTS_RETRY_BLOCKS. Later events only cost one `Contract.get`.
  *
  * Preload: the same code runs in the preload pass (reads and effects only: `set` is a no-op there), so the batch
  * issues its fact reads concurrently and deduplicated by key; the processing pass then reads them from memory and
  * writes once, at the first event that needs them (it sees the rows written by earlier events of the batch).
  */
 
-import type { Contract, ContractLink, EvmChainId, EvmOnEventContext } from 'envio';
+import type { Contract, ContractLink, EvmChainId, EvmOnEventContext, Token } from 'envio';
 
 import {
     readAdapterFacts,
@@ -43,10 +44,16 @@ const SHARE_TOKEN_KINDS: ReadonlySet<ContractKind> = new Set([
     'TOKEN',
 ]);
 
+/** Share tokens that are not ERC-20s: their metadata reads revert for good, so they do not keep the facts PARTIAL. */
+const NON_ERC20_SHARE_KINDS: ReadonlySet<ContractKind> = new Set(['BOOST']);
+
 type ReadLink = { relation: LinkRelation; to: string | undefined };
 
 /** A PARTIAL fact read is retried by an event at least this many blocks after the previous read. */
-export const FACTS_RETRY_BLOCKS = 10_000n;
+const FACTS_RETRY_BLOCKS = 10_000n;
+
+/** Blocks between two reads of a PARTIAL contract's facts (FACTS_RETRY_BLOCKS). */
+export const factsRetryBlocks = (): bigint => FACTS_RETRY_BLOCKS;
 
 /** The one-time reads of each kind, as links. A missing `to` is a reverted / zero read. */
 const readFacts = async (context: Context, kind: ContractKind, address: string): Promise<ReadLink[]> => {
@@ -115,15 +122,25 @@ const TOKEN_RELATIONS: ReadonlySet<LinkRelation> = new Set([
 
 const isTokenRelation = (relation: LinkRelation) => TOKEN_RELATIONS.has(relation);
 
-/** Writes the Token row once (metadata read once per token); upgrades `isBeefyShare`, never downgrades it. */
-export const ensureToken = async (context: Context, chainId: number, address: string, isBeefyShare: boolean) => {
+/**
+ * Writes the Token row; upgrades `isBeefyShare`, never downgrades it. Returns the row (stored or written). Metadata
+ * read once is never read again. Metadata that could not be read (INVALID) is read again only with `retryInvalid`,
+ * which only the facts retry passes (throttled by FACTS_RETRY_BLOCKS): the per-event callers must not pay a call on
+ * every event for a token that really is not an ERC-20.
+ */
+const tokenRow = async (
+    context: Context,
+    chainId: number,
+    address: string,
+    isBeefyShare: boolean,
+    retryInvalid = false
+): Promise<Token> => {
     const id = contractId(chainId, address);
-    const [existing, metadata] = await Promise.all([
-        context.Token.get(id),
-        context.effect(getTokenMetadata, { address: asHex(address) }),
-    ]);
-    if (existing && (existing.isBeefyShare || !isBeefyShare)) return;
-    context.Token.set({
+    const existing = await context.Token.get(id);
+    const upgradesShare = isBeefyShare && existing?.isBeefyShare === false;
+    if (existing && !upgradesShare && (existing.metadataStatus === 'OK' || !retryInvalid)) return existing;
+    const metadata = await context.effect(getTokenMetadata, { address: asHex(address) });
+    const token: Token = {
         id,
         address: asHex(address),
         decimals: metadata.decimals,
@@ -131,8 +148,19 @@ export const ensureToken = async (context: Context, chainId: number, address: st
         name: metadata.name,
         metadataStatus: metadata.status === 'ok' ? 'OK' : 'INVALID',
         isBeefyShare: isBeefyShare || (existing?.isBeefyShare ?? false),
-    });
+    };
+    context.Token.set(token);
+    return token;
 };
+
+/** `tokenRow`, returning whether the token's metadata is read. */
+export const ensureToken = async (
+    context: Context,
+    chainId: number,
+    address: string,
+    isBeefyShare: boolean,
+    retryInvalid = false
+): Promise<boolean> => (await tokenRow(context, chainId, address, isBeefyShare, retryInvalid)).metadataStatus === 'OK';
 
 /** Appends a link discovered from an event (UpgradeStrat, AddReward). */
 export const writeEventLink = (context: Context, event: RawEvent, relation: LinkRelation, to: string) => {
@@ -174,19 +202,69 @@ const needsFacts = (contract: Contract, block: number) =>
     (contract.factsBlock === undefined ||
         (contract.factsStatus === 'PARTIAL' && BigInt(block) >= contract.factsBlock + FACTS_RETRY_BLOCKS));
 
+/** Kinds priced by their own share price. */
+const PRODUCT_KINDS: ReadonlySet<ContractKind> = new Set(['VAULT', 'CLM_MANAGER']);
+
+/** The relation naming the product a staking contract is priced by. */
+const STAKED_RELATIONS: Partial<Record<ContractKind, LinkRelation>> = {
+    BOOST: 'BOOST_STAKED',
+    REWARD_POOL: 'REWARD_POOL_STAKED',
+};
+
+type PriceFacts = Pick<Contract, 'priceDecimals' | 'productKind'>;
+
+/**
+ * Price decimals and kind of `product` (a staked token), the rule of productFactsSelect: a vault's or CLM's own price
+ * decimals, the token's decimals for any other known kind, unknown for an unregistered or UNKNOWN contract.
+ */
+const stakedPriceFacts = async (
+    context: Context,
+    chainId: number,
+    product: string
+): Promise<PriceFacts | undefined> => {
+    const row = await context.Contract.get(contractId(chainId, product));
+    if (row === undefined || row.kind === 'UNKNOWN') return undefined;
+    const priceDecimals = PRODUCT_KINDS.has(row.kind)
+        ? row.priceDecimals
+        : (await context.Token.get(contractId(chainId, product)))?.decimals;
+    return priceDecimals === undefined ? undefined : { priceDecimals, productKind: row.kind };
+};
+
+/**
+ * Price facts of a staking contract whose product is known but whose decimals are not yet (the product registered,
+ * or its want read, after the stake's facts): one more `Contract.get` per event until they are.
+ */
+const completePriceFacts = async (context: Context, chainId: number, contract: Contract): Promise<Contract> => {
+    if (contract.productAddress === undefined || contract.priceDecimals !== undefined) return contract;
+    if (STAKED_RELATIONS[contract.kind] === undefined) return contract;
+    const facts = await stakedPriceFacts(context, chainId, contract.productAddress);
+    if (facts === undefined) return contract;
+    const updated: Contract = { ...contract, ...facts };
+    context.Contract.set(updated);
+    return updated;
+};
+
 /**
  * Reads the contract's facts (at `latest`) and writes its Token rows and READ links. READ links start at the
  * contract's creation block when known (the facts are immutable since then), else at the reading event's block.
+ * Sets the price facts: a vault is priced per its want's decimals, a CLM per its own, a stake per its product's.
  */
 const applyFacts = async (context: Context, event: RawEvent, contract: Contract): Promise<Contract> => {
     const chainId = event.chainId;
     const links = await readFacts(context, contract.kind, contract.address);
-    await Promise.all([
-        SHARE_TOKEN_KINDS.has(contract.kind) ? ensureToken(context, chainId, contract.address, true) : undefined,
+    const [ownToken, ...linkTokens] = await Promise.all([
+        SHARE_TOKEN_KINDS.has(contract.kind) ? tokenRow(context, chainId, contract.address, true, true) : undefined,
         ...links.map(({ relation, to }) =>
-            to !== undefined && isTokenRelation(relation) ? ensureToken(context, chainId, to, false) : undefined
+            to !== undefined && isTokenRelation(relation) ? tokenRow(context, chainId, to, false, true) : undefined
         ),
     ]);
+    const tokensRead = [
+        ownToken === undefined || ownToken.metadataStatus === 'OK' || NON_ERC20_SHARE_KINDS.has(contract.kind),
+        ...links.map(
+            ({ relation, to }, index) =>
+                to === undefined || !isTokenRelation(relation) || linkTokens[index]?.metadataStatus === 'OK'
+        ),
+    ];
     const since = {
         block: contract.createdBlock ?? BigInt(event.block.number),
         timestamp: contract.createdTimestamp ?? blockTimestamp(event),
@@ -194,13 +272,32 @@ const applyFacts = async (context: Context, event: RawEvent, contract: Contract)
     for (const { relation, to } of links) {
         if (to !== undefined) writeReadLink(context, contract, since, relation, to);
     }
+    const linkIndex = links.findIndex(({ relation }) =>
+        contract.kind === 'VAULT' ? relation === 'VAULT_WANT' : relation === STAKED_RELATIONS[contract.kind]
+    );
+    const linked = linkIndex === -1 ? undefined : links[linkIndex]?.to;
+    const productAddress = PRODUCT_KINDS.has(contract.kind)
+        ? contract.address
+        : linked === undefined
+          ? undefined
+          : asHex(linked);
+    const priceDecimals =
+        contract.kind === 'VAULT'
+            ? linkTokens[linkIndex]?.decimals
+            : contract.kind === 'CLM_MANAGER'
+              ? ownToken?.decimals
+              : undefined;
     const updated: Contract = {
         ...contract,
         factsBlock: BigInt(event.block.number),
-        factsStatus: links.every(({ to }) => to !== undefined) ? 'OK' : 'PARTIAL',
+        factsStatus: links.every(({ to }) => to !== undefined) && tokensRead.every(Boolean) ? 'OK' : 'PARTIAL',
+        // a later read never forgets a fact an earlier one found
+        productAddress: productAddress ?? contract.productAddress,
+        priceDecimals: priceDecimals ?? contract.priceDecimals,
+        productKind: priceDecimals === undefined ? contract.productKind : contract.kind,
     };
     context.Contract.set(updated);
-    return updated;
+    return completePriceFacts(context, chainId, updated);
 };
 
 /**
@@ -227,6 +324,9 @@ export const registerCreatedContract = async (
         deployName: deployName ?? existing?.deployName,
         factsBlock: undefined,
         factsStatus: undefined,
+        productAddress: undefined,
+        priceDecimals: undefined,
+        productKind: undefined,
     };
     context.Contract.set(contract);
     return needsFacts(contract, event.block.number) ? applyFacts(context, event, contract) : contract;
@@ -260,6 +360,11 @@ export const ensureContract = async (
         deployName: undefined,
         factsBlock: undefined,
         factsStatus: undefined,
+        productAddress: undefined,
+        priceDecimals: undefined,
+        productKind: undefined,
     };
-    return needsFacts(contract, event.block.number) ? applyFacts(context, event, contract) : contract;
+    return needsFacts(contract, event.block.number)
+        ? applyFacts(context, event, contract)
+        : completePriceFacts(context, chainId, contract);
 };

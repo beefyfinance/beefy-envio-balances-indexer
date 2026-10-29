@@ -1,6 +1,6 @@
 /**
  * Boosts (docs/architecture.md "Balances" -> BoostStake): Staked / Withdrawn write BoostStake rows AND a
- * BalanceChange + Balance keyed on the boost address (the balances API treats boosts as share tokens).
+ * BALANCE TimelineEvent + Balance keyed on the boost address (the balances API treats boosts as share tokens).
  * Real history of the static Base boost 0x31ea... is replayed; expected balances are on-chain boost
  * balanceOf(user) / totalSupply() at the last replayed block.
  */
@@ -8,7 +8,7 @@ import { createTestIndexer } from 'envio';
 import * as R from 'remeda';
 import { describe, expect, it } from 'vitest';
 
-import { latestById, rowsOf } from '../helpers/simulate';
+import { balanceRowsOf, latestById, rowsOf } from '../helpers/simulate';
 import { BOOST_HISTORY, CHAIN, type RealBoostEvent } from './realData';
 
 const BOOST = BOOST_HISTORY.boost;
@@ -77,11 +77,9 @@ describe('boost (real Base history)', () => {
         ).toBe(BOOST_HISTORY.totalSupply);
     });
 
-    it('BalanceChange rows on the boost: source BOOST_STAKE, signed delta, running balanceAfter', async () => {
+    it('BALANCE rows on the boost: source BOOST_STAKE, signed delta, running sharesAfter', async () => {
         const result = await runAll();
-        const changes = new Map(
-            rowsOf<Row & { delta: bigint; balanceAfter: bigint }>(result, 'BalanceChange').map((r) => [r.id, r])
-        );
+        const changes = new Map(balanceRowsOf(result).map((r) => [r.id, r]));
         const running = new Map<string, bigint>();
         let count = 0;
         for (const e of BOOST_HISTORY.events) {
@@ -91,11 +89,11 @@ describe('boost (real Base history)', () => {
             const after = (running.get(user) ?? 0n) + delta;
             running.set(user, after);
             count++;
-            expect(changes.get(`${CHAIN}-${e.hash}-${e.logIndex}-${user}`), e.hash).toMatchObject({
-                token: BOOST,
+            expect(changes.get(`${CHAIN}-${e.hash}-${e.logIndex}-${user}-BALANCE`), e.hash).toMatchObject({
+                contract: BOOST,
                 account: user,
                 delta,
-                balanceAfter: after,
+                sharesAfter: after,
                 source: 'BOOST_STAKE',
             });
         }

@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 
-/** Published by Cloudflare at https://www.cloudflare.com/ips (checked 2026-10); refreshed daily when `CLIENT_IP=cloudflare`. */
-export const CLOUDFLARE_RANGES = [
+/** Published by Cloudflare at https://www.cloudflare.com/ips (checked 2026-10); update by hand when they change. */
+const CLOUDFLARE_RANGES = [
     '173.245.48.0/20',
     '103.21.244.0/22',
     '103.22.200.0/22',
@@ -25,6 +25,9 @@ export const CLOUDFLARE_RANGES = [
     '2a06:98c0::/29',
     '2c0f:f248::/32',
 ];
+
+/** Cloudflare's address ranges, whose `CF-Connecting-IP` is believed. */
+export const cloudflareRanges = (): string[] => [...CLOUDFLARE_RANGES];
 
 const ipv6ToBigInt = (address: string): bigint | undefined => {
     const withoutZone = address.split('%')[0] ?? address;
@@ -91,22 +94,55 @@ export const inRanges = (address: string, ranges: readonly Cidr[]): boolean => {
     });
 };
 
+/** Where the address of the client comes from, behind which proxies (`CLIENT_IP`). */
+export type ClientIpSource = 'socket' | 'cloudflare' | 'heroku-cloudflare';
+
+/** The last `X-Forwarded-For` entry: the one appended by the proxy in front of us, the only one it vouches for. */
+const lastForwardedHop = (header: string | undefined): string | undefined => {
+    const hop = header?.split(',').at(-1)?.trim();
+    return hop !== undefined && isIP(hop) !== 0 ? hop : undefined;
+};
+
 /**
- * The address a rate limit should be keyed by. `CF-Connecting-IP` is believed only when the connecting hop is inside
- * Cloudflare's ranges (anyone else can write that header); otherwise the socket address is used.
+ * The address of the client. `CF-Connecting-IP` is believed only when the hop that reached us is inside Cloudflare's
+ * ranges (anyone else can write that header); otherwise that hop is the client.
+ *
+ * - `socket`: the hop is the socket peer.
+ * - `cloudflare`: Cloudflare connects to us directly, so the hop is the socket peer.
+ * - `heroku-cloudflare`: Cloudflare, then Heroku's router. The socket is the router; the router appends the address it
+ *   was reached from to `X-Forwarded-For`, so the last entry is the hop (Cloudflare, or a client reaching the Heroku
+ *   hostname directly). Earlier entries are whatever the client sent and are never read.
  */
 export const resolveClientIp = ({
+    source,
     socketIp,
-    connectingIpHeader,
+    forwardedFor,
+    connectingIp,
     cloudflare,
 }: {
+    source: ClientIpSource;
     socketIp: string;
-    connectingIpHeader: string | undefined;
-    cloudflare: readonly Cidr[] | undefined;
+    forwardedFor: string | undefined;
+    connectingIp: string | undefined;
+    cloudflare: readonly Cidr[];
 }): string => {
-    if (cloudflare !== undefined && connectingIpHeader !== undefined && inRanges(socketIp, cloudflare)) {
-        const candidate = connectingIpHeader.trim();
+    const hop = source === 'heroku-cloudflare' ? (lastForwardedHop(forwardedFor) ?? socketIp) : socketIp;
+    if (source !== 'socket' && connectingIp !== undefined && inRanges(hop, cloudflare)) {
+        const candidate = connectingIp.trim();
         if (isIP(candidate) !== 0) return candidate.toLowerCase();
     }
-    return socketIp;
+    return hop.toLowerCase();
+};
+
+/**
+ * The rate limit key of an address: IPv4 as is (IPv4-mapped IPv6 included), IPv6 by its /64, the smallest block a
+ * single host or customer is usually given (one host can pick any address in it).
+ */
+export const clientKey = (address: string): string => {
+    const parsed = toBigInt(address);
+    if (parsed === undefined) return address;
+    if (parsed.bits === 32) return /^::ffff:/i.test(address) ? address.slice(7) : address;
+    const prefix = parsed.value >> 64n;
+    const groups = [48n, 32n, 16n, 0n].map((shift) => ((prefix >> shift) & 0xffffn).toString(16));
+    return `${groups.join(':')}::/64`;
 };

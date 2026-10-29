@@ -6,7 +6,7 @@ import type { EvmChainId } from 'envio';
  *
  * Subgraph source files are noted per chain. All subgraph deployments use empty lists today.
  */
-export const CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN: Partial<Record<EvmChainId, readonly string[]>> = {
+const CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN: Partial<Record<EvmChainId, readonly string[]>> = {
     1: [], // ethereum.json
     10: [], // optimism.json
     56: [], // bsc.json
@@ -30,3 +30,7 @@ export const CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN: Partial<Record<EvmC
     59144: [], // linea.json
     80094: [], // berachain.json
 };
+
+/** The Harvest1 strategy addresses of a chain (as listed, not normalised). */
+export const classicStratHarvest1Addresses = (chainId: number): readonly string[] =>
+    (CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN as Partial<Record<number, readonly string[]>>)[chainId] ?? [];

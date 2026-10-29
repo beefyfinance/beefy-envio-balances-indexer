@@ -7,10 +7,3 @@ export type Job = {
     /** Must stop promptly once `signal` aborts (the process is shutting down). */
     run: (signal: AbortSignal) => Promise<void>;
 };
-
-export class NotImplementedError extends Error {
-    constructor(what: string) {
-        super(`${what} is not implemented yet`);
-        this.name = 'NotImplementedError';
-    }
-}

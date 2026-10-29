@@ -1,8 +1,9 @@
 export type RateLimitResult = { allowed: true } | { allowed: false; retryAfterSeconds: number };
 
 /**
- * A token bucket per key, in memory. `ratePerMinute` tokens are added per minute up to `burst`. Keys that have been idle
- * long enough to be full again are forgotten, and the table is capped so a flood of distinct keys cannot grow it.
+ * A token bucket per key, in memory. `ratePerMinute` tokens are added per minute up to `burst`. The table holds at most
+ * `maxKeys` keys and forgets the least recently used one first, in constant time, so a flood of distinct keys can
+ * neither grow it nor make a request slow.
  */
 export const createRateLimiter = ({
     ratePerMinute,
@@ -28,22 +29,17 @@ export const createRateLimiter = ({
             const time = now();
             let bucket = buckets.get(key);
             if (bucket === undefined) {
+                // a Map iterates in insertion order: the first key is the least recently used
                 if (buckets.size >= maxKeys) {
-                    // forget the keys that are full again, and if none is, the oldest
-                    for (const [other, state] of buckets) {
-                        refill(state, time);
-                        if (state.tokens >= burst) buckets.delete(other);
-                    }
-                    if (buckets.size >= maxKeys) {
-                        const oldest = buckets.keys().next();
-                        if (!oldest.done) buckets.delete(oldest.value);
-                    }
+                    const oldest = buckets.keys().next();
+                    if (!oldest.done) buckets.delete(oldest.value);
                 }
                 bucket = { tokens: burst, at: time };
-                buckets.set(key, bucket);
             } else {
+                buckets.delete(key);
                 refill(bucket, time);
             }
+            buckets.set(key, bucket);
             if (bucket.tokens >= 1) {
                 bucket.tokens -= 1;
                 return { allowed: true };

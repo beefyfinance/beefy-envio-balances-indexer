@@ -13,7 +13,7 @@
 import { createEffect, type EffectContext, type EvmChainId, S } from 'envio';
 import type { Abi } from 'viem';
 
-import { staticStrategyVaultMap, staticVaultsMap } from '../config/classic/staticVaults';
+import { staticStrategyVault, staticVaultFacts } from '../config/classic/staticVaults';
 import { classifyClassicProxyReads } from '../lib/classify';
 import { asHex, type Hex, nonZeroAddress } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
@@ -75,7 +75,7 @@ export const readVaultFacts = createEffect(
         crossChain: false,
     },
     async ({ input, context }) => {
-        const staticVault = staticVaultsMap[context.chain.id]?.[asHex(input.address)];
+        const staticVault = staticVaultFacts(context.chain.id, input.address);
         if (staticVault) return { want: staticVault.want };
         const [want, token] = await readCalls(context, input.address, undefined, classicVaultAbi, ['want', 'token']);
         return complete(context, { want: addressResult(want) ?? addressResult(token) }, ['want']);
@@ -94,7 +94,7 @@ export const readStrategyFacts = createEffect(
     },
     async ({ input, context }) => {
         if (!input.clm) {
-            const staticVault = staticStrategyVaultMap[context.chain.id]?.[asHex(input.address)];
+            const staticVault = staticStrategyVault(context.chain.id, input.address);
             if (staticVault) return { vault: staticVault, pool: undefined };
             const [vault] = await readCalls(context, input.address, undefined, classicStrategyAbi, ['vault']);
             return complete(context, { vault: addressResult(vault), pool: undefined }, ['vault']);

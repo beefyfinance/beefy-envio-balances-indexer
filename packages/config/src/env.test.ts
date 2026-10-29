@@ -52,8 +52,9 @@ describe('parseEnv', () => {
         expect(() => parseEnv({ NAME: '   ', DB: 'postgres://h/d' }, shape)).toThrow('NAME is required');
     });
 
-    it('redacts credentials', () => {
-        expect(redact('postgres://user:secret@host:5432/db')).toBe('postgres://***:***@host:5432/db');
+    it('keeps only the scheme and the host of a URL', () => {
+        expect(redact('postgres://user:secret@host:5432/db')).toBe('postgres://host:5432');
+        expect(redact('https://rpc.example/v2/KEY?apikey=KEY')).toBe('https://rpc.example');
         expect(redact('not a url')).toBe('***');
     });
 

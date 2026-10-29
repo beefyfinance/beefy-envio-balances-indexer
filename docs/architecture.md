@@ -30,7 +30,7 @@ Source of truth: `schema.graphql`. Every event row carries `chainId`, `blockNumb
 - `Contract`: `kind` (VAULT, STRATEGY, BOOST, REWARD_POOL, CLM_MANAGER, CLM_STRATEGY, ERC4626_ADAPTER, LST_VAULT,
   SWAPPER, TOKEN, UNKNOWN), `factory`, creation block / timestamp / transaction, `deployName` (from `*WithName` and
   `ContractDeployed` events), `factsBlock` / `factsStatus` (OK or PARTIAL).
-- `Token`: on-chain `decimals`, `symbol`, `name`, `metadataStatus` (INVALID when the reads revert) and
+- `Token`: on-chain `decimals`, `symbol`, `name`, `metadataStatus` (INVALID when the reads failed; retried with the facts) and
   `isBeefyShare`. Every share-token kind gets a share `Token` row, boosts included: a boost is not an ERC-20, so its
   row is INVALID and its decimals come from the BOOST_STAKED token.
 - `ContractLink`: `fromAddress`, `toAddress`, `relation`, `source` (READ or EVENT), `sinceBlock`. READ links come
@@ -43,16 +43,16 @@ Source of truth: `schema.graphql`. Every event row carries `chainId`, `blockNumb
 
 - `ShareTransfer`: every `Transfer` of a share token (classic vault, CLM manager, reward pool, ERC-4626 adapter, LST
   vault, configured `Token`). `totalSupplyAfter` is set on mints and burns only.
-- `BalanceChange`: one row per balance side, with `delta`, `balanceAfter` and `source` (TRANSFER or BOOST_STAKE).
-  This is the step function the wrapper multiplies by prices.
+- `TimelineEvent` (`kind = BALANCE`): one row per balance side, with `delta`, `sharesAfter` and `source` (TRANSFER or
+  BOOST_STAKE). This is the step function the wrapper multiplies by prices.
 - `Balance`: current balance per `account x token` (running sum).
 - `TokenSupply`: running total supply per share token. Mint = transfer from 0x0, burn = transfer to 0x0.
-- `BoostStake`: boost `Staked` / `Withdrawn`. Each stake also writes a `BalanceChange` and updates `Balance` and
+- `BoostStake`: boost `Staked` / `Withdrawn`. Each stake also writes a `BALANCE` `TimelineEvent` and updates `Balance` and
   `TokenSupply` keyed on the boost address, because the balances API treats boosts as share tokens.
 
 Rules (`src/lib/balances.ts`):
 
-- Every account except 0x0 gets `Balance` / `BalanceChange` rows: 0xdead, zaps and swappers included. Filtering
+- Every account except 0x0 gets `Balance` and `BALANCE` `TimelineEvent` rows: 0xdead, zaps and swappers included. Filtering
   holders is the wrapper's job. 0x0 is tracked by `TokenSupply` instead.
 - A self-transfer or a zero-value transfer writes only its `ShareTransfer` row.
 
@@ -117,7 +117,11 @@ Facts, once per contract, read at `latest` (`src/effects/facts.effects.ts`, `src
   an address listed in config.yaml (`src/lib/registry.ts`). The preload pass issues them concurrently; the multicall
   batcher (`src/lib/viem.ts`) merges concurrent reads at the same block or at `latest` into shared aggregate3 calls.
 - A complete answer is cached. An incomplete one (revert, or 0x0 where an address is expected) is not cached, sets
-  `factsStatus = PARTIAL`, and is retried by a later event at most once per 10 000 blocks.
+  `factsStatus = PARTIAL`, and is retried by a later event at most once per 10 000 blocks. Token metadata of the
+  contract and of its linked tokens counts too: a metadata read that failed is not cached either and keeps the facts
+  PARTIAL, so the same retry reads it again (a failed call in the multicall is not always a revert: a public RPC under
+  load answers the same way). A boost's own metadata is the exception, as it is not an ERC-20. Per-event callers
+  (reward and swapper tokens) never re-read INVALID metadata.
 - Legacy vaults with broken `want()` use static facts (`src/config/classic/staticVaults.ts`), without an eth_call.
 
 Classification, once per ClassicVaultFactory proxy whose kind is not otherwise known (see "Registry and
@@ -253,17 +257,22 @@ the dial. Not measured: anything behind the indexer (no API, views or Cloudflare
 - **Interactions**: group `ShareTransfer`, `BoostStake`, `ClmDeposit` / `ClmWithdraw` and `RewardPaid` by `trxHash`
   and label DEPOSIT, WITHDRAW, STAKE, UNSTAKE, ZAP_IN, ZAP_OUT (`trxFrom` is not the share receiver, or a zap contract
   is involved), TRANSFER_IN / TRANSFER_OUT, CLAIM.
-- **Value over time**: `BalanceChange.balanceAfter` step function x share price x underlying USD price, joined at query
+- **Value over time**: the `BALANCE` rows' `sharesAfter` step function x share price x underlying USD price, joined at query
   time. No per-position snapshots.
 - **Cost basis**: CLM from `ClmDeposit` amounts; classic from shares x the nearest share-price point x the underlying
   price.
-- **Prices**: a sync job outside Envio copies the needed TimescaleDB series (share price per vault, USD price per
-  token) into a separate ClickHouse database next to the indexer's: one backfill, then incremental pulls every 15
-  minutes. Queries join with ClickHouse `ASOF JOIN` (nearest earlier point). The price database must not be the one named by
-  `ENVIO_CLICKHOUSE_DATABASE`, which Envio truncates or drops on a reindex.
-- **Gap rule**: TimescaleDB has 15-minute resolution and can miss points. Use the nearest point within 15 minutes,
-  else the last known point within a maximum staleness (wrapper setting), else leave the value unpriced. Positions
-  opened before the first known share price are priced at 0. Every priced figure says which rule produced it.
+- **Prices**: the databarn ClickHouse holds cleaned asset prices (`analytics.asset_price_5m`, mapped from a token
+  by `analytics.token`; the hourly and daily tables are aggregates of it). An event older than a watermark (about a day) gets a stored price, interpolated
+  between the surrounding points, with a flag saying how it was found (`OK`, `EXTRAPOLATED`, `STALE`, `MISSING`). A
+  newer event carries the latest Beefy API price the indexer had when it wrote it (`PROVISIONAL`), or is `PENDING`;
+  nothing is priced at read time. See [timeline-redesign.md](timeline-redesign.md) (target) and
+  [timeline-migration.md](timeline-migration.md) (current state, steps).
+- **Timeline**: the indexer writes `TimelineEvent`, one row per account and kind (balance sides, mints and burns
+  including zap attribution through `ShareFlow`, CLM deposits and withdrawals, claims), sorted by account so the API
+  reads it in place.
+- **Gap rule**: prices have 15 minute resolution and can miss points. Interpolate between the nearest points either side
+  when they are at most 6 hours apart (flagged `STALE` beyond that); with one side only, use it flat within 6 hours
+  (`EXTRAPOLATED`); otherwise the value is 0 and flagged `MISSING`. Every priced figure says which rule produced it.
 - **Misconfiguration guard**: compare Beefy API decimals and token links with `Token` and `ContractLink`; on mismatch
   trust the chain and flag the vault.
 
@@ -274,8 +283,8 @@ gitignored). Every endpoint can be served from these tables, with these differen
 
 - CLM price, range and main / alt split come from `ClmPoolState`.
 - Harvest and timeline USD figures use 15-minute TimescaleDB prices instead of exact on-chain oracle prices.
-- Indexes for the main query patterns: balance at a block (`BalanceChange (token, account, blockNumber, logIndex)`),
-  top holders (`Balance (token, balance desc)`), investor timeline (`BalanceChange (account)`), harvests since a time
+- Indexes for the main query patterns: balance at a block (`TimelineEvent (contract, account, blockNumber, logIndex)`),
+  top holders (`Balance (token, balance desc)`), investor timeline (`TimelineEvent`, sorted by account), harvests since a time
   (`Harvest (chainId, blockTimestamp)`).
 
 Known gaps:

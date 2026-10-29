@@ -3,12 +3,12 @@ import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 
 import { createCircuitBreaker } from '../http/breaker.ts';
-import { createConcurrencyLimiter } from '../http/limiter.ts';
+import { createConcurrencyLimiter, OverloadedError } from '../http/limiter.ts';
 import { createByteLru } from '../http/lru.ts';
 import { createRateLimiter } from '../http/rateLimit.ts';
 import { createSingleFlight } from '../http/singleFlight.ts';
 import { buildTimeline } from './build.ts';
-import type { TimelineRepository } from './repository.ts';
+import { type TimelineRepository, TimelineTooLargeError } from './repository.ts';
 
 const gzipAsync = promisify(gzip);
 
@@ -27,9 +27,21 @@ export type TimelineServiceOptions = {
     /** ClickHouse queries (cache misses) per minute, for all clients together, and the burst allowed. */
     missesPerMinute: number;
     missBurst: number;
+    /**
+     * The same per client, so one client cannot spend everyone's budget with addresses nobody else asks for (each is a
+     * miss). Checked before the global limit, so a refused client takes nothing from it.
+     */
+    clientMissesPerMinute: number;
+    clientMissBurst: number;
     maxInFlight: number;
     maxQueue: number;
     maxQueueWaitMs: number;
+    /**
+     * The active deployment version, part of every cache key: after a switch the entries of the old version are never
+     * served again (they age out of the LRU). Read on every request, so it must be cheap (a value refreshed elsewhere).
+     * Undefined while unknown.
+     */
+    version?: () => number | undefined;
     now?: () => number;
     random?: () => number;
 };
@@ -59,6 +71,10 @@ const ORIGIN_FRESH_MS = { active: 10_000, idle: 45_000, empty: 45_000 };
 const ORIGIN_STALE_MS = 60_000;
 const ORIGIN_ERROR_MS = 3600_000;
 
+/** Accounts found too large are remembered for a while, so asking again costs nothing. */
+const TOO_LARGE_MS = 5 * 60_000;
+const TOO_LARGE_MAX_ENTRIES = 10_000;
+
 export type TimelineLookup = { response: TimelineResponse; cache: 'HIT' | 'MISS' | 'STALE' | 'ERROR-STALE' };
 
 export const createTimelineService = ({
@@ -66,28 +82,54 @@ export const createTimelineService = ({
     cacheBytes,
     missesPerMinute,
     missBurst,
+    clientMissesPerMinute,
+    clientMissBurst,
     maxInFlight,
     maxQueue,
     maxQueueWaitMs,
+    version = () => undefined,
     now = Date.now,
     random = Math.random,
 }: TimelineServiceOptions) => {
     const cache = createByteLru<TimelineResponse>(cacheBytes, now);
     const flight = createSingleFlight<TimelineResponse>();
     const misses = createRateLimiter({ ratePerMinute: missesPerMinute, burst: missBurst, maxKeys: 1, now });
+    const clientMisses = createRateLimiter({ ratePerMinute: clientMissesPerMinute, burst: clientMissBurst, now });
     const limiter = createConcurrencyLimiter({ maxInFlight, maxQueue, maxWaitMs: maxQueueWaitMs });
-    const breaker = createCircuitBreaker({ failureThreshold: 5, openMs: 10_000, now });
+    // only the database failing or timing out opens it: a too large account or a full queue says nothing about its health
+    const breaker = createCircuitBreaker({
+        failureThreshold: 5,
+        openMs: 10_000,
+        isFailure: (error) => !(error instanceof TimelineTooLargeError || error instanceof OverloadedError),
+        now,
+    });
 
-    const build = async (address: string): Promise<TimelineResponse> => {
-        const rows = await breaker.run(() => limiter.run(() => repository.rows(address)));
+    const tooLarge = new Map<string, { until: number; error: TimelineTooLargeError }>();
+
+    const keyOf = (address: string): string => `${version() ?? '?'}:${address}`;
+
+    const build = async (key: string, address: string): Promise<TimelineResponse> => {
+        const rows = await breaker
+            .run(() => limiter.run(() => repository.rows(address)))
+            .catch((error: unknown) => {
+                if (error instanceof TimelineTooLargeError) {
+                    if (tooLarge.size >= TOO_LARGE_MAX_ENTRIES) tooLarge.delete(tooLarge.keys().next().value ?? '');
+                    tooLarge.set(key, { until: now() + TOO_LARGE_MS, error });
+                }
+                throw error;
+            });
         const items = buildTimeline(rows);
         const newest = items[0]?.timestamp;
         const active = newest !== undefined && now() - newest * 1000 < ACTIVE_WINDOW_MS;
         const kind = items.length === 0 ? 'empty' : active ? 'active' : 'idle';
         // the tag covers the data only, not generated_at, so an unchanged timeline revalidates with a 304
-        const itemsJson = JSON.stringify(items);
-        const etag = `"${createHash('sha256').update(itemsJson).digest('hex').slice(0, 32)}"`;
-        const body = `{"address":"${address}","generated_at":"${new Date(now()).toISOString()}","count":${items.length},"items":${itemsJson}}`;
+        const etag = `"${createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0, 32)}"`;
+        const body = JSON.stringify({
+            address,
+            generated_at: new Date(now()).toISOString(),
+            count: items.length,
+            items,
+        });
         const compressed = await gzipAsync(body);
         const response: TimelineResponse = {
             body,
@@ -97,7 +139,7 @@ export const createTimelineService = ({
             items: items.length,
         };
         const jitter = 1 + (random() * 2 - 1) * JITTER;
-        cache.set(address, response, body.length + compressed.length, {
+        cache.set(key, response, body.length + compressed.length, {
             freshMs: ORIGIN_FRESH_MS[kind] * jitter,
             staleMs: ORIGIN_STALE_MS,
             errorMs: ORIGIN_ERROR_MS,
@@ -105,27 +147,37 @@ export const createTimelineService = ({
         return response;
     };
 
-    const refresh = (address: string): Promise<TimelineResponse> => flight.run(address, () => build(address));
+    const refresh = (key: string, address: string): Promise<TimelineResponse> =>
+        flight.run(key, () => build(key, address));
 
     return {
         /**
          * Fresh from memory; stale from memory while one refresh runs in the background; otherwise one shared query,
-         * limited globally, queued, and guarded by the breaker. If that fails and an old copy exists, the old copy.
+         * limited per client (`client`, the rate limit key) and globally, queued, and guarded by the breaker. If that
+         * fails and an old copy exists, the old copy.
          */
-        async get(address: string): Promise<TimelineLookup> {
-            const hit = cache.get(address);
+        async get(address: string, client = 'unknown'): Promise<TimelineLookup> {
+            const key = keyOf(address);
+            const refused = tooLarge.get(key);
+            if (refused !== undefined) {
+                if (refused.until > now()) throw refused.error;
+                tooLarge.delete(key);
+            }
+            const hit = cache.get(key);
             if (hit?.state === 'fresh') return { response: hit.value, cache: 'HIT' };
             if (hit?.state === 'stale') {
-                refresh(address).catch(() => {});
+                refresh(key, address).catch(() => {});
                 return { response: hit.value, cache: 'STALE' };
             }
             try {
                 // a request that joins a query already running costs ClickHouse nothing, so it is not counted
-                if (!flight.has(address)) {
-                    const allowed = misses.take('all');
-                    if (!allowed.allowed) throw new MissRateLimitedError(allowed.retryAfterSeconds);
+                if (!flight.has(key)) {
+                    const ownBudget = clientMisses.take(client);
+                    if (!ownBudget.allowed) throw new MissRateLimitedError(ownBudget.retryAfterSeconds);
+                    const sharedBudget = misses.take('all');
+                    if (!sharedBudget.allowed) throw new MissRateLimitedError(sharedBudget.retryAfterSeconds);
                 }
-                return { response: await refresh(address), cache: 'MISS' };
+                return { response: await refresh(key, address), cache: 'MISS' };
             } catch (error) {
                 // an old copy (the `error-only` lifetime) beats an error
                 if (hit !== undefined) return { response: hit.value, cache: 'ERROR-STALE' };

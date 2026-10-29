@@ -20,6 +20,7 @@ indexer.onEvent({ contract: 'ClassicVault', event: 'UpgradeStrat' }, async ({ ev
 });
 
 indexer.onEvent({ contract: 'ClassicVault', event: 'Transfer' }, async ({ event, context }) => {
-    if (!(await ensureContract(context, event, 'VAULT'))) return;
-    await handleShareTransfer(context, event);
+    const contract = await ensureContract(context, event, 'VAULT');
+    if (!contract) return;
+    await handleShareTransfer(context, event, contract);
 });

@@ -1,16 +1,18 @@
 /**
- * Running sums: `Balance` (account x token), `TokenSupply` (token), and the `BalanceChange` step function.
+ * Running sums: `Balance` (account x token), `TokenSupply` (token), and the balance step function as BALANCE
+ * `TimelineEvent` rows (with the MINT / BURN rows of each transfer: src/lib/timeline.ts).
  *
  * - Mint = transfer from 0x0, burn = transfer to 0x0 (what `totalSupply()` tracks).
- * - Every account except 0x0 gets Balance / BalanceChange rows (0xdead, zaps, swappers included: filtering holders
+ * - Every account except 0x0 gets Balance / BALANCE rows (0xdead, zaps, swappers included: filtering holders
  *   is the wrapper's job). 0x0 is the mint / burn side, tracked by TokenSupply instead.
  * - Zero-value transfers and self-transfers change no balance: only the ShareTransfer row is written.
  */
 
-import type { Balance, BalanceChange, EvmOnEventContext } from 'envio';
+import type { Balance, Contract, EvmOnEventContext } from 'envio';
 
-import { eventColumns, eventId, type RawEvent } from './event';
+import { eventColumns, type RawEvent } from './event';
 import { asHex, isZeroAddress } from './hex';
+import { writeTimelineEvent, writeTransferTimeline } from './timeline';
 
 type Context = EvmOnEventContext;
 
@@ -18,20 +20,22 @@ const balanceId = (chainId: number, token: string, account: string) => `${chainI
 const supplyId = (chainId: number, token: string) => `${chainId}-${asHex(token)}`;
 
 type Delta = { account: string; delta: bigint };
+/** `TimelineEvent.source` of a BALANCE row. */
+type BalanceSource = 'TRANSFER' | 'BOOST_STAKE';
 
 /** Applies balance deltas of one event (reads first, then writes, so preload loads every row it needs). */
 const applyBalanceDeltas = async (
     context: Context,
     event: RawEvent,
-    token: string,
-    source: BalanceChange['source'],
+    contract: Contract,
+    source: BalanceSource,
     deltas: Delta[]
 ) => {
+    const token = contract.address;
     const tracked = deltas.filter(({ account, delta }) => delta !== 0n && !isZeroAddress(account));
     const current = await Promise.all(
         tracked.map(({ account }) => context.Balance.get(balanceId(event.chainId, token, account)))
     );
-    const columns = eventColumns(event);
     tracked.forEach(({ account, delta }, index) => {
         const balanceAfter = (current[index]?.balance ?? 0n) + delta;
         const balance: Balance = {
@@ -39,18 +43,10 @@ const applyBalanceDeltas = async (
             token: asHex(token),
             account: asHex(account),
             balance: balanceAfter,
-            lastChangeBlock: columns.blockNumber,
+            lastChangeBlock: BigInt(event.block.number),
         };
         context.Balance.set(balance);
-        context.BalanceChange.set({
-            ...columns,
-            id: `${eventId(event)}-${asHex(account)}`,
-            token: asHex(token),
-            account: asHex(account),
-            delta,
-            balanceAfter,
-            source,
-        });
+        writeTimelineEvent(context, event, contract, account, 'BALANCE', { source, delta, sharesAfter: balanceAfter });
     });
 };
 
@@ -68,12 +64,16 @@ const applySupplyDelta = async (context: Context, event: RawEvent, token: string
     return totalSupply;
 };
 
-/** ERC-20 `Transfer` of a Beefy share token (the emitter): ShareTransfer + both balance sides + supply on mint/burn. */
+/**
+ * ERC-20 `Transfer` of a Beefy share token (the emitter, `contract` its registry row): ShareTransfer + both balance
+ * sides + supply on mint/burn.
+ */
 export const handleShareTransfer = async (
     context: Context,
-    event: RawEvent & { params: { from: string; to: string; value: bigint } }
+    event: RawEvent & { params: { from: string; to: string; value: bigint } },
+    contract: Contract
 ) => {
-    const token = asHex(event.srcAddress);
+    const token = contract.address;
     const from = asHex(event.params.from);
     const to = asHex(event.params.to);
     const { value } = event.params;
@@ -84,10 +84,11 @@ export const handleShareTransfer = async (
         isMint !== isBurn ? applySupplyDelta(context, event, token, isMint ? value : -value) : undefined,
         from === to
             ? undefined
-            : applyBalanceDeltas(context, event, token, 'TRANSFER', [
+            : applyBalanceDeltas(context, event, contract, 'TRANSFER', [
                   { account: from, delta: -value },
                   { account: to, delta: value },
               ]),
+        writeTransferTimeline(context, event, contract, from, to, value),
     ]);
 
     context.ShareTransfer.set({
@@ -104,14 +105,15 @@ export const handleShareTransfer = async (
 export const handleBoostStake = async (
     context: Context,
     event: RawEvent & { params: { user: string; amount: bigint } },
+    contract: Contract,
     direction: 'STAKE' | 'UNSTAKE'
 ) => {
-    const boost = asHex(event.srcAddress);
+    const boost = contract.address;
     const user = asHex(event.params.user);
     const delta = direction === 'STAKE' ? event.params.amount : -event.params.amount;
     await Promise.all([
         applySupplyDelta(context, event, boost, delta),
-        applyBalanceDeltas(context, event, boost, 'BOOST_STAKE', [{ account: user, delta }]),
+        applyBalanceDeltas(context, event, contract, 'BOOST_STAKE', [{ account: user, delta }]),
     ]);
     context.BoostStake.set({
         ...eventColumns(event),

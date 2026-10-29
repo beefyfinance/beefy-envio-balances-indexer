@@ -1,6 +1,7 @@
-import type { Job } from './jobs/job.ts';
+import { describeError } from '@beefy/config';
 
-export type LogEvent = { event: 'job-start' | 'job-done' | 'job-failed'; job: string; ms?: number; error?: string };
+import type { Job } from './jobs/job.ts';
+import { log } from './lib/log.ts';
 
 export type Scheduler = {
     /** Stops scheduling, aborts the signal handed to running jobs and waits for them to return. */
@@ -11,23 +12,23 @@ export type Scheduler = {
  * Runs every job once at start, then again `intervalMs` after each run finished: a slow run delays the next one instead
  * of overlapping it, and a failing run is logged and retried on the next tick, never fatal.
  */
-export const startScheduler = (jobs: readonly Job[], log: (event: LogEvent) => void): Scheduler => {
+export const startScheduler = (jobs: readonly Job[]): Scheduler => {
     const controller = new AbortController();
     const timers = new Set<NodeJS.Timeout>();
     const running = new Set<Promise<void>>();
 
     const loop = (job: Job): void => {
         const started = Date.now();
-        log({ event: 'job-start', job: job.name });
+        log.info({ event: 'job-start', job: job.name });
         const run = job
             .run(controller.signal)
-            .then(() => log({ event: 'job-done', job: job.name, ms: Date.now() - started }))
+            .then(() => log.info({ event: 'job-done', job: job.name, ms: Date.now() - started }))
             .catch((error: unknown) =>
-                log({
+                log.error({
                     event: 'job-failed',
                     job: job.name,
                     ms: Date.now() - started,
-                    error: error instanceof Error ? error.message : String(error),
+                    error: describeError(error),
                 })
             )
             .finally(() => {

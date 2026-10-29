@@ -1,20 +1,17 @@
+import { type Sql, param, sql } from '@beefy/clickhouse';
+import * as R from 'remeda';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
-import type { CatalogProduct, IndexedEntity } from './catalog';
-import { COVERAGE_ENTITIES } from './catalog';
-import { runIntegrityChecks } from './checks';
-import {
-    type ClickHouseClient,
-    chainIn,
-    clickHouseConfigFromEnv,
-    createClickHouseClient,
-    fetchContractIds,
-    fetchIds,
-} from './clickhouse';
+import { loadScriptsConfig } from '../lib/config.ts';
+import type { CatalogProduct, IndexedEntity } from './catalog.ts';
+import { coverageEntities } from './catalog.ts';
+import { runIntegrityChecks } from './checks.ts';
+import { type ClickHouseClient, createClickHouseClient, fetchContractIds, fetchIds } from './clickhouse.ts';
 
 const emptyIndexed = () => {
     const map = new Map<IndexedEntity, Set<string>>();
-    for (const entity of COVERAGE_ENTITIES) {
+    for (const entity of coverageEntities()) {
         map.set(entity, new Set());
     }
     return map;
@@ -30,18 +27,15 @@ const classicProduct = (id = '8453-0x1111111111111111111111111111111111111111'):
     live: true,
 });
 
-const createMockClient = (onQuery?: (sql: string) => Record<string, unknown>[] | undefined): ClickHouseClient => ({
-    async query<T extends Record<string, unknown>>(sql: string): Promise<T[]> {
-        const override = onQuery?.(sql);
-        if (override) {
-            return override as T[];
-        }
-        if (/\bAS count\b/.test(sql)) {
-            return [{ count: '0' }] as unknown as T[];
-        }
-        return [];
+const createMockClient = (onQuery?: (statement: Sql) => Record<string, unknown>[] | undefined): ClickHouseClient => ({
+    async query(statement, row) {
+        const rows = onQuery?.(statement) ?? (/\bAS count\b/.test(statement.text) ? [{ count: '0' }] : []);
+        return rows.map((value) => row.parse(value));
     },
 });
+
+/** Whether the statement sends `value` as one of its parameters. */
+const sends = (statement: Sql, value: unknown) => R.values(statement.params).some((item) => R.isDeepEqual(item, value));
 
 const run = (client: ClickHouseClient, overrides: Partial<Parameters<typeof runIntegrityChecks>[1]> = {}) =>
     runIntegrityChecks(client, {
@@ -54,43 +48,30 @@ const run = (client: ClickHouseClient, overrides: Partial<Parameters<typeof runI
     });
 
 describe('clickhouse helpers', () => {
-    it('reads config from env and builds IN lists', () => {
-        expect(clickHouseConfigFromEnv({})).toEqual({
-            url: 'http://localhost:8123',
-            database: 'default',
-            username: 'default',
-            password: '',
-        });
-        expect(
-            clickHouseConfigFromEnv({
-                ENVIO_CLICKHOUSE_HOST: 'http://ch:8123',
-                ENVIO_CLICKHOUSE_DATABASE: 'envio',
-                ENVIO_CLICKHOUSE_USERNAME: 'user',
-                ENVIO_CLICKHOUSE_PASSWORD: 'secret',
-            })
-        ).toEqual({
-            url: 'http://ch:8123',
-            database: 'envio',
-            username: 'user',
-            password: 'secret',
-        });
-        expect(chainIn('t.chain_id', [8453, 42161])).toBe('t.chain_id IN (8453,42161)');
-    });
-
-    it('collects ids from a table', async () => {
-        const queries: string[] = [];
-        const client = createMockClient((sql) => {
-            queries.push(sql);
-            if (sql.includes('SELECT id FROM Contract')) {
+    it('collects ids from a table, values as parameters', async () => {
+        const queries: Sql[] = [];
+        const client = createMockClient((statement) => {
+            queries.push(statement);
+            if (statement.text.includes('SELECT id FROM `Contract`')) {
                 return [{ id: '8453-0xabc' }, { id: '8453-0xdef' }];
             }
             return undefined;
         });
         await expect(fetchIds(client, 'Contract', [8453])).resolves.toEqual(new Set(['8453-0xabc', '8453-0xdef']));
         await expect(fetchContractIds(client, ['REWARD_POOL', 'BOOST'], [8453])).resolves.toHaveProperty('size', 2);
-        expect(queries[1]).toBe(
-            "SELECT id FROM Contract WHERE chain_id IN (8453) AND (kind IN ('REWARD_POOL','BOOST'))"
+        // oxlint-disable-next-line beefy/no-untagged-sql -- the expected text of a statement, compared as a string
+        expect(queries[1]?.text).toBe(
+            'SELECT id FROM `Contract` WHERE has({p_0:Array(Int64)}, toInt64(chain_id)) AND (has({p_1:Array(String)}, toString(kind)))'
         );
+        expect(queries[1]?.params).toEqual({ p_0: [8453], p_1: ['REWARD_POOL', 'BOOST'] });
+    });
+
+    it('refuses a table name that is not a plain identifier', async () => {
+        const client = createMockClient();
+        await expect(fetchIds(client, 'Contract; DROP TABLE Token', [8453])).rejects.toThrow(
+            'invalid ClickHouse identifier'
+        );
+        await expect(fetchIds(client, '`Contract`', [8453])).rejects.toThrow('invalid ClickHouse identifier');
     });
 });
 
@@ -99,10 +80,16 @@ describe('createClickHouseClient', () => {
         vi.unstubAllGlobals();
     });
 
-    it('posts SQL as JSONEachRow and parses rows', async () => {
-        vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const config = (env: Record<string, string> = {}) => loadScriptsConfig(env).clickhouse;
+
+    it('posts SQL as JSONEachRow, values as query parameters, and validates rows', async () => {
+        vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
             const url = new URL(input instanceof Request ? input.url : input.toString());
             expect(url.searchParams.get('database')).toBe('envio');
+            expect(url.searchParams.get('param_p_0')).toBe('[8453,10]');
+            expect(url.searchParams.get('param_p_1')).toBe("['a\\'b','c\\\\d']");
+            expect(url.searchParams.get('param_p_2')).toBe('x\\ty');
+            expect(url.searchParams.get('param_p_3')).toBe("{'1':'a\\'b'}");
             expect(init?.method).toBe('POST');
             expect(init?.headers).toMatchObject({
                 'x-clickhouse-user': 'user',
@@ -114,22 +101,38 @@ describe('createClickHouseClient', () => {
                 text: async () => '{"id":"a"}\n{"id":"b"}\n',
             } as Response;
         });
-        const client = createClickHouseClient({
-            url: 'http://localhost:8123',
-            database: 'envio',
-            username: 'user',
-            password: 'secret',
-        });
-        await expect(client.query<{ id: string }>('SELECT id FROM Contract')).resolves.toEqual([
-            { id: 'a' },
-            { id: 'b' },
-        ]);
+        const client = createClickHouseClient(
+            config({
+                ENVIO_CLICKHOUSE_DATABASE: 'envio',
+                ENVIO_CLICKHOUSE_USERNAME: 'user',
+                ENVIO_CLICKHOUSE_PASSWORD: 'secret',
+            })
+        );
+        await expect(
+            client.query(
+                sql`SELECT id FROM Contract WHERE has(${param('Array(Int64)', [8453, 10])}, chain_id) AND has(${param('Array(String)', ["a'b", 'c\\d'])}, id)
+                    AND name != ${param('String', 'x\ty')} AND ${param('Map(String, String)', new Map([['1', "a'b"]]))}['1'] != ''`,
+                z.object({ id: z.string() })
+            )
+        ).resolves.toEqual([{ id: 'a' }, { id: 'b' }]);
+    });
+
+    it('rejects rows of an unexpected shape and malformed parameter names', async () => {
+        vi.stubGlobal('fetch', async () => ({ ok: true, text: async () => '{"id":1}\n' }) as Response);
+        const client = createClickHouseClient(config());
+        await expect(client.query(sql`SELECT id FROM Contract`, z.object({ id: z.string() }))).rejects.toThrow(
+            'unexpected shape'
+        );
+        // @ts-expect-error a statement is built by the sql tag, never a string
+        await expect(client.query('SELECT 1', z.object({ id: z.string() }))).rejects.toThrow('not a SQL statement'); // oxlint-disable-line beefy/no-untagged-sql -- the untagged string the client must refuse
     });
 
     it('surfaces ClickHouse HTTP errors', async () => {
         vi.stubGlobal('fetch', async () => ({ ok: false, status: 400, text: async () => 'syntax error' }) as Response);
-        const client = createClickHouseClient(clickHouseConfigFromEnv({}));
-        await expect(client.query('SELECT bad')).rejects.toThrow('ClickHouse query failed: 400 syntax error');
+        const client = createClickHouseClient(config());
+        await expect(client.query(sql`SELECT bad`, z.object({}))).rejects.toThrow(
+            'ClickHouse query failed: 400 syntax error'
+        );
     });
 });
 
@@ -137,16 +140,16 @@ describe('runIntegrityChecks', () => {
     it('returns only coverage summaries when probes are clean', async () => {
         const findings = await run(createMockClient());
         expect(findings.every((item) => item.check.endsWith('.summary'))).toBe(true);
-        expect(findings).toHaveLength(COVERAGE_ENTITIES.length);
+        expect(findings).toHaveLength(coverageEntities().length);
         expect(findings.find((item) => item.check === 'Classic.summary')?.sample[0]).toContain('missingActive=0');
     });
 
     it('scopes probe SQL to the chains and catalog ids and records sample hits', async () => {
-        const queries: string[] = [];
-        const client = createMockClient((sql) => {
-            queries.push(sql);
-            if (!sql.includes("relation = 'VAULT_WANT'")) return undefined;
-            return /\bAS count\b/.test(sql) ? [{ count: '3' }] : [{ id: '8453-0xv1' }, { id: '8453-0xv2' }];
+        const queries: Sql[] = [];
+        const client = createMockClient((statement) => {
+            queries.push(statement);
+            if (!sends(statement, 'VAULT_WANT')) return undefined;
+            return /\bAS count\b/.test(statement.text) ? [{ count: '3' }] : [{ id: '8453-0xv1' }, { id: '8453-0xv2' }];
         });
         const findings = await run(client);
         const hit = findings.find((item) => item.check === 'VAULT.missing-VAULT_WANT');
@@ -157,16 +160,18 @@ describe('runIntegrityChecks', () => {
             count: 3,
             sample: ['8453-0xv1', '8453-0xv2'],
         });
-        const sql = queries.find((query) => query.includes("relation = 'VAULT_WANT'")) ?? '';
-        expect(sql).toContain('t.chain_id IN (8453)');
-        expect(sql).toContain(`t.id IN ('${classicProduct().id}')`);
+        const query = queries.find((statement) => sends(statement, 'VAULT_WANT'));
+        expect(query?.text).toMatch(/has\(\{p_\d+:Array\(Int64\)\}, toInt64\(`t`\.chain_id\)\)/);
+        expect(query?.text).toMatch(/has\(\{p_\d+:Array\(String\)\}, toString\(t\.id\)\)/);
+        for (const value of ['VAULT', [8453], [classicProduct().id]]) expect(query && sends(query, value)).toBe(true);
     });
 
     it('reports ledger drift as an error and failed CLM reads as a warning', async () => {
-        const client = createMockClient((sql) => {
-            if (!/\bAS count\b/.test(sql)) return undefined;
-            if (sql.includes('argMax(balance_after')) return [{ count: '2' }];
-            if (sql.includes("t.status = 'FAILED'")) return [{ count: '1' }];
+        const client = createMockClient((statement) => {
+            if (!/\bAS count\b/.test(statement.text)) return undefined;
+            if (statement.text.includes('argMax(balance_after')) return [{ count: '2' }];
+            if (statement.text.includes('toString(t.status) = {') && sends(statement, 'FAILED'))
+                return [{ count: '1' }];
             return undefined;
         });
         const findings = await run(client);

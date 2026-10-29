@@ -7,7 +7,8 @@
  * 1. supply: every `TokenSupply` row equals `totalSupply()` at the block (boosts: the boost's `totalSupply()`), share
  *    tokens without a row have a zero supply, and the `Balance` rows of each token sum to its `TokenSupply`.
  * 2. balances: every `Balance` row equals `balanceOf(account)` at the block (its value at the block when it changed
- *    later), plus the internal consistency of `Balance` / `BalanceChange` (running sums, no 0x0 rows).
+ *    later), plus the internal consistency of `Balance` / the BALANCE `TimelineEvent` rows (running sums, no 0x0
+ *    rows).
  * 3. events: `Transfer` logs of share tokens, boost `Staked` / `Withdrawn` and CLM `Deposit` / `Withdraw` fetched with
  *    `eth_getLogs` from the chain's start_block, compared with `ShareTransfer`, `BoostStake`, `ClmDeposit` and
  *    `ClmWithdraw` by (trxHash, logIndex), per-emitter counts and decoded fields.
@@ -22,15 +23,20 @@
  * all processed and stored), so a run during indexing only compares fully indexed data.
  *
  * Usage: pnpm correctness --chain 4326 [--block N] [--schema raw_megaeth] [--rpc URL] [--only supply,balances,...]
- *        [--sample 100] [--concurrency 3] [--config config.yaml]
+ *        [--sample 100] [--concurrency 3] [--config config.yaml]   (pnpm correctness --help)
  * RPC defaults to ENVIO_RPC_URL_<chain>; Postgres comes from ENVIO_PG_HOST / PORT / USER / PASSWORD / DATABASE
- * (defaults: localhost, 5433, postgres, testing, envio-dev) and is read with `psql` (override the binary with PSQL).
+ * (defaults: localhost, 5433, postgres, testing, envio-dev) and is read with `psql` (override the binary with PSQL);
+ * see scripts/lib/config.ts.
+ *
+ * SQL: built with the `pgSql` tag (scripts/lib/pgSql.ts): values are psql variables (`:'v_<n>'`, quoted by psql),
+ * names go through `pgIdent`, derived tables are named CTEs. eth_getLogs answers are validated (zod).
  */
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { Command } from 'commander';
 import * as R from 'remeda';
 import {
     type Abi,
@@ -45,21 +51,30 @@ import {
     parseAbi,
     toEventSelector,
     toEventSignature,
+    zeroAddress,
 } from 'viem';
+import { z } from 'zod';
+
+import { describeError } from '../src/lib/errors.ts';
+import { blockArg, chainIdArg, choiceListArg, httpUrlArg, identifierArg, integerArg } from './lib/cli.ts';
+import { childProcessEnv, type PostgresConfig, type ScriptsConfig, scriptsConfig } from './lib/config.ts';
+import { type PgIdentifier, type PgSql, pgBigint, pgIdent, pgJoin, pgQualified, pgSql, pgValue } from './lib/pgSql.ts';
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------------------------------------------------
 
 const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const CALLS_PER_MULTICALL = 200;
 const LOG_RANGE = 100_000n;
 const ADDRESSES_PER_LOG_QUERY = 500;
 const MAX_SHOWN = 10;
 
-export const CHECK_NAMES = ['supply', 'balances', 'events', 'fields', 'clm-pool-state', 'coverage'] as const;
+const CHECK_NAMES = ['supply', 'balances', 'events', 'fields', 'clm-pool-state', 'coverage'] as const;
 export type CheckName = (typeof CHECK_NAMES)[number];
+
+/** Every check, in run order. */
+export const checkNames = (): readonly CheckName[] => CHECK_NAMES;
 
 /** Contract kinds whose address is a share token (src/lib/registry.ts). */
 const SHARE_KINDS = new Set(['VAULT', 'BOOST', 'REWARD_POOL', 'CLM_MANAGER', 'ERC4626_ADAPTER', 'LST_VAULT', 'TOKEN']);
@@ -82,13 +97,16 @@ const CONFIG_KIND: Record<string, string> = {
 
 const topic = (signature: string) => toEventSelector(signature).toLowerCase();
 
-export const TOPICS = {
+const TOPICS = {
     transfer: topic('Transfer(address,address,uint256)'),
     staked: topic('Staked(address,uint256)'),
     withdrawn: topic('Withdrawn(address,uint256)'),
     clmDeposit: topic('Deposit(address,uint256,uint256,uint256,uint256,uint256)'),
     clmWithdraw: topic('Withdraw(address,uint256,uint256,uint256)'),
 };
+
+/** topic0 of the events the `events` check compares. */
+export const eventTopics = (): Readonly<typeof TOPICS> => TOPICS;
 
 const eventAbi = parseAbi([
     'event Transfer(address indexed from, address indexed to, uint256 value)',
@@ -127,7 +145,7 @@ const FACT_READS: Record<string, string[]> = {
 export const hasOnChainValue = (read: CallResult) => {
     if (!read.ok) return false;
     const values: unknown[] = Array.isArray(read.value) ? read.value : [read.value];
-    return values.some((value) => typeof value === 'string' && value !== '' && value.toLowerCase() !== ZERO_ADDRESS);
+    return values.some((value) => typeof value === 'string' && value !== '' && value.toLowerCase() !== zeroAddress);
 };
 
 const clmStrategyAbi = parseAbi([
@@ -143,9 +161,8 @@ const multicall3Abi = parseAbi([
 ]);
 
 /** Event tables: the column holding the emitting contract and the events the table is written from. */
-export const EVENT_TABLES: Record<string, { emitter: string; topics: string[]; idSuffix?: boolean }> = {
+const EVENT_TABLES: Record<string, { emitter: string; topics: string[] }> = {
     ShareTransfer: { emitter: 'token', topics: [TOPICS.transfer] },
-    BalanceChange: { emitter: 'token', topics: [TOPICS.transfer, TOPICS.staked, TOPICS.withdrawn], idSuffix: true },
     BoostStake: { emitter: 'boost', topics: [TOPICS.staked, TOPICS.withdrawn] },
     ClmDeposit: { emitter: 'manager', topics: [TOPICS.clmDeposit] },
     ClmWithdraw: { emitter: 'manager', topics: [TOPICS.clmWithdraw] },
@@ -186,12 +203,15 @@ export const EVENT_TABLES: Record<string, { emitter: string; topics: string[]; i
     },
 };
 
+/** The event tables the `fields` check samples: the column holding the emitter, and the events of the table. */
+export const eventTables = (): Readonly<Record<string, { emitter: string; topics: string[] }>> => EVENT_TABLES;
+
 const ENTITY_TABLES = [
     'Contract',
     'Token',
     'ContractLink',
     'ShareTransfer',
-    'BalanceChange',
+    'TimelineEvent',
     'Balance',
     'TokenSupply',
     'BoostStake',
@@ -224,52 +244,67 @@ export type Args = {
     config: string;
 };
 
-/** CLI arguments; `env` supplies the RPC default (ENVIO_RPC_URL_<chain>) and the schema default (ENVIO_PG_SCHEMA). */
-export const parseArgs = (argv: readonly string[], env: Record<string, string | undefined>): Args => {
-    const flags = new Map<string, string>();
-    for (let index = 0; index < argv.length; index++) {
-        const flag = argv[index];
-        if (!flag.startsWith('--')) throw new Error(`unexpected argument: ${flag}`);
-        const value = argv[index + 1];
-        if (value === undefined || value.startsWith('--')) throw new Error(`missing value for ${flag}`);
-        flags.set(flag.slice(2), value);
-        index++;
-    }
-    const known = new Set(['chain', 'block', 'schema', 'rpc', 'only', 'sample', 'concurrency', 'config']);
-    const unknown = R.filter([...flags.keys()], (flag) => !known.has(flag));
-    if (unknown.length > 0) throw new Error(`unknown flag(s): ${R.map(unknown, (flag) => `--${flag}`).join(', ')}`);
+type CliOptions = {
+    chain: number;
+    block?: bigint;
+    schema?: string;
+    rpc?: string;
+    only: CheckName[];
+    sample: number;
+    concurrency: number;
+    config: string;
+};
 
-    const chain = flags.get('chain');
-    if (chain === undefined || !/^\d+$/.test(chain)) throw new Error('--chain <chainId> is required');
-    const chainId = Number(chain);
-    const block = flags.get('block');
-    if (block !== undefined && !/^\d+$/.test(block)) throw new Error(`invalid --block: ${block}`);
-    const schema = flags.get('schema') ?? env.ENVIO_PG_SCHEMA ?? 'public';
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) throw new Error(`invalid --schema: ${schema}`);
-    const rpc = flags.get('rpc') ?? env[`ENVIO_RPC_URL_${chainId}`];
-    if (!rpc) throw new Error(`no RPC: pass --rpc or set ENVIO_RPC_URL_${chainId}`);
-    const only = R.pipe(
-        flags.get('only')?.split(',') ?? [...CHECK_NAMES],
-        R.map((name) => name.trim()),
-        R.filter((name) => name !== '')
-    );
-    const invalid = R.filter(only, (name) => !(CHECK_NAMES as readonly string[]).includes(name));
-    if (invalid.length > 0)
-        throw new Error(`unknown check(s): ${invalid.join(', ')} (known: ${CHECK_NAMES.join(', ')})`);
-    const positive = (name: string, fallback: number) => {
-        const value = Number(flags.get(name) ?? fallback);
-        if (!Number.isInteger(value) || value <= 0) throw new Error(`invalid --${name}`);
-        return value;
-    };
+/** The checker's command line (generated help: `pnpm correctness --help`). */
+export const correctnessCommand = () =>
+    new Command('correctness')
+        .description('Compares what the indexer stored in Postgres with the chain, at a fixed block.')
+        .requiredOption('--chain <id>', 'chain id', chainIdArg)
+        .option('--block <n>', "block to compare at (default: the chain's progress_block)", blockArg)
+        .option(
+            '--schema <name>',
+            'Postgres schema of the indexer tables (default: ENVIO_PG_SCHEMA, else public)',
+            identifierArg
+        )
+        .option('--rpc <url>', 'RPC URL (default: ENVIO_RPC_URL_<chain>)', httpUrlArg)
+        .option('--only <checks>', `comma-separated checks (${CHECK_NAMES.join(', ')})`, choiceListArg(CHECK_NAMES), [
+            ...CHECK_NAMES,
+        ])
+        .option('--sample <n>', 'rows sampled by the fields check', integerArg({ min: 1, max: 1_000_000 }), 100)
+        .option('--concurrency <n>', 'RPC requests in flight', integerArg({ min: 1, max: 100 }), 3)
+        .option('--config <path>', 'config file (relative to apps/indexer)', 'config.yaml')
+        .addHelpText(
+            'after',
+            `
+Environment (scripts/lib/config.ts):
+  ENVIO_RPC_URL_<chain>                          default --rpc
+  ENVIO_PG_SCHEMA                                default --schema
+  ENVIO_PG_HOST / PORT / USER / PASSWORD / DATABASE   Postgres (localhost, 5433, postgres, testing, envio-dev)
+  PSQL                                           psql binary (default psql)`
+        );
+
+/**
+ * CLI arguments (user arguments, without node and the script); `config` supplies the RPC default
+ * (ENVIO_RPC_URL_<chain>) and the schema default (ENVIO_PG_SCHEMA). Invalid arguments make `command` exit 1 (or
+ * throw, for a command made with `throwingCommand`).
+ */
+export const parseArgs = (
+    argv: readonly string[],
+    config: ScriptsConfig,
+    command: Command = correctnessCommand()
+): Args => {
+    const options = command.parse(argv, { from: 'user' }).opts<CliOptions>();
+    const rpc = options.rpc ?? config.rpcUrls.get(options.chain);
+    if (rpc === undefined) command.error(`error: no RPC: pass --rpc or set ENVIO_RPC_URL_${options.chain}`);
     return {
-        chainId,
-        block: block === undefined ? undefined : BigInt(block),
-        schema,
+        chainId: options.chain,
+        block: options.block,
+        schema: options.schema ?? config.postgresSchema,
         rpc,
-        only: only as CheckName[],
-        sample: positive('sample', 100),
-        concurrency: positive('concurrency', 3),
-        config: flags.get('config') ?? 'config.yaml',
+        only: R.unique(options.only),
+        sample: options.sample,
+        concurrency: options.concurrency,
+        config: options.config,
     };
 };
 
@@ -560,39 +595,56 @@ const mapLimit = async <T, U>(items: readonly T[], limit: number, fn: (item: T) 
     return out;
 };
 
-type Db = { query: (sql: string) => Promise<Row[]>; table: (name: string) => string; chainId: number };
+/** psql variables: `-v name=value`, read in the SQL as `:'name'` (a literal quoted by psql). */
+export type SqlVars = Readonly<Record<string, string | number | bigint>>;
 
-const createDb = (env: Record<string, string | undefined>, schema: string, chainId: number): Db => {
-    const pg = {
-        host: env.ENVIO_PG_HOST ?? 'localhost',
-        port: env.ENVIO_PG_PORT ?? '5433',
-        user: env.ENVIO_PG_USER ?? 'postgres',
-        password: env.ENVIO_PG_PASSWORD ?? 'testing',
-        database: env.ENVIO_PG_DATABASE ?? 'envio-dev',
-    };
-    const query = (sql: string) =>
+type Db = {
+    /** Runs one statement with its variables; rows from psql's CSV output. */
+    query: (statement: PgSql) => Promise<Row[]>;
+    /** `"schema"."table"`, both through `pgIdent`. */
+    table: (name: string) => PgIdentifier;
+    chainId: number;
+};
+
+const VAR_NAME = /^[a-z_][a-z0-9_]*$/;
+
+/**
+ * psql arguments for a statement read from stdin (`-f -`: unlike `-c`, psql interpolates variables there). The
+ * values travel as separate argv entries (no shell) and reach the SQL only through `:'name'` (a {@link PgSql}'s vars).
+ */
+export const psqlArgs = (pg: PostgresConfig, vars: SqlVars): string[] => [
+    '-X',
+    '-q',
+    '--csv',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-h',
+    pg.host,
+    '-p',
+    String(pg.port),
+    '-U',
+    pg.user,
+    '-d',
+    pg.database,
+    ...R.flatMap(R.entries(vars), ([name, value]) => {
+        if (!VAR_NAME.test(name) || name === 'on_error_stop')
+            throw new Error(`invalid psql variable: ${JSON.stringify(name)}`);
+        const text = String(value);
+        // psql variables are single-line; a newline or NUL in a value is never legitimate here
+        if (/[\n\r\0]/.test(text)) throw new Error(`invalid value for psql variable ${name}`);
+        return ['-v', `${name}=${text}`];
+    }),
+    '-f',
+    '-',
+];
+
+const createDb = (config: ScriptsConfig, schema: string, chainId: number): Db => {
+    const pg = config.postgres;
+    const query = (statement: PgSql) =>
         new Promise<Row[]>((resolve, reject) => {
-            const child = spawn(
-                env.PSQL ?? 'psql',
-                [
-                    '-X',
-                    '-q',
-                    '--csv',
-                    '-v',
-                    'ON_ERROR_STOP=1',
-                    '-h',
-                    pg.host,
-                    '-p',
-                    pg.port,
-                    '-U',
-                    pg.user,
-                    '-d',
-                    pg.database,
-                    '-c',
-                    sql,
-                ],
-                { env: { ...process.env, PGPASSWORD: pg.password } }
-            );
+            const child = spawn(config.psql, psqlArgs(pg, statement.vars), {
+                env: childProcessEnv({ PGPASSWORD: pg.password }),
+            });
             const stdout: Buffer[] = [];
             const stderr: Buffer[] = [];
             child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
@@ -600,13 +652,48 @@ const createDb = (env: Record<string, string | undefined>, schema: string, chain
             child.on('error', reject);
             child.on('close', (code) => {
                 if (code !== 0) {
-                    reject(new Error(`psql failed (${code}): ${Buffer.concat(stderr).toString()}\n${sql}`));
+                    reject(new Error(`psql failed (${code}): ${Buffer.concat(stderr).toString()}\n${statement.text}`));
                 } else {
                     resolve(parseCsv(Buffer.concat(stdout).toString()));
                 }
             });
+            child.stdin.end(`${statement.text.trim()};\n`);
         });
-    return { query, table: (name) => `"${schema}"."${name}"`, chainId };
+    return {
+        query,
+        table: (name) => pgQualified(schema, name),
+        chainId,
+    };
+};
+
+const hexQuantity = z.string().regex(/^0x[0-9a-fA-F]+$/);
+const hexData = z.string().regex(/^0x([0-9a-fA-F]{2})*$/);
+const rpcLog = z.object({
+    address: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
+    topics: z.array(z.string().regex(/^0x[0-9a-fA-F]{64}$/)).max(4),
+    data: hexData,
+    blockNumber: hexQuantity,
+    transactionHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+    logIndex: hexQuantity,
+    removed: z.boolean().optional(),
+});
+
+/** An eth_getLogs answer, validated: a malformed log fails the query (the node is not answering what was asked). */
+export const parseLogs = (answer: unknown): ChainLog[] => {
+    const parsed = z.array(rpcLog).safeParse(answer);
+    if (!parsed.success) throw new Error(`eth_getLogs: unexpected answer: ${parsed.error.message.slice(0, 300)}`);
+    return R.pipe(
+        parsed.data,
+        R.filter((log) => !log.removed),
+        R.map((log) => ({
+            address: log.address.toLowerCase(),
+            topics: R.map(log.topics, (value) => value.toLowerCase()),
+            data: log.data,
+            blockNumber: BigInt(log.blockNumber),
+            transactionHash: log.transactionHash.toLowerCase(),
+            logIndex: Number(log.logIndex),
+        }))
+    );
 };
 
 type Call = { address: string; abi: Abi; functionName: string; args?: readonly unknown[] };
@@ -670,8 +757,9 @@ const createRpc = (url: string, concurrency: number): Rpc => {
         from: bigint,
         to: bigint
     ): Promise<ChainLog[]> => {
+        let logs: unknown;
         try {
-            const logs = await withRetry(() =>
+            logs = await withRetry(() =>
                 client.request({
                     method: 'eth_getLogs',
                     params: [
@@ -684,18 +772,6 @@ const createRpc = (url: string, concurrency: number): Rpc => {
                     ],
                 })
             );
-            return R.pipe(
-                logs,
-                R.filter((log) => !log.removed),
-                R.map((log) => ({
-                    address: log.address.toLowerCase(),
-                    topics: R.map(log.topics, (value) => value.toLowerCase()),
-                    data: log.data,
-                    blockNumber: BigInt(log.blockNumber ?? '0x0'),
-                    transactionHash: (log.transactionHash ?? '').toLowerCase(),
-                    logIndex: Number(log.logIndex ?? '0x0'),
-                }))
-            );
         } catch (error) {
             // only a too-large answer is worth splitting; anything else would bisect down to single blocks
             if (to <= from || isRateLimited(error) || !isTooLarge(error)) throw error;
@@ -705,6 +781,7 @@ const createRpc = (url: string, concurrency: number): Rpc => {
                 ...(await getLogs(addresses, topics, middle + 1n, to)),
             ];
         }
+        return parseLogs(logs);
     };
 
     return { client, read, getLogs };
@@ -767,12 +844,30 @@ type Ctx = {
     shareTokens: string[];
 };
 
-const chainFilter = (ctx: Ctx) => `chain_id = ${ctx.db.chainId}`;
+/** Rows of the checked chain. */
+const chainIs = (db: Db): PgSql => pgSql`chain_id = ${pgValue(db.chainId)}`;
+
+/** The balance step function (BALANCE `TimelineEvent` rows) as the named CTE `balance_steps`. */
+const balanceStepsCte = (db: Db): PgSql =>
+    pgSql`balance_steps as (
+        select chain_id, id, contract as token, account, delta, shares_after as balance_after, block_number, log_index
+        from ${db.table('TimelineEvent')} where kind = ${pgValue('BALANCE')}
+     )`;
+
+/** `select <name 0> as t, count(*) as n from <table 0> where ... union all ...`: one count per table, names as values. */
+const tableCounts = (db: Db, tables: readonly string[], where: PgSql): PgSql =>
+    pgJoin(
+        R.map(
+            tables,
+            (table) => pgSql`select ${pgValue(table)} as t, count(*) as n from ${db.table(table)} where ${where}`
+        ),
+        pgSql`\n union all `
+    );
 
 const checkSupply = async (ctx: Ctx): Promise<CheckResult[]> => {
     const { db, block } = ctx;
     const rows = await db.query(
-        `select token, total_supply, last_change_block from ${db.table('TokenSupply')} where ${chainFilter(ctx)}`
+        pgSql`select token, total_supply, last_change_block from ${db.table('TokenSupply')} where ${chainIs(db)}`
     );
     const share = new Set(ctx.shareTokens);
     const notShare = R.filter(rows, (row) => !share.has(row.token as string));
@@ -815,8 +910,8 @@ const checkSupply = async (ctx: Ctx): Promise<CheckResult[]> => {
 
     // internal: Balance rows sum to TokenSupply (current state, independent of --block)
     const sums = await db.query(
-        `with s as (select token, sum(balance) as total, count(*) as holders from ${db.table('Balance')} where ${chainFilter(ctx)} group by token),
-              t as (select token, total_supply from ${db.table('TokenSupply')} where ${chainFilter(ctx)})
+        pgSql`with s as (select token, sum(balance) as total, count(*) as holders from ${db.table('Balance')} where ${chainIs(db)} group by token),
+              t as (select token, total_supply from ${db.table('TokenSupply')} where ${chainIs(db)})
          select coalesce(s.token, t.token) as token, s.total, s.holders, t.total_supply
          from s full outer join t on s.token = t.token`
     );
@@ -848,14 +943,15 @@ const checkSupply = async (ctx: Ctx): Promise<CheckResult[]> => {
 const checkBalances = async (ctx: Ctx): Promise<CheckResult[]> => {
     const { db, block } = ctx;
     const rows = await db.query(
-        `select token, account, balance, last_change_block from ${db.table('Balance')} where ${chainFilter(ctx)} order by token, account`
+        pgSql`select token, account, balance, last_change_block from ${db.table('Balance')} where ${chainIs(db)} order by token, account`
     );
-    // rows changed after the block: their value at the block is the last BalanceChange at or before it (else 0)
+    // rows changed after the block: their value at the block is the last BALANCE row at or before it (else 0)
     const historical = await db.query(
-        `select distinct on (bc.token, bc.account) bc.token, bc.account, bc.balance_after
-         from ${db.table('BalanceChange')} bc
+        pgSql`with ${balanceStepsCte(db)}
+         select distinct on (bc.token, bc.account) bc.token, bc.account, bc.balance_after
+         from balance_steps bc
          join ${db.table('Balance')} b on b.chain_id = bc.chain_id and b.token = bc.token and b.account = bc.account
-         where bc.${chainFilter(ctx)} and b.last_change_block > ${block} and bc.block_number <= ${block}
+         where bc.chain_id = ${pgValue(db.chainId)} and b.last_change_block > ${pgValue(block)} and bc.block_number <= ${pgValue(block)}
          order by bc.token, bc.account, bc.block_number desc, bc.log_index desc`
     );
     const historicalOf = new Map(
@@ -895,50 +991,56 @@ const checkBalances = async (ctx: Ctx): Promise<CheckResult[]> => {
     // internal consistency of the step function
     const [latest, steps, zero] = await Promise.all([
         db.query(
-            `select b.token, b.account, b.balance, b.last_change_block, l.balance_after, l.block_number
+            pgSql`with ${balanceStepsCte(db)},
+             latest_step as (
+                select distinct on (token, account) token, account, balance_after, block_number
+                from balance_steps where ${chainIs(db)}
+                order by token, account, block_number desc, log_index desc
+             )
+             select b.token, b.account, b.balance, b.last_change_block, l.balance_after, l.block_number
              from ${db.table('Balance')} b
-             left join lateral (
-                select balance_after, block_number from ${db.table('BalanceChange')} bc
-                where bc.chain_id = b.chain_id and bc.token = b.token and bc.account = b.account
-                order by bc.block_number desc, bc.log_index desc limit 1
-             ) l on true
-             where b.${chainFilter(ctx)}
+             left join latest_step l on l.token = b.token and l.account = b.account
+             where b.chain_id = ${pgValue(db.chainId)}
                and (l.balance_after is null or l.balance_after <> b.balance or l.block_number <> b.last_change_block)`
         ),
         db.query(
-            `select id, delta, balance_after, prev from (
+            pgSql`with ${balanceStepsCte(db)},
+             stepped as (
                 select id, delta, balance_after,
                        lag(balance_after) over (partition by token, account order by block_number, log_index) as prev
-                from ${db.table('BalanceChange')} where ${chainFilter(ctx)}
-             ) t where balance_after <> coalesce(prev, 0) + delta or delta = 0`
+                from balance_steps where ${chainIs(db)}
+             )
+             select id, delta, balance_after, prev from stepped
+             where balance_after <> coalesce(prev, 0) + delta or delta = 0`
         ),
         db.query(
-            `select 'Balance' as t, id from ${db.table('Balance')} where ${chainFilter(ctx)} and (account = '${ZERO_ADDRESS}' or balance < 0)
+            pgSql`with ${balanceStepsCte(db)}
+             select ${pgValue('Balance')} as t, id from ${db.table('Balance')} where ${chainIs(db)} and (account = ${pgValue(zeroAddress)} or balance < 0)
              union all
-             select 'BalanceChange', id from ${db.table('BalanceChange')} where ${chainFilter(ctx)} and account = '${ZERO_ADDRESS}'`
+             select ${pgValue('TimelineEvent')}, id from balance_steps where ${chainIs(db)} and account = ${pgValue(zeroAddress)}`
         ),
     ]);
     return [
         result(
             'balances: Balance vs balanceOf()',
             [
-                `${expected.length} Balance rows checked at block ${block} (${R.filter(expected, (row) => row.later).length} changed later: checked with their BalanceChange value at the block)`,
+                `${expected.length} Balance rows checked at block ${block} (${R.filter(expected, (row) => row.later).length} changed later: checked with their BALANCE row value at the block)`,
             ],
             mismatches
         ),
         result(
             'balances: internal consistency',
-            ['Balance = latest BalanceChange, balanceAfter = previous + delta, no zero delta, no 0x0 / negative rows'],
+            ['Balance = latest BALANCE row, sharesAfter = previous + delta, no zero delta, no 0x0 / negative rows'],
             [
                 ...R.map(
                     latest,
                     (row) =>
-                        `Balance ${row.token} ${row.account}: ${row.balance} @${row.last_change_block} != latest BalanceChange ${row.balance_after ?? 'none'} @${row.block_number ?? '-'}`
+                        `Balance ${row.token} ${row.account}: ${row.balance} @${row.last_change_block} != latest BALANCE row ${row.balance_after ?? 'none'} @${row.block_number ?? '-'}`
                 ),
                 ...R.map(
                     steps,
                     (row) =>
-                        `BalanceChange ${row.id}: balanceAfter ${row.balance_after} != previous ${row.prev ?? 0} + delta ${row.delta}`
+                        `BALANCE ${row.id}: sharesAfter ${row.balance_after} != previous ${row.prev ?? 0} + delta ${row.delta}`
                 ),
                 ...R.map(zero, (row) => `${row.t} ${row.id}: 0x0 account or negative balance`),
             ]
@@ -946,11 +1048,14 @@ const checkBalances = async (ctx: Ctx): Promise<CheckResult[]> => {
     ];
 };
 
-const DB_EVENT_QUERIES: Record<EventCategory, { table: string; columns: string }> = {
-    ShareTransfer: { table: 'ShareTransfer', columns: 'token as emitter, from_address, to_address, value' },
-    BoostStake: { table: 'BoostStake', columns: 'boost as emitter, "user", amount, direction' },
-    ClmDeposit: { table: 'ClmDeposit', columns: 'manager as emitter, "user", shares, amount0, amount1, fee0, fee1' },
-    ClmWithdraw: { table: 'ClmWithdraw', columns: 'manager as emitter, "user", shares, amount0, amount1' },
+const DB_EVENT_QUERIES: Record<EventCategory, { table: string; columns: PgSql }> = {
+    ShareTransfer: { table: 'ShareTransfer', columns: pgSql`token as emitter, from_address, to_address, value` },
+    BoostStake: { table: 'BoostStake', columns: pgSql`boost as emitter, "user", amount, direction` },
+    ClmDeposit: {
+        table: 'ClmDeposit',
+        columns: pgSql`manager as emitter, "user", shares, amount0, amount1, fee0, fee1`,
+    },
+    ClmWithdraw: { table: 'ClmWithdraw', columns: pgSql`manager as emitter, "user", shares, amount0, amount1` },
 };
 
 const checkEvents = async (ctx: Ctx): Promise<CheckResult[]> => {
@@ -979,7 +1084,7 @@ const checkEvents = async (ctx: Ctx): Promise<CheckResult[]> => {
     return mapLimit(categories, 1, async (category) => {
         const { table, columns } = DB_EVENT_QUERIES[category];
         const rows = await db.query(
-            `select trx_hash, log_index, block_number, ${columns} from ${db.table(table)} where ${chainFilter(ctx)} and block_number <= ${block}`
+            pgSql`select trx_hash, log_index, block_number, ${columns} from ${db.table(table)} where ${chainIs(db)} and block_number <= ${pgValue(block)}`
         );
         const chainLogs = byCategory[category] ?? [];
         const chainByKey = new Map(
@@ -1024,13 +1129,7 @@ const checkEvents = async (ctx: Ctx): Promise<CheckResult[]> => {
 const checkFields = async (ctx: Ctx): Promise<CheckResult[]> => {
     const { db, block } = ctx;
     const tables = R.keys(EVENT_TABLES);
-    const counts = await db.query(
-        R.map(
-            tables,
-            (table) =>
-                `select '${table}' as t, count(*) as n from ${db.table(table)} where ${chainFilter(ctx)} and block_number <= ${block}`
-        ).join(' union all ')
-    );
+    const counts = await db.query(tableCounts(db, tables, pgSql`${chainIs(db)} and block_number <= ${pgValue(block)}`));
     const sizes = sampleSizes(
         R.pipe(
             counts,
@@ -1042,11 +1141,12 @@ const checkFields = async (ctx: Ctx): Promise<CheckResult[]> => {
     const sampled = (
         await mapLimit(R.entries(sizes), 2, async ([table, size]) => {
             const spec = EVENT_TABLES[table];
+            if (spec === undefined) throw new Error(`unexpected event table in the counts: ${JSON.stringify(table)}`);
             const rows = await db.query(
-                `select id, ${spec.emitter} as emitter, block_number, extract(epoch from block_timestamp)::bigint as ts,
-                        trx_hash, trx_from, log_index
-                 from ${db.table(table)} where ${chainFilter(ctx)} and block_number <= ${block}
-                 order by random() limit ${size}`
+                pgSql`select id, ${pgIdent(spec.emitter)} as emitter, block_number,
+                        extract(epoch from block_timestamp)::bigint as ts, trx_hash, trx_from, log_index
+                 from ${db.table(table)} where ${chainIs(db)} and block_number <= ${pgValue(block)}
+                 order by random() limit ${pgBigint(size)}`
             );
             return R.map(rows, (row) => ({ table, row }));
         })
@@ -1082,14 +1182,12 @@ const checkFields = async (ctx: Ctx): Promise<CheckResult[]> => {
             const log = R.find(receipt.logs, (entry) => entry.logIndex === logIndex);
             const id = `${ctx.db.chainId}-${row.trx_hash}-${logIndex}`;
             const errors = [
-                ...((spec.idSuffix ? (row.id as string).startsWith(`${id}-`) : row.id === id)
-                    ? []
-                    : [`id does not match chainId-trxHash-logIndex`]),
+                ...(row.id === id ? [] : [`id does not match chainId-trxHash-logIndex`]),
                 ...(log ? [] : [`no log ${logIndex} in the receipt`]),
                 ...(log && log.address.toLowerCase() !== row.emitter
                     ? [`emitter: chain ${log.address.toLowerCase()} != db ${row.emitter}`]
                     : []),
-                ...(log && !spec.topics.includes((log.topics[0] ?? '').toLowerCase())
+                ...(log && !(spec?.topics ?? []).includes((log.topics[0] ?? '').toLowerCase())
                     ? [`topic0 ${log.topics[0]} is not an event of ${table}`]
                     : []),
                 ...fieldMismatches(
@@ -1121,29 +1219,34 @@ const checkFields = async (ctx: Ctx): Promise<CheckResult[]> => {
 
 const checkClmPoolState = async (ctx: Ctx): Promise<CheckResult[]> => {
     const { db, block } = ctx;
+    // the (strategy, block) pairs of every CLM TVL / Harvest event up to the block
+    const clmEvents = pgSql`clm_events as (
+        select strategy, block_number from ${db.table('ClmTvl')} where ${chainIs(db)} and block_number <= ${pgValue(block)}
+        union
+        select strategy, block_number from ${db.table('Harvest')}
+        where ${chainIs(db)} and kind = ${pgValue('CLM_HARVEST')} and block_number <= ${pgValue(block)}
+     )`;
     const [missing, orphans] = await Promise.all([
         db.query(
-            `select e.strategy, e.block_number from (
-                select strategy, block_number from ${db.table('ClmTvl')} where ${chainFilter(ctx)} and block_number <= ${block}
-                union
-                select strategy, block_number from ${db.table('Harvest')} where ${chainFilter(ctx)} and kind = 'CLM_HARVEST' and block_number <= ${block}
-             ) e
-             left join ${db.table('ClmPoolState')} p on p.${chainFilter(ctx)} and p.strategy = e.strategy and p.block_number = e.block_number
+            pgSql`with ${clmEvents}
+             select e.strategy, e.block_number from clm_events e
+             left join ${db.table('ClmPoolState')} p
+               on p.chain_id = ${pgValue(db.chainId)} and p.strategy = e.strategy and p.block_number = e.block_number
              where p.id is null order by e.block_number`
         ),
         db.query(
-            `select p.id from ${db.table('ClmPoolState')} p
-             where p.${chainFilter(ctx)} and p.block_number <= ${block}
-               and not exists (select 1 from ${db.table('ClmTvl')} t where t.chain_id = p.chain_id and t.strategy = p.strategy and t.block_number = p.block_number)
-               and not exists (select 1 from ${db.table('Harvest')} h where h.chain_id = p.chain_id and h.strategy = p.strategy and h.block_number = p.block_number and h.kind = 'CLM_HARVEST')`
+            pgSql`with ${clmEvents}
+             select p.id from ${db.table('ClmPoolState')} p
+             left join clm_events e on e.strategy = p.strategy and e.block_number = p.block_number
+             where p.chain_id = ${pgValue(db.chainId)} and p.block_number <= ${pgValue(block)} and e.strategy is null`
         ),
     ]);
     const size = Math.max(10, Math.ceil(ctx.args.sample / 4));
     const rows = await db.query(
-        `select id, strategy, status, price, range_lower, range_upper, token0_bal, token1_bal, main_amount0, main_amount1,
+        pgSql`select id, strategy, status, price, range_lower, range_upper, token0_bal, token1_bal, main_amount0, main_amount1,
                 alt_amount0, alt_amount1, block_number
-         from ${db.table('ClmPoolState')} where ${chainFilter(ctx)} and block_number <= ${block}
-         order by random() limit ${size}`
+         from ${db.table('ClmPoolState')} where ${chainIs(db)} and block_number <= ${pgValue(block)}
+         order by random() limit ${pgBigint(size)}`
     );
     const valueErrors = (
         await mapLimit(rows, ctx.args.concurrency, async (row) => {
@@ -1201,12 +1304,7 @@ const checkClmPoolState = async (ctx: Ctx): Promise<CheckResult[]> => {
 
 const checkCoverage = async (ctx: Ctx): Promise<CheckResult[]> => {
     const { db, block, chain } = ctx;
-    const counts = await db.query(
-        R.map(
-            ENTITY_TABLES,
-            (table) => `select '${table}' as t, count(*) as n from ${db.table(table)} where ${chainFilter(ctx)}`
-        ).join(' union all ')
-    );
+    const counts = await db.query(tableCounts(db, ENTITY_TABLES, chainIs(db)));
     const kinds = R.pipe(
         ctx.contracts,
         R.countBy((contract) => contract.kind),
@@ -1382,7 +1480,7 @@ const CHECKS: Record<CheckName, (ctx: Ctx) => Promise<CheckResult[]>> = {
 /** Envio's progress for the chain: `progress_block` is the last block whose events are all processed and stored. */
 const loadProgress = async (db: Db) => {
     const [row] = await db.query(
-        `select start_block, end_block, progress_block, source_block, events_processed from ${db.table('envio_chains')} where id = ${db.chainId}`
+        pgSql`select start_block, end_block, progress_block, source_block, events_processed from ${db.table('envio_chains')} where id = ${pgValue(db.chainId)}`
     );
     if (!row) throw new Error(`chain ${db.chainId} not found in envio_chains`);
     return {
@@ -1395,14 +1493,14 @@ const loadProgress = async (db: Db) => {
 };
 
 const main = async () => {
-    const env = process.env;
-    const args = parseArgs(process.argv.slice(2), env);
+    const config = scriptsConfig();
+    const args = parseArgs(process.argv.slice(2), config);
     const root = join(dirname(fileURLToPath(import.meta.url)), '..');
     const configYaml = readFileSync(isAbsolute(args.config) ? args.config : join(root, args.config), 'utf8');
     const chain = parseChainConfig(configYaml, args.chainId);
     if (!chain) throw new Error(`chain ${args.chainId} not found in ${args.config}`);
 
-    const db = createDb(env, args.schema, args.chainId);
+    const db = createDb(config, args.schema, args.chainId);
     const progress = await loadProgress(db);
     const block = args.block ?? progress.progressBlock;
     console.log(
@@ -1418,10 +1516,10 @@ const main = async () => {
 
     const [contractRows, tokenRows] = await Promise.all([
         db.query(
-            `select address, kind, facts_status, created_block from ${db.table('Contract')} where chain_id = ${args.chainId}`
+            pgSql`select address, kind, facts_status, created_block from ${db.table('Contract')} where ${chainIs(db)}`
         ),
         db.query(
-            `select address, decimals, symbol, name, metadata_status, is_beefy_share from ${db.table('Token')} where chain_id = ${args.chainId}`
+            pgSql`select address, decimals, symbol, name, metadata_status, is_beefy_share from ${db.table('Token')} where ${chainIs(db)}`
         ),
     ]);
     const contracts = R.map(contractRows, (row) => ({
@@ -1487,7 +1585,7 @@ const main = async () => {
         const startedAt = Date.now();
         process.stderr.write(`running ${name}...\n`);
         const checkResults = await CHECKS[name](ctx).catch((error: unknown) => [
-            result(name, ['check crashed'], [errorText(error).slice(0, 500)]),
+            result(name, ['check crashed'], [describeError(error)]),
         ]);
         for (const checkResult of checkResults) {
             console.log(formatResult(checkResult));
@@ -1502,7 +1600,7 @@ const main = async () => {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     main().catch((error: unknown) => {
-        console.error(error);
+        console.error(describeError(error));
         process.exit(1);
     });
 }

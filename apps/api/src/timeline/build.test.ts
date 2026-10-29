@@ -33,6 +33,7 @@ const row = (overrides: Partial<PricedRow> & { at: string; trx: string }): Price
         share_to_usd: 2,
         price_flag: 'OK',
         price_source: 'test',
+        price_resolution: '5m',
         price_before_at: Date.parse(at) / 1000,
         price_after_at: null,
         usd_delta: 0,
@@ -182,15 +183,69 @@ describe('buildTimeline', () => {
                 delta: String(E18),
                 shares_after: String(E18),
                 price_after_at: Date.parse('2026-01-01T10:15:00Z') / 1000,
+                price_flag: 'MISSING',
+                price_source: '',
+                price_resolution: '',
             }),
         ]);
         expect(items).toHaveLength(2);
         expect(items.map((item) => item.product_address).sort()).toEqual([other, VAULT]);
         expect(items.find((item) => item.product_address === VAULT)?.price).toMatchObject({
             flag: 'PROVISIONAL',
+            resolution: '5m',
             as_of_next: null,
         });
-        expect(items.find((item) => item.product_address === other)?.price.as_of_next).toBe('2026-01-01T10:15:00.000Z');
+        expect(items.find((item) => item.product_address === other)?.price).toMatchObject({
+            flag: 'MISSING',
+            resolution: null,
+            as_of_next: '2026-01-01T10:15:00.000Z',
+        });
+    });
+
+    it('passes the indexer price and PENDING through', () => {
+        const unstored = { product_kind: 'CLM_MANAGER', contract_kind: 'CLM_MANAGER', price_after_at: null } as const;
+        const [pending, indexer] = buildTimeline([
+            row({
+                ...unstored,
+                at: '2026-01-01T10:00:00Z',
+                trx: '0x1',
+                contract: MANAGER,
+                product_address: MANAGER,
+                kind: 'CLM_DEPOSIT',
+                amount0: '5',
+                amount1: '7',
+                price_source: 'indexer',
+                price_resolution: 'latest',
+                price_flag: 'PROVISIONAL',
+            }),
+            row({
+                ...unstored,
+                at: '2026-01-01T11:00:00Z',
+                trx: '0x2',
+                // the indexer did not know the facts yet
+                product_address: '',
+                product_kind: '',
+                contract_kind: '',
+                delta: String(E18),
+                shares_after: String(E18),
+                share_to_usd: 0,
+                price_flag: 'PENDING',
+                price_source: '',
+                price_resolution: '',
+                price_before_at: null,
+            }),
+        ]);
+        expect(indexer).toMatchObject({
+            type: 'clm',
+            product_address: MANAGER,
+            price: { flag: 'PROVISIONAL', source: 'indexer', resolution: 'latest', as_of: '2026-01-01T10:00:00.000Z' },
+        });
+        expect(pending).toMatchObject({
+            type: 'classic',
+            product_address: VAULT,
+            price: { share_to_usd: 0, flag: 'PENDING', source: '', resolution: null, as_of: null },
+            usd_balance: 0,
+        });
     });
 
     it('is empty for an account with no rows', () => {

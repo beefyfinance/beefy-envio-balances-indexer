@@ -1,20 +1,50 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "import", "node", "promise", "vitest"],
+  "jsPlugins": ["./tools/oxlint-plugin-beefy/index.js"],
   "categories": { "correctness": "error" },
   "options": { "typeAware": true, "denyWarnings": true },
   "rules": {
     "typescript/no-unnecessary-type-assertion": "error",
     "typescript/no-unnecessary-template-expression": "error",
     "typescript/no-unnecessary-type-conversion": "error",
-    "vitest/valid-expect": ["error", { "maxArgs": 2 }]
+    "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+    "beefy/no-untagged-sql": "error",
+    "beefy/prefer-remeda-object": "error",
+    "beefy/remeda-namespace": "error",
+    "node/no-process-env": "error",
+    "no-console": "error",
+    "import/extensions": ["error", "always", { "ignorePackages": true }]
   },
+  "overrides": [
+    {
+      "files": ["**/lib/config.ts", "**/*.test.ts", "**/vitest*.config.ts"],
+      "rules": { "node/no-process-env": "off" }
+    },
+    {
+      "files": ["apps/indexer/scripts/**", "**/*.test.ts", "tools/**"],
+      "rules": { "no-console": "off" }
+    },
+    {
+      "files": ["apps/indexer/src/**", "apps/indexer/test/**"],
+      "rules": {
+        "import/extensions": ["error", "never", { "ignorePackages": true }],
+        "beefy/no-wall-clock": "error",
+        "beefy/effects-in-effects-files": "error"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "apps/indexer/test/**"],
+      "rules": { "beefy/no-wall-clock": "off" }
+    }
+  ],
   "ignorePatterns": [
     "**/dist",
     "**/.envio",
     "**/.turbo",
     "**/node_modules",
     "apps/indexer/envio-env.d.ts",
-    "apps/indexer/test/fixtures/rpc"
+    "apps/indexer/test/fixtures/rpc",
+    "tools/oxlint-plugin-beefy/fixtures"
   ]
 }

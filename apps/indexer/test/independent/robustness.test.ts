@@ -5,7 +5,7 @@
 import { createTestIndexer } from 'envio';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { latestById, registrationsOf, rowsOf } from '../helpers/simulate';
+import { balanceRowsOf, latestById, registrationsOf, rowsOf } from '../helpers/simulate';
 import { fakeHash, installRpcCounter, transferItem, vaultCreated, vaultInitialized } from './harness';
 import {
     BOOST_HISTORY,
@@ -93,7 +93,7 @@ describe('blacklist', () => {
             },
         });
         expect(rowsOf(result, 'ShareTransfer')).toHaveLength(3);
-        const accounts = rowsOf<Row>(result, 'BalanceChange').map((c) => c.account);
+        const accounts = balanceRowsOf(result).map((c) => c.account);
         expect(accounts).toEqual([ZAP, ZAP, DEPLOYER, DEPLOYER, DEAD]);
         const balances = latestById<Row>(result, 'Balance');
         expect([...balances.values()].map((b) => [b.account, b.balance])).toEqual([
@@ -113,7 +113,7 @@ describe('determinism and idempotence', () => {
             return indexer.process({ chains: { [CHAIN]: { simulate: vaultScenario(20) } } });
         };
         const [a, b] = [await run(), await run()];
-        for (const entity of ['ShareTransfer', 'BalanceChange', 'Balance', 'TokenSupply', 'ContractLink', 'Contract']) {
+        for (const entity of ['ShareTransfer', 'TimelineEvent', 'Balance', 'TokenSupply', 'ContractLink', 'Contract']) {
             expect(rowsOf(b, entity), entity).toEqual(rowsOf(a, entity));
         }
     });
@@ -121,7 +121,7 @@ describe('determinism and idempotence', () => {
     it('event row ids are unique per event / per (event, account)', async () => {
         const indexer = createTestIndexer();
         const result = await indexer.process({ chains: { [CHAIN]: { simulate: vaultScenario(30) } } });
-        for (const entity of ['ShareTransfer', 'BalanceChange']) {
+        for (const entity of ['ShareTransfer', 'TimelineEvent']) {
             const ids = rowsOf<Row>(result, entity).map((r) => r.id);
             expect(new Set(ids).size, entity).toBe(ids.length);
         }

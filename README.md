@@ -1,21 +1,22 @@
 # Beefy balances
 
-A pnpm + Turborepo monorepo for tracking Beefy user positions and PnL: a raw-events indexer, a worker for background
-jobs (starting with the price sync from TimescaleDB), and an API. Raw facts come from the chains, prices from the TimescaleDB on Tiger Cloud, and everything
-derived (positions, values, PnL) is computed downstream, so changing a formula never forces a reindex.
+A pnpm + Turborepo monorepo for tracking Beefy user positions and PnL: a raw-events indexer, an account-first ClickHouse
+analytics schema (`packages/clickhouse`), a worker for background jobs (none yet), and an API. Raw facts come from the
+chains, prices from the databarn ClickHouse, and everything derived (positions, PnL) is computed downstream, so changing
+a formula never forces a reindex.
 
 ```
 apps/
   indexer/          @beefy/indexer          Envio HyperIndex 3.14 indexer (events → ClickHouse, state → Postgres)
-  worker/           @beefy/worker           Background jobs: a small scheduler plus jobs (scaffold; the price sync stub is
-                                            obsolete, prices come from the databarn table, see serving-architecture.md)
+  worker/           @beefy/worker           Background jobs: a small scheduler plus jobs (none yet: the time-driven work
+                                            runs inside ClickHouse, see serving-architecture.md)
   api/              @beefy/api              Read API over ClickHouse: Hono + zod-openapi. GET /v1/users/{address}/timeline
                                             (cached, rate limited, single-flight), /healthz, /openapi.json
 packages/
   models/           @beefy/models           Dependency-free domain models: chain registry, hex helpers
   config/           @beefy/config           Typed fail-fast env parsing, ClickHouse connection settings
-  clickhouse/       @beefy/clickhouse       Analytics schema: account-first user_timeline, projection and price-stamping views,
-                                            migrations, catch-up and synthetic-data commands (integration tests need a ClickHouse)
+  clickhouse/       @beefy/clickhouse       Timeline read path over Envio's TimelineEvent, pricing, watermark, versions
+                                            (deploy, switch, cleanup) and synthetic-data commands (integration tests need a ClickHouse)
   tsconfig/         @beefy/tsconfig         Shared TypeScript settings (base, app, library)
 docs/               Architecture and Envio reference notes
 ```
@@ -25,7 +26,7 @@ Start with [docs/architecture.md](docs/architecture.md) (what is indexed), [docs
 
 ## Getting started
 
-Requirements: Node 26.12.1 (`.nvmrc`; `nvm use` / `fnm use`) and pnpm 11.28.6 (pinned in `packageManager` and `engines`;
+Requirements: Node 26.13.0 (`.nvmrc`; `nvm use` / `fnm use`) and pnpm 11.28.6 (pinned in `packageManager` and `engines`;
 `corepack enable` picks it up).
 
 ```bash

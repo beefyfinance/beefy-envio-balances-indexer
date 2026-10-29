@@ -1,5 +1,5 @@
 /**
- * Running balances (docs/architecture.md "Balances"): ShareTransfer, BalanceChange (delta / balanceAfter),
+ * Running balances (docs/architecture.md "Balances"): ShareTransfer, BALANCE TimelineEvent rows (delta / sharesAfter),
  * Balance, TokenSupply and ShareTransfer.totalSupplyAfter (mint / burn only).
  *
  * Real Base vault V and CLM manager histories are replayed and the end state is compared to on-chain
@@ -9,7 +9,7 @@ import { createTestIndexer } from 'envio';
 import * as R from 'remeda';
 import { describe, expect, it } from 'vitest';
 
-import { latestById, rowsOf } from '../helpers/simulate';
+import { balanceRowsOf, latestById, rowsOf } from '../helpers/simulate';
 import { fakeHash, transferItem, vaultCreated, vaultInitialized } from './harness';
 import {
     CHAIN,
@@ -26,19 +26,6 @@ const A = '0x00000000000000000000000000000000000a11ce';
 const B = '0x00000000000000000000000000000000000b0b00';
 const C = '0x0000000000000000000000000000000000000ca7';
 
-type BalanceChangeRow = {
-    id: string;
-    token: string;
-    account: string;
-    delta: bigint;
-    balanceAfter: bigint;
-    source: string;
-    blockNumber: bigint;
-    logIndex: number;
-    trxHash: string;
-    trxFrom?: string;
-    blockTimestamp: Date;
-};
 type BalanceRow = { id: string; token: string; account: string; balance: bigint; lastChangeBlock: bigint };
 type SupplyRow = { id: string; token: string; totalSupply: bigint; lastChangeBlock: bigint };
 type ShareTransferRow = {
@@ -108,7 +95,7 @@ describe('real vault history (Base vault 0xf1ba...)', () => {
         }
     });
 
-    it('BalanceChange.balanceAfter is the running sum of deltas per account (step function)', async () => {
+    it('BALANCE sharesAfter is the running sum of deltas per account (step function)', async () => {
         const indexer = createTestIndexer();
         const result = await indexer.process({
             chains: {
@@ -120,7 +107,7 @@ describe('real vault history (Base vault 0xf1ba...)', () => {
                 },
             },
         });
-        const changes = rowsOf<BalanceChangeRow>(result, 'BalanceChange');
+        const changes = balanceRowsOf(result);
 
         // expected: every side of every transfer except 0x0 (zaps included), in (block, logIndex) order
         const expected: Array<{ id: string; account: string; delta: bigint; balanceAfter: bigint }> = [];
@@ -134,7 +121,7 @@ describe('real vault history (Base vault 0xf1ba...)', () => {
                 const after = (running.get(account) ?? 0n) + delta;
                 running.set(account, after);
                 expected.push({
-                    id: `${CHAIN}-${t.hash}-${t.logIndex}-${account}`,
+                    id: `${CHAIN}-${t.hash}-${t.logIndex}-${account}-BALANCE`,
                     account,
                     delta,
                     balanceAfter: after,
@@ -145,10 +132,10 @@ describe('real vault history (Base vault 0xf1ba...)', () => {
         expect(byId.size).toBe(expected.length);
         for (const e of expected) {
             expect(byId.get(e.id), e.id).toMatchObject({
-                token: V,
+                contract: V,
                 account: e.account,
                 delta: e.delta,
-                balanceAfter: e.balanceAfter,
+                sharesAfter: e.balanceAfter,
                 source: 'TRANSFER',
             });
         }
@@ -211,17 +198,15 @@ describe('real CLM manager history (Base manager 0x8145...)', () => {
         const supply = latestById<SupplyRow>(result, 'TokenSupply').get(`${CHAIN}-${CLM.manager}`);
         expect(supply?.totalSupply).toBe(CLM_MANAGER_HISTORY.totalSupply);
 
-        // several transfers in one tx (same block, increasing logIndex): balanceAfter follows logIndex order
-        const changes = rowsOf<BalanceChangeRow>(result, 'BalanceChange').filter(
-            (c) => c.account === CLM.clmVaultStrategy
-        );
+        // several transfers in one tx (same block, increasing logIndex): sharesAfter follows logIndex order
+        const changes = balanceRowsOf(result).filter((c) => c.account === CLM.clmVaultStrategy);
         const sorted = [...changes].sort((a, b) =>
             a.blockNumber === b.blockNumber ? a.logIndex - b.logIndex : Number(a.blockNumber - b.blockNumber)
         );
         let running = 0n;
         for (const c of sorted) {
             running += c.delta;
-            expect(c.balanceAfter, c.id).toBe(running);
+            expect(c.sharesAfter, c.id).toBe(running);
         }
         expect(running).toBe(0n); // the strategy only forwards shares
     });
@@ -265,18 +250,13 @@ describe('synthetic sequences on vault V', () => {
         return { indexer, result };
     };
 
-    it('mint, transfer, burn: deltas, balanceAfter, Balance, supply', async () => {
+    it('mint, transfer, burn: deltas, sharesAfter, Balance, supply', async () => {
         const { result } = await run([
             tx(25059000, 1, ZERO, A, 1000n),
             tx(25059001, 1, A, B, 300n),
             tx(25059002, 1, B, ZERO, 100n),
         ]);
-        const changes = rowsOf<BalanceChangeRow>(result, 'BalanceChange').map((c) => [
-            Number(c.blockNumber),
-            c.account,
-            c.delta,
-            c.balanceAfter,
-        ]);
+        const changes = balanceRowsOf(result).map((c) => [Number(c.blockNumber), c.account, c.delta, c.sharesAfter]);
         expect(changes).toEqual([
             [25059000, A, 1000n, 1000n],
             [25059001, A, -300n, 700n],
@@ -304,8 +284,8 @@ describe('synthetic sequences on vault V', () => {
             tx(25059010, 8, A, C, 30n, h),
             tx(25059010, 9, C, ZERO, 45n, h),
         ]);
-        const changes = rowsOf<BalanceChangeRow>(result, 'BalanceChange');
-        const view = changes.map((c) => [c.logIndex, c.account, c.delta, c.balanceAfter]);
+        const changes = balanceRowsOf(result);
+        const view = changes.map((c) => [c.logIndex, c.account, c.delta, c.sharesAfter]);
         expect(view).toEqual([
             [5, A, 50n, 50n],
             [6, A, -20n, 30n],
@@ -321,13 +301,13 @@ describe('synthetic sequences on vault V', () => {
         expect(latestById<SupplyRow>(result, 'TokenSupply').get(`${CHAIN}-${V}`)?.totalSupply).toBe(5n);
     });
 
-    it('an account that goes to zero then back gets a 0 balanceAfter step and a fresh positive one', async () => {
+    it('an account that goes to zero then back gets a 0 sharesAfter step and a fresh positive one', async () => {
         const { result } = await run([
             tx(25059020, 1, ZERO, A, 10n),
             tx(25059021, 1, A, ZERO, 10n),
             tx(25059022, 1, ZERO, A, 7n),
         ]);
-        const steps = rowsOf<BalanceChangeRow>(result, 'BalanceChange').map((c) => c.balanceAfter);
+        const steps = balanceRowsOf(result).map((c) => c.sharesAfter);
         expect(steps).toEqual([10n, 0n, 7n]);
         const balance = latestById<BalanceRow>(result, 'Balance').get(`${CHAIN}-${V}-${A}`);
         expect(balance).toMatchObject({ balance: 7n, lastChangeBlock: 25059022n });
@@ -340,12 +320,10 @@ describe('synthetic sequences on vault V', () => {
         const transfers = rowsOf<ShareTransferRow>(result, 'ShareTransfer');
         expect(transfers).toHaveLength(2);
         expect(transfers[1]).toMatchObject({ fromAddress: A, toAddress: A, value: 4n, totalSupplyAfter: undefined });
-        // whatever rows the self-transfer writes, they must net to zero and leave balanceAfter at 10
-        const selfChanges = rowsOf<BalanceChangeRow>(result, 'BalanceChange').filter(
-            (c) => c.blockNumber === 25059031n
-        );
+        // whatever rows the self-transfer writes, they must net to zero and leave sharesAfter at 10
+        const selfChanges = balanceRowsOf(result).filter((c) => c.blockNumber === 25059031n);
         expect(selfChanges.reduce((s, c) => s + c.delta, 0n)).toBe(0n);
-        for (const c of selfChanges) expect([6n, 10n]).toContain(c.balanceAfter);
+        for (const c of selfChanges) expect([6n, 10n]).toContain(c.sharesAfter);
         expect(latestById<BalanceRow>(result, 'Balance').get(`${CHAIN}-${V}-${A}`)?.balance).toBe(10n);
         expect(latestById<SupplyRow>(result, 'TokenSupply').get(`${CHAIN}-${V}`)?.totalSupply).toBe(10n);
     });
@@ -354,7 +332,7 @@ describe('synthetic sequences on vault V', () => {
         const { result } = await run([tx(25059040, 1, ZERO, A, 10n), tx(25059041, 1, A, B, 0n)]);
         const transfers = rowsOf<ShareTransferRow>(result, 'ShareTransfer');
         expect(transfers[1]).toMatchObject({ fromAddress: A, toAddress: B, value: 0n });
-        const later = rowsOf<BalanceChangeRow>(result, 'BalanceChange').filter((c) => c.blockNumber === 25059041n);
+        const later = balanceRowsOf(result).filter((c) => c.blockNumber === 25059041n);
         for (const c of later) expect(c.delta).toBe(0n);
         const balances = latestById<BalanceRow>(result, 'Balance');
         expect(balances.get(`${CHAIN}-${V}-${A}`)?.balance).toBe(10n);
@@ -367,7 +345,7 @@ describe('synthetic sequences on vault V', () => {
         expect(transfers.map((t) => t.totalSupplyAfter)).toEqual([10n, 10n]);
     });
 
-    it('event columns of ShareTransfer / BalanceChange come from the simulated event', async () => {
+    it('event columns of ShareTransfer / BALANCE rows come from the simulated event', async () => {
         const t = tx(25059060, 42, ZERO, A, 10n, 4242);
         const { result } = await run([t]);
         const columns = {
@@ -378,7 +356,11 @@ describe('synthetic sequences on vault V', () => {
             logIndex: 42,
         };
         expect(rowsOf(result, 'ShareTransfer')[0]).toMatchObject({ ...columns, id: `${CHAIN}-${t.hash}-42` });
-        expect(rowsOf(result, 'BalanceChange')[0]).toMatchObject({ ...columns, id: `${CHAIN}-${t.hash}-42-${A}` });
+        const { trxFrom: _trxFrom, ...timelineColumns } = columns;
+        expect(balanceRowsOf(result)[0]).toMatchObject({
+            ...timelineColumns,
+            id: `${CHAIN}-${t.hash}-42-${A}-BALANCE`,
+        });
     });
 
     it('state persists across process() calls on one indexer (running sums continue)', async () => {
@@ -393,7 +375,7 @@ describe('synthetic sequences on vault V', () => {
         const second = await indexer.process({
             chains: { [CHAIN]: { simulate: [transferItem('ClassicVault', V, tx(25059071, 1, A, B, 4n))] } },
         });
-        expect(rowsOf<BalanceChangeRow>(second, 'BalanceChange').map((c) => [c.account, c.balanceAfter])).toEqual([
+        expect(balanceRowsOf(second).map((c) => [c.account, c.sharesAfter])).toEqual([
             [A, 6n],
             [B, 4n],
         ]);

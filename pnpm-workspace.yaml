@@ -1,18 +1,31 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "tools/*"
 
 # Versions shared by several workspace packages live here, exact, and are referenced as `catalog:`. Anything
 # in the catalog that a package pins to another version fails the install (catalogMode: strict).
 catalog:
-  "@types/node": 25.6.2
-  remeda: 2.34.0
-  tsx: 4.21.0
+  '@clickhouse/client': 1.24.1
+  "@types/node": 26.6.5
+  apache-arrow: 21.2.0
+  commander: 15.0.0
+  oxlint: 1.89.0
+  pino: 10.4.0
+  remeda: 2.53.0
+  tsx: 4.23.15
   typescript: 7.0.2
-  viem: 2.56.3
-  vitest: 4.1.5
+  viem: 2.57.10
+  vitest: 5.0.5
   zod: 4.6.7
 catalogMode: strict
+
+# Security fixes for exact pins of our dependencies, to drop once they ship them. envio pins express 4.19.2 (its local
+# metrics server: body-parser, path-to-regexp, qs, send, serve-static, cookie advisories); viem pins ws 8.20.1 or
+# 8.21.0 (one version for all, so its peers agree).
+overrides:
+  express@4.19.2: 4.22.3
+  ws@<8.21.3: 8.21.3
 
 # Supply chain
 minimumReleaseAge: 10080 # 1 week

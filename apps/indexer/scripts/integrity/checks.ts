@@ -8,8 +8,13 @@
  * Probes are scoped to the requested chains and, when `scope` says so, to the catalog products (contract ids, or
  * share tokens for ledger tables) so that non-Beefy-API contracts do not add noise.
  */
-import { type CatalogProduct, COVERAGE_ENTITIES, type IndexedEntity } from './catalog';
-import { type ClickHouseClient, chainIn, sqlStringIn } from './clickhouse';
+import { type Sql, ident, join, param, sql } from '@beefy/clickhouse';
+import * as R from 'remeda';
+import { zeroAddress } from 'viem';
+import { z } from 'zod';
+
+import { type CatalogProduct, coverageEntities, type IndexedEntity } from './catalog.ts';
+import { type ClickHouseClient, inChains, table } from './clickhouse.ts';
 
 export type Severity = 'error' | 'warning' | 'info';
 export type Section = 'coverage' | 'structure' | 'sanity';
@@ -23,31 +28,38 @@ export type Finding = {
 };
 
 /**
- * `from` must alias its main table `t`. `scope`: `contract` keeps rows whose `t.id` is a catalog product,
- * `token` rows whose `chainId-token` is one, `none` every row of the requested chains.
+ * `from` must alias its main table `t`; it may read the probe's named CTEs (`ctes`, lowercase names). Values are
+ * parameters (`param`) of the fragments. `scope`: `contract` keeps rows whose `t.id` is a catalog product, `token` rows
+ * whose `chainId-token` is one, `none` every row of the requested chains.
  */
 type Probe = {
     id: string;
     section: Section;
     severity: Severity;
-    from: string;
-    where: string;
+    ctes?: ReadonlyArray<readonly [name: string, sql: Sql]>;
+    from: Sql;
+    where: Sql;
     scope: 'contract' | 'token' | 'none';
 };
 
-export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-
 /** ClickHouse keeps BigInt columns without a precision as strings: compare them as Int256. */
-export const int = (column: string) => `toInt256OrZero(toString(${column}))`;
+export const int256 = (column: Sql) => sql`toInt256OrZero(toString(${column}))`;
 
 /** `chainId-token` of a ledger row, comparable with catalog ids. */
-export const tokenKey = (alias = 't') => `concat(toString(${alias}.chain_id), '-', ${alias}.token)`;
+export const tokenKey = (alias = 't') =>
+    sql`concat(toString(${ident(alias)}.chain_id), '-', toString(${ident(alias)}.token))`;
 
-/** On-chain order of a row inside its chain. */
-const changeSeq = (alias = 't') => `(${alias}.block_number, ${alias}.log_index)`;
+/** `WITH a AS (...), b AS (...)` from named CTEs (names through `ident`); empty without any. */
+const withClause = (ctes: ReadonlyArray<readonly [name: string, sql: Sql]>): Sql =>
+    ctes.length === 0
+        ? sql``
+        : sql`WITH ${join(
+              R.map(ctes, ([name, body]) => sql`${ident(name)} AS (${body})`),
+              sql`,\n     `
+          )}\n`;
 
 /** Links every contract of a kind must have once its facts were read. */
-export const REQUIRED_LINKS: ReadonlyArray<{ kind: string; relation: string; severity: Severity }> = [
+const REQUIRED_LINKS: ReadonlyArray<{ kind: string; relation: string; severity: Severity }> = [
     { kind: 'VAULT', relation: 'VAULT_WANT', severity: 'error' },
     { kind: 'BOOST', relation: 'BOOST_STAKED', severity: 'error' },
     { kind: 'BOOST', relation: 'BOOST_REWARD', severity: 'warning' },
@@ -60,8 +72,11 @@ export const REQUIRED_LINKS: ReadonlyArray<{ kind: string; relation: string; sev
     { kind: 'ERC4626_ADAPTER', relation: 'ADAPTER_VAULT', severity: 'warning' },
 ];
 
+/** Links every contract of a kind must have once its facts were read. */
+export const requiredLinks = () => REQUIRED_LINKS;
+
 /** Kinds whose address is a share token (must have a Token row). */
-export const SHARE_TOKEN_KINDS = [
+const SHARE_TOKEN_KINDS: readonly string[] = [
     'VAULT',
     'BOOST',
     'REWARD_POOL',
@@ -71,6 +86,9 @@ export const SHARE_TOKEN_KINDS = [
     'TOKEN',
 ];
 
+/** Kinds whose address is a share token (must have a Token row). */
+export const shareTokenKinds = () => SHARE_TOKEN_KINDS;
+
 /** Catalog-scoped probes only see catalog kinds; strategies are checked over every indexed row. */
 const CATALOG_KINDS = new Set(['VAULT', 'BOOST', 'REWARD_POOL', 'CLM_MANAGER', 'LST_VAULT', 'SWAPPER']);
 
@@ -78,141 +96,192 @@ const missingLink = ({ kind, relation, severity }: (typeof REQUIRED_LINKS)[numbe
     id: `${kind}.missing-${relation}`,
     section: 'structure',
     severity,
-    from: 'Contract AS t',
-    where: `t.kind = '${kind}' AND t.facts_block IS NOT NULL AND (t.chain_id, t.address) NOT IN (SELECT chain_id, from_address FROM ContractLink WHERE relation = '${relation}')`,
+    ctes: [
+        [
+            'linked',
+            sql`SELECT chain_id, from_address FROM ${table('ContractLink')} WHERE toString(relation) = ${param('String', relation)}`,
+        ],
+    ],
+    from: sql`${table('Contract')} AS t LEFT ANTI JOIN linked AS l ON l.chain_id = t.chain_id AND l.from_address = t.address`,
+    where: sql`toString(t.kind) = ${param('String', kind)} AND t.facts_block IS NOT NULL`,
     scope: CATALOG_KINDS.has(kind) ? 'contract' : 'none',
 });
 
-export const STRUCTURE_PROBES: Probe[] = [
+const STRUCTURE_PROBES: readonly Probe[] = [
     {
         id: 'Contract.id-mismatch',
         section: 'structure',
         severity: 'error',
-        from: 'Contract AS t',
-        where: `t.id != concat(toString(t.chain_id), '-', t.address)`,
+        from: sql`${table('Contract')} AS t`,
+        where: sql`t.id != concat(toString(t.chain_id), '-', t.address)`,
         scope: 'none',
     },
     {
         id: 'Contract.facts-unread',
         section: 'structure',
         severity: 'warning',
-        from: 'Contract AS t',
-        where: `t.facts_block IS NULL AND t.kind != 'UNKNOWN'`,
+        from: sql`${table('Contract')} AS t`,
+        where: sql`t.facts_block IS NULL AND toString(t.kind) != ${param('String', 'UNKNOWN')}`,
         scope: 'contract',
     },
     {
         id: 'Contract.facts-partial',
         section: 'structure',
         severity: 'warning',
-        from: 'Contract AS t',
-        where: `t.facts_status = 'PARTIAL'`,
+        from: sql`${table('Contract')} AS t`,
+        where: sql`toString(t.facts_status) = ${param('String', 'PARTIAL')}`,
         scope: 'contract',
     },
     {
         id: 'Contract.unclassified-proxy',
         section: 'structure',
         severity: 'warning',
-        from: 'Contract AS t',
-        where: `t.kind = 'UNKNOWN' AND t.deploy_name IS NULL`,
+        from: sql`${table('Contract')} AS t`,
+        where: sql`toString(t.kind) = ${param('String', 'UNKNOWN')} AND t.deploy_name IS NULL`,
         scope: 'none',
     },
-    ...REQUIRED_LINKS.map(missingLink),
+    ...R.map(REQUIRED_LINKS, missingLink),
     {
         id: 'ContractLink.zero-target',
         section: 'structure',
         severity: 'error',
-        from: 'ContractLink AS t',
-        where: `t.to_address = '${ZERO_ADDRESS}'`,
+        from: sql`${table('ContractLink')} AS t`,
+        where: sql`t.to_address = ${param('String', zeroAddress)}`,
         scope: 'none',
     },
     {
         id: 'Token.missing-share-token',
         section: 'structure',
         severity: 'error',
-        from: 'Contract AS t',
-        where: `${sqlStringIn('t.kind', SHARE_TOKEN_KINDS)} AND t.facts_block IS NOT NULL AND (t.chain_id, t.id) NOT IN (SELECT chain_id, id FROM Token)`,
+        ctes: [['tokens', sql`SELECT chain_id, id FROM ${table('Token')}`]],
+        from: sql`${table('Contract')} AS t LEFT ANTI JOIN tokens AS k ON k.chain_id = t.chain_id AND k.id = t.id`,
+        where: sql`has(${param('Array(String)', SHARE_TOKEN_KINDS)}, toString(t.kind)) AND t.facts_block IS NOT NULL`,
         scope: 'contract',
     },
     {
         id: 'Token.invalid-share-metadata',
         section: 'structure',
         severity: 'warning',
-        from: 'Token AS t',
-        where: `t.is_beefy_share AND t.metadata_status = 'INVALID'`,
+        from: sql`${table('Token')} AS t`,
+        where: sql`t.is_beefy_share AND toString(t.metadata_status) = ${param('String', 'INVALID')}`,
         scope: 'contract',
     },
 ];
 
-const lastChange = `(SELECT chain_id, token, account, argMax(balance_after, ${changeSeq('c')}) AS last_after FROM BalanceChange AS c GROUP BY chain_id, token, account)`;
-const balanceSums = `(SELECT chain_id, token, sum(${int('b.balance')}) AS balance_sum FROM Balance AS b GROUP BY chain_id, token)`;
-const previousAfter = `(SELECT id, chain_id, token, balance_after, delta, lagInFrame(balance_after, 1, NULL) OVER (PARTITION BY chain_id, token, account ORDER BY block_number, log_index ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS prev_after FROM BalanceChange)`;
+/** The balance step function: BALANCE `TimelineEvent` rows, the share token (or boost) as `token`. */
+const BALANCE_STEPS = [
+    'balance_steps',
+    sql`SELECT id, chain_id, contract AS token, account, delta, shares_after AS balance_after, block_number, log_index
+     FROM ${table('TimelineEvent')} WHERE toString(kind) = ${param('String', 'BALANCE')}`,
+] as const;
+/** The balance after each account's last change. */
+const LAST_CHANGE = [
+    'last_change',
+    sql`SELECT chain_id, token, account, argMax(balance_after, (block_number, log_index)) AS last_after
+     FROM balance_steps GROUP BY chain_id, token, account`,
+] as const;
+/** Each step with the balance after the previous step of the same account. */
+const PREVIOUS_AFTER = [
+    'previous_after',
+    sql`SELECT id, chain_id, token, balance_after, delta,
+            lagInFrame(toNullable(balance_after), 1, NULL) OVER (PARTITION BY chain_id, token, account ORDER BY block_number, log_index
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS prev_after
+     FROM balance_steps`,
+] as const;
+const BALANCE_SUMS = [
+    'balance_sums',
+    sql`SELECT chain_id, token, sum(${int256(sql`balance`)}) AS balance_sum FROM ${table('Balance')} GROUP BY chain_id, token`,
+] as const;
 
-export const SANITY_PROBES: Probe[] = [
+const SANITY_PROBES: readonly Probe[] = [
     {
         id: 'Balance.negative',
         section: 'sanity',
         severity: 'error',
-        from: 'Balance AS t',
-        where: `${int('t.balance')} < 0`,
+        from: sql`${table('Balance')} AS t`,
+        where: sql`${int256(sql`t.balance`)} < 0`,
         scope: 'token',
     },
     {
         id: 'Balance.drift-from-last-change',
         section: 'sanity',
         severity: 'error',
-        from: `Balance AS t INNER JOIN ${lastChange} AS ch ON ch.chain_id = t.chain_id AND ch.token = t.token AND ch.account = t.account`,
-        where: `${int('ch.last_after')} != ${int('t.balance')}`,
+        ctes: [BALANCE_STEPS, LAST_CHANGE],
+        from: sql`${table('Balance')} AS t INNER JOIN last_change AS ch ON ch.chain_id = t.chain_id AND ch.token = t.token AND ch.account = t.account`,
+        where: sql`${int256(sql`ch.last_after`)} != ${int256(sql`t.balance`)}`,
         scope: 'token',
     },
     {
-        id: 'BalanceChange.discontinuity',
+        id: 'TimelineEvent.balance-discontinuity',
         section: 'sanity',
         severity: 'error',
-        from: `${previousAfter} AS t`,
-        where: `${int('t.balance_after')} - ${int('t.delta')} != ifNull(${int('t.prev_after')}, 0)`,
+        ctes: [BALANCE_STEPS, PREVIOUS_AFTER],
+        from: sql`previous_after AS t`,
+        where: sql`${int256(sql`t.balance_after`)} - ${int256(sql`t.delta`)} != ifNull(${int256(sql`t.prev_after`)}, 0)`,
         scope: 'token',
     },
     {
         id: 'TokenSupply.negative',
         section: 'sanity',
         severity: 'error',
-        from: 'TokenSupply AS t',
-        where: `${int('t.total_supply')} < 0`,
+        from: sql`${table('TokenSupply')} AS t`,
+        where: sql`${int256(sql`t.total_supply`)} < 0`,
         scope: 'token',
     },
     {
         id: 'TokenSupply.below-tracked-balances',
         section: 'sanity',
         severity: 'error',
-        from: `TokenSupply AS t INNER JOIN ${balanceSums} AS s ON s.chain_id = t.chain_id AND s.token = t.token`,
-        where: `s.balance_sum > ${int('t.total_supply')}`,
+        ctes: [BALANCE_SUMS],
+        from: sql`${table('TokenSupply')} AS t INNER JOIN balance_sums AS s ON s.chain_id = t.chain_id AND s.token = t.token`,
+        where: sql`s.balance_sum > ${int256(sql`t.total_supply`)}`,
         scope: 'token',
     },
     {
         id: 'ClmPoolState.read-failed',
         section: 'sanity',
         severity: 'warning',
-        from: 'ClmPoolState AS t',
-        where: `t.status = 'FAILED'`,
+        from: sql`${table('ClmPoolState')} AS t`,
+        where: sql`toString(t.status) = ${param('String', 'FAILED')}`,
         scope: 'none',
     },
 ];
 
-export const ALL_PROBES: Probe[] = [...STRUCTURE_PROBES, ...SANITY_PROBES];
+/** Registry probes: links, token metadata, ids. */
+export const structureProbes = (): readonly Probe[] => STRUCTURE_PROBES;
+/** Ledger probes: running sums against the step function. */
+export const sanityProbes = (): readonly Probe[] => SANITY_PROBES;
+export const allProbes = (): readonly Probe[] => [...STRUCTURE_PROBES, ...SANITY_PROBES];
 
-export const scopePredicate = (probe: Probe, catalogIds: readonly string[]) => {
+/** The probe's catalog filter; the (large) catalog is a parameter only of the probes that read it (it travels in the URL). */
+export const scopePredicate = (probe: Probe, catalogIds: readonly string[]): Sql => {
     switch (probe.scope) {
         case 'contract':
-            return sqlStringIn('t.id', catalogIds);
+            return sql`has(${param('Array(String)', catalogIds)}, toString(t.id))`;
         case 'token':
-            return sqlStringIn(tokenKey('t'), catalogIds);
+            return sql`has(${param('Array(String)', catalogIds)}, ${tokenKey('t')})`;
         case 'none':
-            return '1';
+            return sql`1`;
     }
 };
 
-export const probeWhere = (probe: Probe, chainIds: number[], catalogIds: readonly string[]) =>
-    `${chainIn('t.chain_id', chainIds)} AND ${scopePredicate(probe, catalogIds)} AND (${probe.where})`;
+export const probeWhere = (probe: Probe, chainIds: readonly number[], catalogIds: readonly string[]): Sql =>
+    sql`${inChains(chainIds, 't')} AND ${scopePredicate(probe, catalogIds)} AND (${probe.where})`;
+
+/** The probe's count and sample queries (`WITH` its CTEs). */
+export const probeQueries = (
+    probe: Probe,
+    chainIds: readonly number[],
+    catalogIds: readonly string[],
+    sampleSize: number
+): { count: Sql; sample: Sql } => {
+    const head = withClause(probe.ctes ?? []);
+    const where = probeWhere(probe, chainIds, catalogIds);
+    return {
+        count: sql`${head}SELECT count() AS count FROM ${probe.from} WHERE ${where}`,
+        sample: sql`${head}SELECT t.id AS id FROM ${probe.from} WHERE ${where} ORDER BY t.id LIMIT ${param('UInt32', sampleSize)}`,
+    };
+};
 
 const finding = (section: Section, severity: Severity, check: string, count: number, sample: string[]): Finding => ({
     section,
@@ -235,7 +304,7 @@ export const diffCoverage = (
     sampleSize: number
 ): Finding[] => {
     const findings: Finding[] = [];
-    for (const entity of COVERAGE_ENTITIES) {
+    for (const entity of coverageEntities()) {
         const indexed = indexedByEntity.get(entity) ?? new Set<string>();
         const expectedForEntity = expected.filter((product) => product.entity === entity);
         const expectedIds = new Set(expectedForEntity.map((product) => product.id));
@@ -291,31 +360,32 @@ export const diffCoverage = (
     return findings;
 };
 
+const countRow = z.object({ count: z.union([z.string(), z.number()]) });
+const idRow = z.object({ id: z.string() });
+
 const runProbe = async (
     client: ClickHouseClient,
     probe: Probe,
-    chainIds: number[],
+    chainIds: readonly number[],
     sampleSize: number,
     catalogIds: readonly string[]
 ): Promise<Finding> => {
-    const where = probeWhere(probe, chainIds, catalogIds);
+    const queries = probeQueries(probe, chainIds, catalogIds, sampleSize);
     const [countRows, sampleRows] = await Promise.all([
-        client.query<{ count: string }>(`SELECT count() AS count FROM ${probe.from} WHERE ${where}`),
-        client.query<{ id: string }>(
-            `SELECT t.id AS id FROM ${probe.from} WHERE ${where} ORDER BY t.id LIMIT ${sampleSize}`
-        ),
+        client.query(queries.count, countRow),
+        client.query(queries.sample, idRow),
     ]);
     return finding(
         probe.section,
         probe.severity,
         probe.id,
         Number(countRows[0]?.count ?? 0),
-        sampleRows.map((row) => row.id)
+        R.map(sampleRows, (row) => row.id)
     );
 };
 
 type IntegrityOptions = {
-    chainIds: number[];
+    chainIds: readonly number[];
     sampleSize: number;
     catalog: CatalogProduct[];
     indexedByEntity: Map<IndexedEntity, Set<string>>;
@@ -328,7 +398,7 @@ export const runIntegrityChecks = async (client: ClickHouseClient, options: Inte
     const { chainIds, sampleSize } = options;
     const catalogIds = [...new Set(options.catalog.map((product) => product.id))];
     const findings = diffCoverage(options.catalog, options.indexedByEntity, options.blacklist, sampleSize);
-    for (const probe of ALL_PROBES) {
+    for (const probe of allProbes()) {
         log(`probe ${probe.id}`);
         pushIfAny(findings, await runProbe(client, probe, chainIds, sampleSize, catalogIds));
     }

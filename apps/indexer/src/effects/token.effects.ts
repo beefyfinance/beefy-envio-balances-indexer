@@ -1,12 +1,15 @@
 import { createEffect, type EvmChainId, S } from 'envio';
 import { erc20Abi } from 'viem';
 
+import { describeError } from '../lib/errors';
 import { asHex } from '../lib/hex';
 import { getViemClient } from '../lib/viem';
 
 /**
  * ERC-20 metadata, once per token (chain-scoped cache keyed on the lowercase address), read at `latest`:
- * decimals / name / symbol do not change. On-chain reverts return `invalid` (cached); transport errors throw.
+ * decimals / name / symbol do not change. A complete read is cached. A failed one returns `invalid` with
+ * `context.cache = false`: a failed call inside the multicall is not always a revert (an RPC that drops calls under
+ * load answers the same way), so the facts retry (registry.ts) reads it again. Transport errors throw.
  */
 export const getTokenMetadata = createEffect(
     {
@@ -35,12 +38,15 @@ export const getTokenMetadata = createEffect(
             ],
         });
         const ok = decimals.status === 'success' && name.status === 'success' && symbol.status === 'success';
+        context.cache = ok;
         if (!ok) {
-            context.log.warn('[INVALID_TOKEN] token metadata calls reverted', {
+            context.log.warn('[INVALID_TOKEN] token metadata calls failed', {
                 address,
                 decimals: decimals.status,
                 name: name.status,
                 symbol: symbol.status,
+                // a revert, empty return data (no code, or a sub-call out of gas), or a transport error
+                error: decimals.status === 'failure' ? describeError(decimals.error) : undefined,
             });
         }
         return {

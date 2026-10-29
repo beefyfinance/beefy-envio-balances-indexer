@@ -2,7 +2,7 @@ import { createTestIndexer } from 'envio';
 import { describe, expect, it } from 'vitest';
 
 import { latestById, rowsOf, tx } from '../../test/helpers/simulate';
-import { FACTS_RETRY_BLOCKS } from '../lib/registry';
+import { factsRetryBlocks } from '../lib/registry';
 
 // Base swapper listed in config.yaml
 const SWAPPER = '0x9f8c6a094434c6e6f5f2792088bb4d2d5971ddcc' as const;
@@ -155,6 +155,9 @@ describe('LST vault', () => {
               "factsStatus": "PARTIAL",
               "id": "43114-0x2e360492120cebeb2527c41bae1a4f21992d86ec",
               "kind": "LST_VAULT",
+              "priceDecimals": undefined,
+              "productAddress": undefined,
+              "productKind": undefined,
             },
           ]
         `);
@@ -182,14 +185,14 @@ describe('LST vault', () => {
                     simulate: [
                         transfer(1, 38_500_000),
                         transfer(2, 38_500_005), // too early: no retry
-                        transfer(3, 38_500_000 + Number(FACTS_RETRY_BLOCKS)), // retried
+                        transfer(3, 38_500_000 + Number(factsRetryBlocks())), // retried
                     ],
                 },
             },
         });
         expect(rowsOf<{ factsBlock: bigint }>(result, 'Contract').map(({ factsBlock }) => factsBlock)).toEqual([
             38_500_000n,
-            38_500_000n + FACTS_RETRY_BLOCKS,
+            38_500_000n + factsRetryBlocks(),
         ]);
     });
 });
