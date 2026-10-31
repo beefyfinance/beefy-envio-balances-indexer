@@ -31,6 +31,15 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # `envio codegen` interpolates every ENVIO_RPC_URL_<chainId> in config.yaml and stops when one is unset. Loopback
+      # placeholders, set for this step only, so the unit tests below still run without them; `pnpm test` then takes
+      # codegen from Turborepo's local cache.
+      - name: codegen
+        run: |
+          for chain_var in $(grep -oh 'ENVIO_RPC_URL_[0-9]*' apps/indexer/config*.yaml | sort -u); do
+            export "$chain_var=http://127.0.0.1:8545"
+          done
+          pnpm codegen
       # typecheck, unit tests, lint and secretlint; offline, from the recorded RPC fixtures
       - run: pnpm test
         env:
