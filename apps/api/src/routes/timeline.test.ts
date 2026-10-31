@@ -109,7 +109,7 @@ describe('GET /v1/users/{address}/timeline', () => {
         const response = await app.request(timeline());
         expect(response.status).toBe(200);
         expect(response.headers.get('cache-control')).toBe(
-            'public, max-age=5, s-maxage=15, stale-while-revalidate=60, stale-if-error=3600'
+            'public, max-age=5, s-maxage=5, stale-while-revalidate=5, stale-if-error=3600'
         );
         expect(response.headers.get('x-cache')).toBe('MISS');
         expect(response.headers.get('etag')).toMatch(/^"[0-9a-f]{32}"$/);

@@ -1,15 +1,14 @@
 # Beefy balances
 
 A pnpm + Turborepo monorepo for tracking Beefy user positions and PnL: a raw-events indexer, an account-first ClickHouse
-analytics schema (`packages/clickhouse`), a worker for background jobs (none yet), and an API. Raw facts come from the
+analytics schema (`packages/clickhouse`), a worker for background jobs, and an API. Raw facts come from the
 chains, prices from the databarn ClickHouse, and everything derived (positions, PnL) is computed downstream, so changing
 a formula never forces a reindex.
 
 ```
 apps/
   indexer/          @beefy/indexer          Envio HyperIndex 3.14 indexer (events → ClickHouse, state → Postgres)
-  worker/           @beefy/worker           Background jobs: a small scheduler plus jobs (none yet: the time-driven work
-                                            runs inside ClickHouse, see serving-architecture.md)
+  worker/           @beefy/worker           Background jobs: a small scheduler plus jobs
   api/              @beefy/api              Read API over ClickHouse: Hono + zod-openapi. GET /v1/users/{address}/timeline
                                             (cached, rate limited, single-flight), /healthz, /openapi.json
 packages/
@@ -21,8 +20,8 @@ packages/
 docs/               Architecture and Envio reference notes
 ```
 
-Start with [docs/architecture.md](docs/architecture.md) (what is indexed), [docs/serving-architecture.md](docs/serving-architecture.md)
-(how the one public endpoint, the user timeline, is served: Cache-Control only at Cloudflare, origin defences, ClickHouse read models) and the [indexer README](apps/indexer/README.md).
+Start with [docs/architecture.md](docs/architecture.md) (what is indexed, the timeline and its prices, versions, the public
+API and its caching) and the [indexer README](apps/indexer/README.md).
 
 ## Getting started
 
@@ -105,6 +104,5 @@ To work on one app, `cd` into it and use its own scripts (`pnpm dev`, `pnpm test
 - **Worker and API (Heroku).** Not set up yet. The API reads `PORT`; both shut down on `SIGTERM`. `WORKER_JOBS` picks
   which jobs a process runs, so each job can be its own process type. A monorepo build must run `pnpm build` for the
   packages before starting an app.
-- **API caching.** Hono's `cache()` middleware needs the Web Cache API, which Node does not have, so the API sets
-  `Cache-Control` and `ETag` (for browsers and any CDN in front) and leaves server-side caching to ClickHouse's query
-  cache.
+- **API caching.** The API sets `Cache-Control` and `ETag` for browsers and Cloudflare and keeps its own in-process cache:
+  see [docs/architecture.md](docs/architecture.md#public-api-and-caching).

@@ -1811,6 +1811,96 @@ chains:
         address:
           - 0xCee843CD04E3758dDC5BCFf08647DddB117151D0
 
+  - id: 5042 # arc
+    start_block: 22167000
+    rpc:
+      - url: ${ENVIO_RPC_URL_5042}
+        for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: ClassicVaultFactory
+        address:
+          - 0x19123E344Dc22ef22525994FcB801E99fb37fA9E
+      - name: ClassicStrategyFactory
+        address:
+          - 0xd1Af3f1Aeb525746389C9d76788C1413E8D051fF
+      - name: ClassicBoostFactory
+        address: []
+      - name: RewardPoolFactory
+        address:
+          - 0x45efE862a9c6Dba32221c040885b794A9589103F
+      - name: ClmManagerFactory
+        address:
+          - 0x7881036d5DE71CE2ed5f2916025460A2AcA69ac4
+      - name: ClmStrategyFactory
+        address:
+          - 0xD4E968d673bc2C4Ba5abcB773de6f07e65E94E44
+      - name: ContractFactory
+        address: []
+      - name: Erc4626AdapterFactory
+        address: []
+      - name: ClassicVault
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x6f1df3b2974877f8db9aa42e29621c362ba84d42
+          - 0x98ff4c9bbb06ac23beeef038c14d0b8c485a414a
+          - 0xa798397117c38949796dbbea38b33ea7f880c77d
+          # end generated
+      - name: ClassicBoost
+        address: []
+      - name: ClassicStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0dc65b232a71e9ca81bf451e729312788f97d732
+          - 0x2454d8939334356a6946e4a21c33788d01ec70c0
+          - 0xb542f44de0cc59a78b5d10973891c4207cfcc611
+          # end generated
+      - name: ClassicStrategyStratHarvest0
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0dc65b232a71e9ca81bf451e729312788f97d732
+          - 0x2454d8939334356a6946e4a21c33788d01ec70c0
+          - 0xb542f44de0cc59a78b5d10973891c4207cfcc611
+          # end generated
+      - name: ClassicStrategyStratHarvest1
+        address: []
+      - name: ClmStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x14cc22d3a69e4125e9e6d42fdca01afbba7c15b3
+          - 0x238e7fbb8ceac082c68dd15fa134b74f8c15b0c0
+          - 0x4a3a354d41577fdc570827e26c13c8a7f5d0aeca
+          - 0x6095947dc613fed93c0e988b2efed9852e6810ac
+          - 0x916b5712b6bd6df6c30fc302f390003bd0b6a747
+          - 0xa16ad7363697115526bf155a7695fe2156493d07
+          # end generated
+      - name: ClmManager
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x104e6823bab0be3fe9b48c5fb0f0413301d935a4
+          - 0x3ab58808c6fec9cc0ec56a04800e306c08ffb5e0
+          - 0x4f95d85389de296869a5a815a1aa05ec32f7efb5
+          - 0x9ccce25f82f37ef777552e3bbb2a01bc5574abe8
+          - 0xcf65c5ab9e90adb45d10d66b81bc9b0d95278423
+          - 0xd5319d37f56c70f10da99bfb3a38694d5bd1ff22
+          # end generated
+      - name: RewardPool
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0365ce42fbe05c07cb835c06d3b68dd871e94ae4
+          - 0x28a7d169942bb50f51a2e53262ca736980fe183f
+          - 0x541ec9d0523f18b48309b8914d8e424fc144ceb9
+          - 0x5bc50aba09c285529c14290179ac345d0baa033e
+          - 0x8f6e62ac78b06f4f45db8de37c8a8b6e1f3e3a13
+          - 0xdaceb29d88ee1b5efe8ac134523dc93a35548703
+          # end generated
+      - name: LstVault
+        address: []
+      - name: Erc4626Adapter
+        address: []
+      - name: BeefySwapper
+        address:
+          - 0x3e810a6bf0418c53eaac24221375a166f77841ee
+
   - id: 43114 # avax
     start_block: 591621
     rpc:

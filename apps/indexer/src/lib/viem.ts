@@ -11,6 +11,7 @@ import {
 } from 'viem';
 import {
     arbitrum,
+    arc,
     avalanche,
     base,
     berachain,
@@ -74,6 +75,7 @@ const chainMap: Record<EvmChainId, ViemChain> = {
     59144: linea,
     1135: lisk,
     5000: mantle,
+    5042: arc,
     4326: megaeth,
     1088: metis,
     143: monad,

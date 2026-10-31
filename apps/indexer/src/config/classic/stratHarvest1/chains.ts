@@ -23,6 +23,7 @@ const CLASSIC_STRAT_HARVEST_1_FOR_ADDRESSES_BY_CHAIN: Partial<Record<EvmChainId,
     4326: [], // megaeth.json (subgraph config has no harvest1 field yet)
     4663: [], // robinhood.json
     5000: [], // mantle.json
+    5042: [], // arc — no subgraph deployment
     8453: [], // base.json
     9745: [], // plasma.json (subgraph config has no harvest1 field yet)
     42161: [], // arbitrum.json / arbitrum-beta.json

@@ -1,5 +1,5 @@
 /**
- * Indexer prices (docs/timeline-redesign.md "Indexer prices"): the latest Beefy API share price of each product, kept
+ * Indexer prices (docs/architecture.md "Indexer prices"): the latest Beefy API share price of each product, kept
  * in memory per chain and read synchronously by the timeline writers.
  *
  * - Classic vaults: `/mootokenprices` (API chain -> moo token symbol -> price), mapped to addresses by `/vaults`
@@ -227,11 +227,17 @@ export const createHeadPriceCache = ({
         rebuild();
     };
 
+    // no mappings yet (the first fetch failed): prices would attach to nothing until the next mappings period
+    const refresh = async () => {
+        if (vaults.length === 0 || cowVaults.length === 0) await refreshMappings();
+        await refreshPrices();
+    };
+
     const start = () => {
         if (timers.length > 0) return;
-        void refreshMappings().then(refreshPrices);
+        void refresh();
         timers = [
-            setInterval(() => void refreshPrices(), pricesRefreshMs),
+            setInterval(() => void refresh(), pricesRefreshMs),
             setInterval(() => void refreshMappings(), mappingsRefreshMs),
         ];
         timers.forEach((timer) => timer.unref());
@@ -262,7 +268,7 @@ type Override = { source: HeadPriceSource; clock: () => number };
 const OVERRIDE = Symbol.for('beefy.indexer.headPrices');
 const override = () => (globalThis as { [OVERRIDE]?: Override })[OVERRIDE];
 
-/** The process-wide cache, started at the first read; disabled in RPC fixture mode. */
+/** The process-wide cache, started once; disabled in RPC fixture mode. */
 const activeSource = (): HeadPriceSource => {
     const injected = override();
     if (injected !== undefined) return injected.source;
@@ -278,6 +284,9 @@ const activeSource = (): HeadPriceSource => {
     return source;
 };
 
+/** Starts the cache when the handlers load: an event some seconds after a restart finds prices, not only the next one. */
+export const startHeadPrices = () => void activeSource();
+
 /** Tests: replace the cache and the clock (undefined restores the defaults). */
 export const setHeadPriceSource = (next: HeadPriceSource | undefined, clock: () => number = Date.now) => {
     (globalThis as { [OVERRIDE]?: Override })[OVERRIDE] = next === undefined ? undefined : { source: next, clock };
@@ -288,7 +297,6 @@ export const setHeadPriceSource = (next: HeadPriceSource | undefined, clock: () 
  * HEAD_PRICE_EVENT_MAX_AGE_MS old and the price at most HEAD_PRICE_MAX_AGE_MS old, now (src/lib/config.ts).
  */
 export const headPriceAt = (chainId: number, product: string, blockTimestamp: number): HeadPrice | undefined => {
-    // read first: the cache starts during a historical sync, so it has prices when the indexer reaches the head
     const cache = activeSource();
     const { eventMaxAgeMs, priceMaxAgeMs } = indexerConfig().headPrices;
     const now = (override()?.clock ?? Date.now)();

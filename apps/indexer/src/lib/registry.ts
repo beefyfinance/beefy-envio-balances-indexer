@@ -214,7 +214,7 @@ const STAKED_RELATIONS: Partial<Record<ContractKind, LinkRelation>> = {
 type PriceFacts = Pick<Contract, 'priceDecimals' | 'productKind'>;
 
 /**
- * Price decimals and kind of `product` (a staked token), the rule of productFactsSelect: a vault's or CLM's own price
+ * Price decimals and kind of `product` (a staked token), the rule of productFactsCtes: a vault's or CLM's own price
  * decimals, the token's decimals for any other known kind, unknown for an unregistered or UNKNOWN contract.
  */
 const stakedPriceFacts = async (

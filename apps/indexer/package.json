@@ -19,6 +19,7 @@
     "correctness": "node --env-file=.env scripts/correctness.ts",
     "integrity": "tsx scripts/integrity/cli.ts",
     "rpc-pacer": "node scripts/rpcPacer.ts",
+    "watch-timeline": "node --env-file=../worker/.env scripts/watchTimeline.ts",
     "db:console": "PGPASSWORD=testing psql -h localhost -p ${ENVIO_PG_PORT:-55433} -U postgres -d envio-dev",
     "db:console:clickhouse": "docker compose -f ../../docker-compose.yml exec clickhouse clickhouse-client"
   },

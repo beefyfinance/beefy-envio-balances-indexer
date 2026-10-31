@@ -61,14 +61,15 @@ const JITTER = 0.2;
 
 /** What Cloudflare and browsers are told (the doc's table). */
 const CACHE_CONTROL = {
-    active: 'public, max-age=5, s-maxage=15, stale-while-revalidate=60, stale-if-error=3600',
+    active: 'public, max-age=5, s-maxage=5, stale-while-revalidate=5, stale-if-error=3600',
     idle: 'public, max-age=30, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400',
     empty: 'public, s-maxage=60, stale-while-revalidate=300',
 };
 
 /** The origin's own freshness is a little shorter than the edge's, and jittered so popular keys do not expire together. */
-const ORIGIN_FRESH_MS = { active: 10_000, idle: 45_000, empty: 45_000 };
-const ORIGIN_STALE_MS = 60_000;
+const ORIGIN_FRESH_MS = { active: 4_000, idle: 45_000, empty: 45_000 };
+// none for an active user: a stale answer delays their new event, and its refresh would escape the miss budgets
+const ORIGIN_STALE_MS = { active: 0, idle: 60_000, empty: 60_000 };
 const ORIGIN_ERROR_MS = 3600_000;
 
 /** Accounts found too large are remembered for a while, so asking again costs nothing. */
@@ -141,7 +142,7 @@ export const createTimelineService = ({
         const jitter = 1 + (random() * 2 - 1) * JITTER;
         cache.set(key, response, body.length + compressed.length, {
             freshMs: ORIGIN_FRESH_MS[kind] * jitter,
-            staleMs: ORIGIN_STALE_MS,
+            staleMs: ORIGIN_STALE_MS[kind],
             errorMs: ORIGIN_ERROR_MS,
         });
         return response;

@@ -1,105 +1,87 @@
 # Architecture
 
-> Monorepo: file paths below that are not prefixed (`src/`, `scripts/`, `config.yaml`, `schema.graphql`, `test/`)
-> are relative to `apps/indexer/`. Other apps live in `apps/`, shared code in `packages/` (see the root README).
+Paths starting with `src/` are relative to `apps/indexer/`. Envio's behaviour is in [envio-3.14-notes.md](envio-3.14-notes.md).
 
-## Goal and principles
+## Overview
 
-The indexer records raw on-chain facts about Beefy products (classic vaults, boosts, reward pools, CLMs, ERC-4626
-adapters, LST vaults, configured share tokens) plus harvests, fees, rewards and swapper routes. A separate wrapper
-service turns these facts into positions, values and PnL.
+```
+ chains, Beefy API ──▶ indexer ──▶ Envio database: events, facts, indexer prices
+                                     │                    │
+ analytics prices ──▶ worker (advance) ◀──────────────────┤
+                                     ▼                    ▼
+                           event_price_<N> ──▶ user_timeline_api(account) ──▶ API ──▶ Cloudflare ──▶ client
+```
 
-- **Raw facts only.** Amounts are raw integers (no decimals applied), addresses and hashes are lowercase `0x` hex. No
-  prices, no share prices, no snapshots, no derived positions.
-- **Calculations live in the wrapper.** Any formula can change without touching the indexer.
-- **Reindex-averse.** Because nothing is derived, a reindex is only needed when a new raw fact must be captured.
-  Every `eth_call` goes through a cached Envio effect, so a reindex replays reads from the effect cache.
-- **Robust to Beefy API misconfiguration.** Decimals and token links come from the chain, so the wrapper can check
-  the Beefy API against them.
-- **No HyperSync dependency outside production.** The RPC variants and the tests run without HyperSync (see
-  "Deployment modes").
+- **Raw facts.** The indexer stores raw integers and lowercase hex read from the chain, so the Beefy API can be checked
+  against them. Its only non-raw value is the indexer price, which is always replaced later.
+- **Few reindexes, no copies.** Formulas live downstream, every `eth_call` is a cached Envio effect, and ClickHouse reads
+  Envio's tables in place.
+- **No pricing at read time.** The worker stores prices and a read is a lookup. A watermark, about a day behind now,
+  splits final prices from temporary ones.
+- **The API only runs a query.** A reindex is a new version next to the active one, and the API switches atomically. Results
+  are `ArrowStream`, decoded by the API: API servers are easy to add, ClickHouse servers are not. The frontend computes PnL.
 
-## Entity model
+## Indexer
 
-Source of truth: `schema.graphql`. Every event row carries `chainId`, `blockNumber`, `blockTimestamp`, `trxHash`,
-`trxFrom` (the EOA that sent the transaction, used to label zaps) and `logIndex`. Event row ids are
-`chainId-trxHash-logIndex`.
+One hand-edited `config.yaml` with 23 chains. `pnpm dev` and `pnpm start` use HyperSync with RPC fallback (hyperevm and
+metis are RPC only). `pnpm start:rpc` sets `ENVIO_RPC_FOR=sync`: every chain syncs over RPC, with no `ENVIO_API_TOKEN`.
+
+Tables are in `schema.graphql`, ClickHouse only by default. Event rows carry block and transaction fields, with `trxFrom` (the
+EOA) to label zaps. Handlers read only Postgres, so `Contract`, `Token`, `Balance`, `TokenSupply` and `SwapperRoute` are in
+both, and `ShareFlow` is Postgres only.
 
 ### Registry and on-chain facts
 
-- `Contract`: `kind` (VAULT, STRATEGY, BOOST, REWARD_POOL, CLM_MANAGER, CLM_STRATEGY, ERC4626_ADAPTER, LST_VAULT,
-  SWAPPER, TOKEN, UNKNOWN), `factory`, creation block / timestamp / transaction, `deployName` (from `*WithName` and
-  `ContractDeployed` events), `factsBlock` / `factsStatus` (OK or PARTIAL).
-- `Token`: on-chain `decimals`, `symbol`, `name`, `metadataStatus` (INVALID when the reads failed; retried with the facts) and
-  `isBeefyShare`. Every share-token kind gets a share `Token` row, boosts included: a boost is not an ERC-20, so its
-  row is INVALID and its decimals come from the BOOST_STAKED token.
-- `ContractLink`: `fromAddress`, `toAddress`, `relation`, `source` (READ or EVENT), `sinceBlock`. READ links come
-  from the one-time facts and start at the contract's creation block when known, else at the block of the event that
-  read them. EVENT links are appended by `UpgradeStrat` (VAULT_STRATEGY) and `AddReward` (REWARD_POOL_REWARD), so
-  history is kept. `vault.strategy()` is not read: the vault-to-strategy history is the STRATEGY_VAULT READ link of
-  each strategy plus the VAULT_STRATEGY EVENT links.
+- `Contract`: `kind`, `factory`, creation block, `deployName`, `factsBlock`, `factsStatus` (OK or PARTIAL), and the
+  [price facts](#price-facts-on-contract).
+- `Token`: on-chain `decimals`, `symbol`, `name`, `metadataStatus`, `isBeefyShare`. Every share-token kind gets a row. A
+  boost is not an ERC-20: its row is INVALID and its decimals come from the BOOST_STAKED token.
+- `ContractLink`: `relation`, `source`, `sinceBlock`. READ links come from the one-time facts. EVENT links are appended
+  by `UpgradeStrat` and `AddReward`, so history is kept. `vault.strategy()` is never read.
+- `contractRegister` handlers route a new address to its contract type, with no RPC. `onEvent` handlers write the row.
+- ClassicVaultFactory deploys vaults, strategies and boosts with one `ProxyCreated`. The kind comes from the transaction
+  input, then the static listing in config.yaml, then a classification read. A proxy of unknown kind is registered under
+  every candidate type.
+- The first established kind wins: only an UNKNOWN row is replaced. `ensureContract`, called by every product handler,
+  drops the event when the address has another kind or is blacklisted.
+- `ContractDeployed` is accepted only from ContractFactory addresses in config.yaml (none today): anyone can emit it.
+- LST vaults, swappers and `Token` share tokens are listed in config.yaml only. Never list want tokens: too much volume.
 
 ### Balances
 
-- `ShareTransfer`: every `Transfer` of a share token (classic vault, CLM manager, reward pool, ERC-4626 adapter, LST
-  vault, configured `Token`). `totalSupplyAfter` is set on mints and burns only.
-- `TimelineEvent` (`kind = BALANCE`): one row per balance side, with `delta`, `sharesAfter` and `source` (TRANSFER or
-  BOOST_STAKE). This is the step function the wrapper multiplies by prices.
-- `Balance`: current balance per `account x token` (running sum).
-- `TokenSupply`: running total supply per share token. Mint = transfer from 0x0, burn = transfer to 0x0.
-- `BoostStake`: boost `Staked` / `Withdrawn`. Each stake also writes a `BALANCE` `TimelineEvent` and updates `Balance` and
-  `TokenSupply` keyed on the boost address, because the balances API treats boosts as share tokens.
+- `ShareTransfer`: every `Transfer` of a share token. `totalSupplyAfter` is set on mints and burns only.
+- `TimelineEvent` (`kind = BALANCE`): one row per balance side ([other kinds](#timelineevent)).
+- `Balance` (account and token) and `TokenSupply`: running sums. A mint is a transfer from 0x0, a burn a transfer to 0x0.
+- `BoostStake`: boost `Staked` / `Withdrawn`. Boosts count as share tokens: each also updates `Balance` and `TokenSupply`.
 
-Rules (`src/lib/balances.ts`):
-
-- Every account except 0x0 gets `Balance` and `BALANCE` `TimelineEvent` rows: 0xdead, zaps and swappers included. Filtering
-  holders is the wrapper's job. 0x0 is tracked by `TokenSupply` instead.
-- A self-transfer or a zero-value transfer writes only its `ShareTransfer` row.
-
-Classic vault `Deposit` / `Withdraw` events are not indexed: they are share mints and burns, already captured by
-`ShareTransfer`.
+Every account except 0x0 gets `Balance` and `BALANCE` rows, 0xdead and zaps included. A self-transfer or zero-value
+transfer writes only its `ShareTransfer`. Classic vault `Deposit` / `Withdraw` are not indexed: they are mints and burns.
 
 ### CLM
 
-- `ClmDeposit` / `ClmWithdraw`: `user`, `shares`, `amount0`, `amount1` (deposits also `fee0`, `fee1`). This is the
-  exact underlying cost basis, with no price lookup.
-- `ClmTvl`: strategy `TVL(bal0, bal1)`.
-- `ClmPoolState`: raw `price()`, `range()` and `balancesOfPool()` of the strategy at each block with a CLM `TVL` or
-  `Harvest` event; `status` FAILED (failed fields unset) when a read reverts.
+`ClmDeposit`, `ClmWithdraw` (`user`, `shares`, `amount0`, `amount1`, fees on deposits: the cost basis), `ClmTvl`, and
+`ClmPoolState`: raw `price()`, `range()`, `balancesOfPool()` at each block with a `TVL` or `Harvest`.
 
 ### Rewards
 
-- `RewardNotified`: boost `RewardAdded` and reward-pool `NotifyReward` (`rewardToken` and `duration` for reward pools
-  only).
-- `RewardPaid`: boost and reward-pool claims. Boost reward tokens come from the BOOST_REWARD link.
+`RewardNotified` (boost `RewardAdded`, reward pool `NotifyReward`) and `RewardPaid` (claims; boost reward tokens come from
+the BOOST_REWARD link).
 
 ### Strategy activity
 
-- `Harvest`: classic `StratHarvest` (both ABI variants, see `src/config/classic/stratHarvest1`), CLM `Harvest`,
-  `HarvestRewards`, `ClaimedFees`, `ClaimedRewards`, distinguished by `kind`.
-- `FeesCharged`: `ChargedFees` v1 (beefy + liquidity fee) and v2 (call + beefy + strategist fee), classic and CLM.
-- `PauseChange`: strategy `Paused` / `Unpaused`.
+`Harvest` (classic `StratHarvest` in both ABIs, CLM `Harvest`, `HarvestRewards`, `ClaimedFees`, `ClaimedRewards`, told apart
+by `kind`), `FeesCharged` (`ChargedFees` v1 and v2) and `PauseChange`.
 
 ### Swapper
 
-- `SwapperRoute` (current route per `fromToken -> toToken`) and `SwapperRouteChange` (history) from `SetSwapInfo`.
-- `SwapperConfigChange`: `Initialized`, `SetOracle`, `SetSlippage`.
+`SwapperRoute` (current), `SwapperRouteChange` (history, from `SetSwapInfo`) and `SwapperConfigChange`.
 
-### Storage
+### Allowed eth_calls
 
-`config.yaml` stores event tables in ClickHouse only (the storage default). Entities that handlers read, and the
-current-state tables, opt into Postgres and ClickHouse with `@storage(postgres: true, clickhouse: true)`: `Contract`,
-`Token`, `Balance`, `TokenSupply`, `SwapperRoute`. Handlers can only read Postgres. ClickHouse tables are ordered for
-the wrapper's queries (`orderBy` on chain, token or contract, block, log index).
+Only reads that grow with the number of contracts, plus one per CLM TVL or Harvest block. All are cached, per-chain
+effects. Facts run once per contract, at `latest`, because they are immutable once initialized:
 
-## Allowed eth_calls
-
-Only reads whose count grows with the number of contracts, plus one per CLM TVL / Harvest block. All are Envio
-effects with `cache: true`, chain-scoped, inputs keyed on lowercase addresses.
-
-Facts, once per contract, read at `latest` (`src/effects/facts.effects.ts`, `src/effects/token.effects.ts`):
-
-| kind | reads | links |
+| Kind | Reads | Links |
 |---|---|---|
 | any token | `decimals()`, `name()`, `symbol()` | `Token` row |
 | VAULT | `want()`, else `token()` | VAULT_WANT |
@@ -111,183 +93,209 @@ Facts, once per contract, read at `latest` (`src/effects/facts.effects.ts`, `src
 | ERC4626_ADAPTER | `vault()` | ADAPTER_VAULT |
 | LST_VAULT | `asset()`, else `want()` | VAULT_WANT |
 
-- These values are immutable once the contract is initialized; an early block is wrong anyway (`want()` / `wants()`
-  return 0x0 until the strategy is initialized), so they are read at `latest`.
-- They are read as soon as the contract is known: at its factory creation event, or at the first handled event of
-  an address listed in config.yaml (`src/lib/registry.ts`). The preload pass issues them concurrently; the multicall
-  batcher (`src/lib/viem.ts`) merges concurrent reads at the same block or at `latest` into shared aggregate3 calls.
-- A complete answer is cached. An incomplete one (revert, or 0x0 where an address is expected) is not cached, sets
-  `factsStatus = PARTIAL`, and is retried by a later event at most once per 10 000 blocks. Token metadata of the
-  contract and of its linked tokens counts too: a metadata read that failed is not cached either and keeps the facts
-  PARTIAL, so the same retry reads it again (a failed call in the multicall is not always a revert: a public RPC under
-  load answers the same way). A boost's own metadata is the exception, as it is not an ERC-20. Per-event callers
-  (reward and swapper tokens) never re-read INVALID metadata.
-- Legacy vaults with broken `want()` use static facts (`src/config/classic/staticVaults.ts`), without an eth_call.
+- A complete answer is cached. An incomplete one, failed token metadata included (a public RPC under load fails like a
+  revert), sets `factsStatus = PARTIAL` and is retried at most once per 10 000 blocks.
+- Classification: `vault()`, `strategy()`, `rewardToken()`, once per proxy of unknown kind. Exactly one must succeed.
+- CLM pool state: once per `(strategy, block)`, pinned to the block. This is the only read that scales with events.
 
-Classification, once per ClassicVaultFactory proxy whose kind is not otherwise known (see "Registry and
-classification"): `vault()`, `strategy()`, `rewardToken()` in one multicall; exactly one must succeed. An UNKNOWN
-answer is not cached.
+### Known contracts
 
-CLM pool state, once per `(strategy, block)` with a `TVL` or `Harvest` event (`src/effects/clmPoolState.effects.ts`):
-`price()`, `range()`, `balancesOfPool()` pinned to the event block. A harvest and the TVL event of the same block
-share one read. This is the only read that scales with events.
+Static address lists only speed up a fresh index: Envio starts each chain with a few partitions. Factory events still write
+the rows and register anything missing. `pnpm known-contracts` verifies Beefy API candidates on chain and rewrites the
+`# generated` blocks. Changing static addresses requires a reindex, so regenerate only when planning one.
 
-## Registry and classification
+### Multichain isolation
 
-- Factories emit the creation events; `contractRegister` handlers route the new address to its contract type (no
-  effects there, so no RPC), and `onEvent` handlers write the `Contract` row and read its facts
-  (`src/handlers/factories.handlers.ts`).
-- ClassicVaultFactory deploys vaults, strategies and boosts with the same `ProxyCreated` event. The kind comes from,
-  in order: the transaction input (`cloneVault` -> VAULT, `booooost` -> BOOST; `cloneContract` clones anything and
-  calls through a multisig do not decode), the address's static listing in config.yaml, then the classification
-  read. A proxy of unknown kind is registered under every candidate type (ClassicVault, ClassicStrategy, ClassicBoost).
-- Kind precedence: the first established kind wins. An existing row is replaced only when its kind is UNKNOWN and
-  the new one is not, so a `ContractDeployed` row or a failed classification never overwrites a kind set by a Beefy
-  factory event or a classification read.
-- Kind guard: every product handler calls `ensureContract`, which drops the event when the address already has
-  another kind (a proxy registered under several types) or is blacklisted (`src/lib/blacklist.ts`; blacklisted
-  addresses are not registered either).
-- `ContractDeployed(bytes32,address)` is only accepted from ContractFactory addresses configured in config.yaml (none
-  today): anyone can emit it and clone addresses are predictable. Its contracts are UNKNOWN.
-- LST vaults, swappers and `Token` share tokens (mooBIFI, beTokens, BIFI) are listed in config.yaml only. Never list
-  want tokens as `Token` (volume).
+A slow chain must not stall the others, so set `ENVIO_PG_MAX_CONNECTIONS` to 4 or more everywhere and list the busiest chains
+first ([how Envio splits them](envio-3.14-notes.md#multi-process)). `src/perChain.test.ts` keeps the indexer per-chain:
+`disable_default_cross_chain: true`, no `@crossChain`, `crossChain: false` on every effect.
 
-## Deployment modes
+## Timeline and prices
 
-One `config.yaml` (hand-edited, except its `# generated` address blocks, known contracts below) and one
-`schema.graphql`. Storage is always Postgres + ClickHouse. The event source is an environment variable:
+The timeline is every action of an account on Beefy products, with its USD value. Envio's database `envio_<env>_N` holds
+`envio_history_TimelineEvent`, sorted by account, the product facts and `envio_chains`. Our database
+(`CLICKHOUSE_ANALYTICS_DATABASE`) holds `event_price_<N>`, `price_watermark_<N>` (with Envio's frontier per chain at each
+move), `deployments`, and the only objects the API reads: `user_timeline_api(account)`, `product_contracts_api`, `api_status`.
 
-| mode | how | sync |
+### TimelineEvent
+
+| Kind | Written by | Account |
 |---|---|---|
-| default | `pnpm dev`, `pnpm start` | HyperSync with RPC fallback; hyperevm (999) and metis (1088) RPC only |
-| RPC only | `pnpm start:rpc` or `ENVIO_RPC_FOR=sync` | every chain syncs over RPC (vendor-risk fallback) |
+| `BALANCE` | share token `Transfer`, boost stake and withdraw | each side of the balance change |
+| `MINT`, `BURN` | share token `Transfer` from or to 0x0 | the receiver, the sender |
+| `CLM_DEPOSIT`, `CLM_WITHDRAW` | CLM manager `Deposit`, `Withdraw` | the user |
+| `CLAIM` | reward pool and boost `RewardPaid` | the user |
 
-Each chain's rpc entry has `for: ${ENVIO_RPC_FOR:-fallback}`; with `sync` no HyperSync source is used and
-`ENVIO_API_TOKEN` is not needed. Checked with a live run: `sync` makes only RPC `eth_getLogs` requests. Unit tests
-simulate events and replay recorded RPC responses (`src/lib/rpcFixtures.ts`).
+- **Zap attribution** (`src/lib/timeline.ts`). An account that receives freshly minted shares and forwards the same value
+  gives the receiver a `MINT` at the forwarding log. An account that receives a value and burns it gives each sender a
+  `BURN` at its transfer log. The router keeps its row, no row is updated, and earlier legs live in `ShareFlow`.
+- **Invariants.** Ids are `chainId-trxHash-logIndex-account-kind`. A handler never deletes a `TimelineEvent` and an id never
+  changes account: a `DELETE` history row has empty data columns, so a read filtered on account would keep the old row.
+- **Rollbacks** need nothing: Envio deletes rolled-back rows, and reads stop at the committed checkpoint per chain.
 
-Known contracts. Static address lists only speed up a fresh index: Envio then starts each chain with a few address
-partitions instead of one per factory registration block. Factory events still write the `Contract` rows of known
-contracts (their re-registration is a no-op) and register anything missing from the lists. `pnpm known-contracts`
-(`scripts/knownContracts.ts`) builds the lists:
+### Indexer prices
 
-- candidates from the Beefy API: `/vaults` (classic vaults and their strategy), `/cow-vaults` (CLM managers and their
-  strategy), `/gov-vaults` (version 2 reward pools, older gov vaults), `/boosts`;
-- every candidate verified on chain at `latest` (multicalls, two rounds per chain) with the handlers' classification
-  (`src/lib/classify.ts`): a vault answers only `strategy()` and that strategy answers only `vault()`, pointing back
-  to it (the API's strategy is also kept when it points back); a CLM manager's `wants()` returns two tokens and its
-  `strategy()` has `vault()` = the manager; a reward pool answers `stakedToken()` and no classic detection call; a
-  boost answers only `rewardToken()` among them and has a `stakedToken()`. The contract's shape decides between reward
-  pool and boost (the API lists reward-pool contracts under `/boosts` too). Rejections are printed, blacklisted
-  contracts are skipped, and a chain whose reads fail keeps its current list;
-- the result replaces config.yaml's `# generated` blocks (sorted, minus hand-listed addresses), then the variants.
+`src/lib/headPrices.ts` keeps the latest share price per product in memory: `/mootokenprices` with `/vaults` for classic
+vaults, `/lps` with `/cow-vaults` for CLMs, and boosts and reward pools take the price of `Contract.productAddress`. Prices
+refresh every minute and mappings every 10 minutes; a failed fetch keeps the previous data, and handlers never wait. It is
+not an Envio effect, because effects cache by input and this value depends on when it is read.
 
-Changing static addresses changes the stored config, which requires a reindex (`-r`): regenerate the lists only when
-planning one, and commit the result. They are never fetched at deploy time. ERC-4626 adapters (not in the API) and
-contracts deployed after the last run are registered dynamically.
+An event gets a price only if, when its handler runs, it is at most 10 minutes old, the price is at most 15 minutes old (a
+stuck refresh stops pricing instead of spreading an old price), and the contract's price facts are known. The value is not
+deterministic, which is fine because the watermark always replaces it. `headPrice` and `headPriceAt` are unset when not
+priced; `headProduct`, `headDecimals`, `headProductKind` and `headContractKind` are set whenever the facts are known. Events
+with no indexer price get a provisional stored row from the next `advance`, so they show `PENDING` for at most one period.
 
-Multichain isolation. Envio 3.14 runs every chain in one process unless `ENVIO_PG_MAX_CONNECTIONS` is 4 or more (default
-2); it then starts min(chains, connections / 2, 4) worker processes, dealing chains out in config order. In a single
-process, a slow or erroring chain stalled the healthy ones: Fraxtal and Lisk (public RPCs, no HyperSync) stopped fetching
-at about 72 000 processed events in total, for hours, while Monad crawled behind a flaky node (3 chains, 3 runs, also with
-`ENVIO_IN_MEMORY_OBJECTS_TARGET` and `ENVIO_INDEXING_MAX_BUFFER_SIZE` at 100 million, so not a buffer cap). With
-`ENVIO_PG_MAX_CONNECTIONS=8` the same three chains ran for 3 hours with no stall, Fraxtal and Lisk going well past the
-old stall points while Monad stayed slow. Set it in every environment; list the busiest chains first in config order.
+### Price facts on Contract
 
-RPC partition size. With the known-contract lists, a chain's static addresses form one `eth_getLogs` address filter of
-up to 5 000 addresses by default, which rpc.beefy.com answers slower than Envio's 20 s query timeout (BSC with 926 and
-Arbitrum with 2 354 addresses timed out). The RPC scripts therefore set `MAX_PARTITION_SIZE=250`. Measured on Base, RPC
-only, 3 minutes, same rate-limited endpoint: dynamic registration without static lists 175 events; static lists with
-partitions of 5 000 / 50 / 250 addresses 7.4k / 17.8k / 21.1k events. The runs were noisy (140 to 280 HTTP 429 each)
-but consistent in direction; re-measure with a production RPC token.
+Handlers cannot read `ContractLink` (ClickHouse only), so `Contract` carries these, set in `src/lib/registry.ts`:
+`productAddress` (the contract itself for a vault or CLM manager, the staked product for a boost or reward pool),
+`priceDecimals` (want decimals for a classic vault, share decimals otherwise) and `productKind`. The rule is the one of
+`productFactsCtes` (`packages/clickhouse/src/events.ts`), the source of truth for stored rows.
 
-Verified end to end: Lisk (1135) indexed RPC-only from its first block to block 39 000 000 through the public
-`rpc.api.lisk.com` and the pacer (`scripts/rpcPacer.ts`), then compared with the chain by `scripts/correctness.ts`: 14
-checks passed, including 31 185 share transfers and 6 160 CLM deposits and withdrawals matched one to one, and every
-`Balance` and `TokenSupply` row equal to `balanceOf` / `totalSupply` at the end block. Two factory clones that were
-never initialized on chain stay PARTIAL by design.
+### Read path
 
-Production storage (events in ClickHouse, current-state entities in Postgres, `config.yaml` storage directives)
-verified on the same Lisk range, once as a single process and once with two worker processes (Lisk plus Fraxtal to
-6 000 000): every ClickHouse table equals the verified Postgres-only rows exactly (all 20 tables, field by field), the
-five Postgres entities (`Balance`, `Contract`, `SwapperRoute`, `Token`, `TokenSupply`) equal them too, no event table
-exists in Postgres, and each ClickHouse event history table has one row per event id. Events came from HyperSync for
-speed; the sources were already shown to produce identical rows.
+1. **Events**: filter by account first (the sort key), keep rows at or below the committed checkpoint of their chain, take
+   the latest row per id, keep it if it is a `SET`.
+2. **Price**: the stored row matching `event_id` and timestamp; else the indexer price (`PROVISIONAL`); else `PENDING`. USD
+   values exist for `BALANCE` rows only.
 
-RPC sync cost: one `eth_getBlockByNumber` per block with a handled event, one `eth_getTransactionByHash` per
-transaction (for `transaction.from`, and `input` on ClassicVaultFactory events). Details in
-`docs/envio-3.14-notes.md`, "RPC sync cost model".
+### Stored prices
 
-## Freshness: user action to API
+`event_price_<N>` holds every event below the watermark, whatever its flag (a row left out would stay unpriced forever), and
+the events above it that the indexer did not price. `advance` runs for each live version, at one frontier:
 
-Measured on Base, live at the chain head, HyperSync + the production storage layout (events in ClickHouse), from a
-laptop with a **free HyperSync dev token** and a public RPC for the contract reads. The clock is the block timestamp
-(second resolution) against the moment the row is readable in ClickHouse.
+1. **Late rows**: events committed since the recorded frontier with a timestamp below the watermark.
+2. **Retry window**: events of the last `REPRICE_RETRY_DAYS` below the watermark with no final row (none, a flag other than
+   `OK` or `STALE`, or incomplete facts). This catches late prices and links, and rows replayed after a rollback.
+3. **Watermark**: events between the old and new watermark. The first advance starts at the day of the oldest event.
+4. **Provisional rows**: events at or above the new watermark without `headPrice`, stored only if the result changed.
 
-- **Floor, not rate limited:** 0.5 to 1.5 s from block time to a readable row. Once the indexer knows a block, processing
-  and the ClickHouse write take under 0.5 s: 571 HyperSync log queries took 22 s in total (about 39 ms each), the storage
-  writes 3.8 s in total.
-- **With the free token:** median head lag 7.8 s, p90 31.8 s, p99 40.9 s, maximum 43.3 s, with five stalls of 7 to 43 s in
-  five minutes. Cause: HyperSync answered 429 (264 "rate-limited, retry in 31 to 41 s" warnings in the indexer log), and
-  the indexer backs off for the whole delay. HyperSync's height endpoint itself is at most 1 s behind a public RPC
-  (210 blocks), so the source is not behind; the token tier is. A production token should remove these stalls; this is
-  not measured yet.
-- `MAX_PARTITION_SIZE=250` (the RPC-mode setting) on HyperSync split Base's ~2 700 static addresses into 16 partitions
-  that never completed on this token: leave it unset for HyperSync (one partition).
-- Sample sizes are small (4 to 5 event blocks per run: Beefy activity on Base is sparse at the block level); the head lag
-  figures come from 1 200 samples of the progress block time.
+- **Watermark rule**: `min(now - WATERMARK_MIN_AGE_HOURS, freshest price of each required source - 6 h)`, sources from
+  `CLICKHOUSE_WATERMARK_PRICE_SOURCES`. If a source stops, the watermark stops: nothing is final with a stale price.
+- **Bounded statements.** Each covers at most `ADVANCE_STEP_DAYS` and about `REPRICE_MAX_EVENTS` events, with per-query limits,
+  so its cost never depends on the length of history.
+- **Repricing history.** `rewind` moves the watermark back. The next advances reprice the rows above it without an indexer
+  price as provisional rows, then store them as final as the watermark catches up. A `rewind` during an advance stops it (`superseded`), through a compare-and-set on `moved_at`. `reprice`
+  rewrites a range without moving the watermark. `FINAL` hides the old rows until a merge.
 
-End to end for a public, Cloudflare-fronted API, with a production HyperSync token (assumed) and a tail read live from the
-raw tables (no refresh interval in the path):
+### Prices
 
-| stage | adds |
+The SQL is `pricedEventsCtes` (`packages/clickhouse/src/pricing.ts`). `analytics.token` maps the product's share token to one
+`asset_id`, never its want's. Prices from `analytics.asset_price_5m` are interpolated linearly between the nearest price each
+side, each within 48 h, so an event's price never depends on the other events in the statement. `share_to_usd` is per
+10^(want decimals) share units for a classic vault, 10^(share decimals) for a CLM. Every pick is deterministic.
+
+| Flag | Stored | Meaning |
+|---|---|---|
+| `OK` | yes | interpolated between prices at most 6 h apart |
+| `STALE` | yes | interpolated between prices further apart |
+| `EXTRAPOLATED` | yes | a price on one side only, carried flat |
+| `MISSING` | yes | no price within reach, USD 0 |
+| `PROVISIONAL` | read only | the indexer's price (`price_source = 'indexer'`, `price_resolution = 'latest'`) |
+| `PENDING` | read only | no stored row and no indexer price, USD 0 |
+
+## Versions and operations
+
+`building → ready → active → retired → dropped`, recorded in `deployments`.
+
+- **building**: Envio indexes into `<CLICKHOUSE_ENVIO_DATABASE_PREFIX><N>`, the only name `deploy` accepts, and the worker
+  fills the version's tables. RPC and Beefy API calls double during a reindex.
+- **ready**: set by hand once `readiness <N>` looks right. **active**: the API views point at it.
+- **retired**: kept for a grace period, so a switch can be undone with `switch <old> --force`.
+- **dropped**: its tables, then its Envio database, are gone. Envio's Postgres schema stays.
+- **Gates.** `ready` and `switch` refuse a version with no indexer price columns or with `PENDING` events older than
+  `PENDING_GRACE_MINUTES`. `switch` also refuses a version that is not `ready`. `--force` overrides these.
+- **Switch.** States are recorded first, so a switch that dies halfway leaves nothing cleanup could drop under the API, and
+  rerunning converges. Each view is built as `<name>_next` and swapped with `EXCHANGE TABLES`: `CREATE OR REPLACE` with a
+  definer leaves dependency records behind.
+- **Cleanup.** Every step is recorded and safe to rerun. A version one of our views still names is skipped. Only `<prefix><N>`
+  of the version's own N is dropped, never a system, ours or price database. Unknown objects are reported, never dropped.
+- **Access.** `beefy_api` reads the three views only, under a readonly [profile](#limits). `beefy_pipeline` (worker, CLI)
+  creates and drops in our database, reads and drops `<prefix>*`, and reads the price tables. The views run as
+  `CLICKHOUSE_DEFINER`, so the API needs no other grant. The indexer's user is not managed here.
+
+| CLI command (`packages/clickhouse/src/cli.ts`) | Does |
 |---|---|
-| transaction waits for its block | up to one block time (Base 2 s, Ethereum 12 s) |
-| indexer to readable in ClickHouse | about 1 to 2 s (measured floor), more if the source is throttled |
-| ClickHouse query cache | its TTL (set to a few seconds) |
-| Cloudflare `s-maxage` on the tail endpoint | its TTL (set to 5 to 10 s) |
-| browser `max-age` | 0 to a few seconds |
-| prices | up to 15 minutes plus gaps; they only move the USD value, never the appearance of the position |
+| `migrate` | create our database and `deployments` (the first `switch` creates the views) |
+| `access [envioPrefix]` | create users, profiles and quota (administrator; `PIPELINE_PASSWORD`, `API_PASSWORD`) |
+| `deploy <N> <envioDatabase>`, `list` | create version N's tables and register it; list versions |
+| `readiness <N>`, `ready <N> [--force]` | report, then mark N ready |
+| `switch <N> [--force]` | point the API at N, retire the previous version |
+| `advance`, `cleanup [--grace-hours H]` | run a worker job once |
+| `rewind <N> <time>`, `reprice <N> <from> <to>` | see [Stored prices](#stored-prices) |
 
-So a position change shows up in the API after roughly 5 to 15 s with those TTLs, 30 s as a safe maximum, and the TTLs are
-the dial. Not measured: anything behind the indexer (no API, views or Cloudflare exist yet), and any production token.
+Worker jobs (`WORKER_JOBS`): `advance` every 15 min, `cleanup` daily with 48 h grace, `version-status` every 5 min. They warn on
+a watermark older than 2 days, a version `building` for 7 days, no active version, over 50% of the last hour's events without an
+indexer price, `PENDING` events older than 30 minutes, and refused drops. Variables and defaults are in each `.env.example`.
 
-## Wrapper responsibilities
+SQL is built only with the `sql` tag (`packages/clickhouse/src/sql.ts`): values through `param`, names through `ident`. A plain
+string fails to compile, and the `beefy/no-untagged-sql` oxlint rule catches what types cannot see.
 
-- **Interactions**: group `ShareTransfer`, `BoostStake`, `ClmDeposit` / `ClmWithdraw` and `RewardPaid` by `trxHash`
-  and label DEPOSIT, WITHDRAW, STAKE, UNSTAKE, ZAP_IN, ZAP_OUT (`trxFrom` is not the share receiver, or a zap contract
-  is involved), TRANSFER_IN / TRANSFER_OUT, CLAIM.
-- **Value over time**: the `BALANCE` rows' `sharesAfter` step function x share price x underlying USD price, joined at query
-  time. No per-position snapshots.
-- **Cost basis**: CLM from `ClmDeposit` amounts; classic from shares x the nearest share-price point x the underlying
-  price.
-- **Prices**: the databarn ClickHouse holds cleaned asset prices (`analytics.asset_price_5m`, mapped from a token
-  by `analytics.token`; the hourly and daily tables are aggregates of it). An event older than a watermark (about a day) gets a stored price, interpolated
-  between the surrounding points, with a flag saying how it was found (`OK`, `EXTRAPOLATED`, `STALE`, `MISSING`). A
-  newer event carries the latest Beefy API price the indexer had when it wrote it (`PROVISIONAL`), or is `PENDING`;
-  nothing is priced at read time. See [timeline-redesign.md](timeline-redesign.md) (target) and
-  [timeline-migration.md](timeline-migration.md) (current state, steps).
-- **Timeline**: the indexer writes `TimelineEvent`, one row per account and kind (balance sides, mints and burns
-  including zap attribution through `ShareFlow`, CLM deposits and withdrawals, claims), sorted by account so the API
-  reads it in place.
-- **Gap rule**: prices have 15 minute resolution and can miss points. Interpolate between the nearest points either side
-  when they are at most 6 hours apart (flagged `STALE` beyond that); with one side only, use it flat within 6 hours
-  (`EXTRAPOLATED`); otherwise the value is 0 and flagged `MISSING`. Every priced figure says which rule produced it.
-- **Misconfiguration guard**: compare Beefy API decimals and token links with `Token` and `ContractLink`; on mismatch
-  trust the chain and flag the vault.
+## Public API and caching
 
-## Coverage of the existing APIs
+`GET /v1/users/{address}/timeline` (`apps/api`, Hono) is public, so the worst case is a scraper enumerating addresses. Cloudflare
+honours `Cache-Control` and nothing else: no rules, custom keys or purges. Every other defence lives in the origin, and overload
+degrades to stale data or a clean `429` or `503`.
 
-Checked against `existing-apis/beefy-balances-api` and `existing-apis/beefy-clm-api` (local reference copies,
-gitignored). Every endpoint can be served from these tables, with these differences:
+No parameters and no pagination: the whole history in one response, one cache entry per user. Items are newest first, one per
+transaction and product, with `actions[]`, share balances, a `price` object ([flags](#prices)) and USD values (`/openapi.json`).
 
-- CLM price, range and main / alt split come from `ClmPoolState`.
-- Harvest and timeline USD figures use 15-minute TimescaleDB prices instead of exact on-chain oracle prices.
-- Indexes for the main query patterns: balance at a block (`TimelineEvent (contract, account, blockNumber, logIndex)`),
-  top holders (`Balance (token, balance desc)`), investor timeline (`TimelineEvent`, sorted by account), harvests since a time
-  (`Harvest (chainId, blockTimestamp)`).
+### Cache headers
 
-Known gaps:
+An active user has an event in the last 2 hours. Origin lifetimes are jittered ±20 %, plus 1 h kept for errors.
 
-- The classic underlying breakdown (LP reserves, want total supply, breakdown token prices) is dropped: no event
-  carries it.
+| Response | `Cache-Control` | Origin fresh / stale |
+|---|---|---|
+| active user | `public, max-age=5, s-maxage=5, stale-while-revalidate=5, stale-if-error=3600` | 4 s / none |
+| any other user | `public, max-age=30, s-maxage=60, stale-while-revalidate=300, stale-if-error=86400` | 45 s / 60 s |
+| user with no events (`200`, empty) | `public, s-maxage=60, stale-while-revalidate=300` | 45 s / 60 s |
+| old copy after a failed refresh | `public, max-age=5, s-maxage=5, stale-if-error=3600` | |
+| `308` to the canonical URL | `public, max-age=3600, s-maxage=86400` | |
+| `400` not an address | `public, max-age=86400, s-maxage=86400` | |
+| `404` zero, burn or Beefy product contract | `public, max-age=3600, s-maxage=3600` | |
+| `413` too many rows | `public, s-maxage=300` | 5 min |
+| `429`, `503`, `504` | `no-store` | |
+
+A data fix reaches users within the lifetime, normally a minute. The ETag hashes the items only, and a hit answers `304` from
+memory. The cache key holds the active version, read every 10 s, so a switch never serves old timelines.
+
+### The origin
+
+Cloudflare keys on the full URL, so any query string or upper-case address gets a `308` from memory: cache busting ends there.
+Then, in order: per-client rate limit, in-process LRU (a stale entry is served while one refresh runs), per-client then global
+miss budgets, single-flight, circuit breaker, concurrency limiter, and the build, which keeps a running share sum per product and
+gzips once. On failure an old copy beats an error; otherwise a `503` with `Retry-After: 5`.
+
+`CF-Connecting-IP` is believed only when the hop that reached us is inside Cloudflare's ranges (`CLIENT_IP`, list updated by hand
+in `apps/api/src/http/clientIp.ts`). Each instance enforces its own buckets. `/health` and `/metrics` need `OPS_TOKEN`.
+
+### Limits
+
+Defaults, all in `apps/api/.env.example`: 60 requests a minute per client (burst 20); 20 misses a minute per client (burst 10);
+1500 misses a minute overall (burst 100); 4 ClickHouse queries in flight, a queue of 64, 250 ms wait; 3.5 s query and 10 s request
+timeouts; 10 000 rows per account, then `413`; a 128 MB cache. The breaker opens for 10 s after 5 failures, then lets one probe.
+The backstop is the API user's readonly profile (`packages/clickhouse/src/access.ts`): 3 s, 2 M rows, 256 MiB read, 1 GB memory, 4
+threads, 16 concurrent queries, and a quota of 3000 queries and 3 G rows a minute.
+
+## Freshness
+
+Real zap deposits into a reward pool on MegaETH with an indexer price, active cache of 5 s, indexer at the head, one sample
+per refresh rate, behind a simulated browser cache and CDN (`pnpm watch-timeline`). Real Cloudflare and production RPCs are
+not measured.
+
+| Step | Seconds after the block |
+|---|---|
+| indexed and readable in ClickHouse | 3 |
+| seen by a user refreshing every 15 s | 14.7 |
+| seen by a user refreshing every 30 s | 23.8 |
+
+## Open questions
+
+1. A real rollback: can a reader filtering on `envio_chains` see a row Envio is about to delete? Only simulated so far.
+2. `ready` stays manual: nothing compares event counts between versions or checks that Envio reached the chain head.
+3. Indexer price unit: confirm on a vault whose want does not have 18 decimals that the API price matches analytics.
+4. Products the Beefy API does not list rely on provisional rows, which lag with the analytics tables. Is that fine?
+5. Claims have no USD value (`claims[].usd` is null). They need reward token prices.
+6. Cloudflare: that it caches `200` JSON and `308`s, honours `stale-while-revalidate` and collapses concurrent misses.
+7. The response has not been compared with a databarn v1 timeline sample.

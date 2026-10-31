@@ -1,14 +1,13 @@
 # Beefy raw-events indexer
 
 An [Envio HyperIndex](https://docs.envio.dev) 3.14 indexer that records raw on-chain facts about Beefy products on
-22 EVM chains: share transfers and running balances, boost stakes, CLM deposits / withdrawals and pool state, rewards,
+23 EVM chains: share transfers and running balances, boost stakes, CLM deposits / withdrawals and pool state, rewards,
 harvests, fees, pauses and swapper routes, plus a registry of Beefy contracts with their on-chain links and token
-metadata. Amounts are raw integers; prices, positions and PnL are computed by a separate wrapper service.
+metadata. Amounts are raw integers; prices, positions and PnL are computed downstream.
 
-- [docs/architecture.md](../../docs/architecture.md): principles, entity model, allowed eth_calls, deployment modes, wrapper
-  responsibilities, API coverage and known gaps.
-- [docs/envio-3.14-notes.md](../../docs/envio-3.14-notes.md): Envio 3.14.1 reference (config, handlers, effects, testing,
-  running, RPC cost model).
+- [docs/architecture.md](../../docs/architecture.md): entity model, allowed eth_calls, deployment, the timeline and its
+  prices, versions, the public API.
+- [docs/envio-3.14-notes.md](../../docs/envio-3.14-notes.md): Envio 3.14.1 gotchas and the settings we rely on, RPC cost model.
 - `schema.graphql`: the tables.
 
 ## Quick start
@@ -50,8 +49,9 @@ The event source is chosen per run with an environment variable, not a second fi
 | RPC only | `pnpm start:rpc`, or `ENVIO_RPC_FOR=sync` | every chain syncs over its RPC; no HyperSync and no `ENVIO_API_TOKEN` |
 
 `ENVIO_RPC_FOR` fills the `for:` of each chain's rpc entry (`${ENVIO_RPC_FOR:-fallback}` in config.yaml). All scripts set
-`ENVIO_PG_MAX_CONNECTIONS=8` (override with the env var), which makes Envio run one worker process per chain (see
-"Multichain isolation" in [docs/architecture.md](../../docs/architecture.md)); production needs it too. `start:rpc` also
+`ENVIO_PG_MAX_CONNECTIONS=8` (override with the env var), which splits the chains over up to 4 worker processes (see
+"Multichain isolation" in [docs/architecture.md](../../docs/architecture.md)); production needs it too. Chains that
+share a worker are kept within 20% of each other's progress; for one process per chain, use `envio start --chain`. `start:rpc` also
 sets `MAX_PARTITION_SIZE=250`. The type check (`pnpm test:ts`) uses whichever codegen ran last (`pnpm codegen`).
 Switching mode on one Postgres schema is fine; a changed config or schema needs `-r` (or a separate `ENVIO_PG_SCHEMA`).
 
@@ -59,17 +59,17 @@ Switching mode on one Postgres schema is fine; a changed config or schema needs 
 
 Known Beefy contracts are listed statically in config.yaml so a fresh index starts each chain with a few address
 partitions. The lists come from the Beefy API and every entry is verified on chain at `latest` (details in
-docs/architecture.md); the factory handlers still register anything missing.
+[docs/architecture.md](../../docs/architecture.md#known-contracts)); the factory handlers still register anything missing.
 
 Regenerating changes static addresses, which changes the stored config and **requires a reindex**: run it only when
-planning one, then commit config.yaml and the variants.
+planning one, then commit config.yaml.
 
 ```bash
 pnpm known-contracts             # all chains (or chain ids as arguments); needs ENVIO_RPC_URL_<chainId> in .env
 pnpm codegen
 ```
 
-It takes about 20 seconds for the 22 chains and rewrites config.yaml's `# generated` blocks and the variants.
+It takes about 20 seconds and rewrites config.yaml's `# generated` blocks.
 
 ## Tests
 
@@ -107,9 +107,13 @@ front of the RPC and point `ENVIO_RPC_URL_<chain>` at it (`http://127.0.0.1:<por
 pnpm rpc-pacer --upstream https://rpc.api.lisk.com --port 8546 --rps 10 --max-rps 12 --concurrency 8
 ```
 
-It paces with an adaptive rate (halved on rate limits, at most once per burst, raised after successes), retries
-rate-limited and failed requests, and rebuilds `eth_getTransactionByHash` answers from the full block when a node
-returns `null` for an old transaction. Production uses rpc.beefy.com (eRPC), which does this upstream.
+It paces each upstream with its own adaptive rate (halved on rate limits, at most once per burst, raised after
+successes), concurrency cap and backoff. With several upstreams of the same chain (`--upstream <url>,<url>`), each
+request goes to the one free soonest, so their rates add up. A rate-limited or failed request is retried on another
+upstream. An `eth_getLogs` one upstream refuses for its block range goes to the others, and Envio only gets the refusal
+when all of them refuse it, so give Envio's `interval_ceiling` the widest range any upstream accepts. It also rebuilds
+`eth_getTransactionByHash` answers from the full block when a node returns `null` for an old transaction. Every
+upstream must serve archive state. Production uses rpc.beefy.com (eRPC), which does this upstream.
 
 ## Integrity audit
 

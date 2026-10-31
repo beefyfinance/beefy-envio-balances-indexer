@@ -7,8 +7,7 @@
  * classification the factory handlers use (src/lib/classify.ts) plus the links that tie a product together. Only
  * confirmed contracts are kept; rejections are printed. Blacklisted contracts (src/lib/blacklist.ts) are skipped.
  *
- * The result replaces the `# generated` blocks of config.yaml (sorted, deterministic), then the config variants are
- * rewritten. Changing static addresses changes the stored config, which requires a reindex: run this only when
+ * The result replaces the `# generated` blocks of config.yaml (sorted, deterministic). Changing static addresses changes the stored config, which requires a reindex: run this only when
  * planning one, and commit the result. Chains whose reads fail keep their current list.
  *
  * Usage: pnpm known-contracts [chainId ...]   (default: every chain in config.yaml; needs ENVIO_RPC_URL_<chainId>)

@@ -59,6 +59,7 @@ export type CatalogProduct = {
 /** Beefy `chain` / `network` name → EVM chain id. */
 const BEEFY_NETWORK_TO_CHAIN_ID: Readonly<Record<string, number>> = {
     arbitrum: 42161,
+    arc: 5042,
     aurora: 1313161554,
     avax: 43114,
     base: 8453,

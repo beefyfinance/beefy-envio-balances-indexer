@@ -20,6 +20,7 @@ export const CHAINS = [
     { id: 4326, key: 'megaeth' },
     { id: 4663, key: 'robinhood' },
     { id: 5000, key: 'mantle' },
+    { id: 5042, key: 'arc' },
     { id: 8453, key: 'base' },
     { id: 9745, key: 'plasma' },
     { id: 42161, key: 'arbitrum' },

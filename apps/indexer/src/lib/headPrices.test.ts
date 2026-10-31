@@ -154,8 +154,8 @@ describe('head price cache', () => {
     });
 
     it('refreshes prices every minute and mappings every 10 minutes', async () => {
-        const { fetch, calls } = stubFetch(() => ({}));
-        // no retries: every answer here fails, and the count is of refreshes
+        const { fetch, calls } = stubFetch(() => mappings);
+        // no retries: every price answer here fails, and the count is of refreshes
         const cache = createHeadPriceCache({ fetch, retryDelaysMs: [], onError: () => undefined });
         vi.useFakeTimers();
         try {
@@ -169,6 +169,20 @@ describe('head price cache', () => {
         // the first fetch, then one per period
         expect(count('/mootokenprices')).toBe(11);
         expect(count('/vaults')).toBe(2);
+    });
+
+    it('asks for the mappings again with the next prices when the first fetch failed', async () => {
+        const { fetch, calls } = stubFetch(() => ({}));
+        const cache = createHeadPriceCache({ fetch, retryDelaysMs: [], onError: () => undefined });
+        vi.useFakeTimers();
+        try {
+            cache.start();
+            await vi.advanceTimersByTimeAsync(60_000);
+            cache.stop();
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(calls.filter((call) => call === '/vaults')).toHaveLength(2);
     });
 
     it('names every configured chain as the Beefy API does', () => {

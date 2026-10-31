@@ -1,5 +1,5 @@
 /**
- * `TimelineEvent`: everything an account did, one row per account and kind (docs/timeline-redesign.md).
+ * `TimelineEvent`: everything an account did, one row per account and kind (docs/architecture.md).
  *
  * - BALANCE: each side of a balance change (src/lib/balances.ts).
  * - MINT / BURN: a share token transfer from 0x0 marks the receiver, one to 0x0 the sender.

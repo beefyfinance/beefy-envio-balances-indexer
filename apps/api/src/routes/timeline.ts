@@ -34,7 +34,7 @@ const ItemSchema = z
             share_to_usd: z.number(),
             flag: z.enum(timelinePriceFlags()).openapi({
                 description:
-                    'OK is interpolated between two 5 minute prices at most 6 hours apart; STALE between prices further apart (each within 48 hours); EXTRAPOLATED carried flat from the one price within 48 hours; MISSING no price (USD 0). Newer than about a day the price is provisional and replaced later: PROVISIONAL is the latest Beefy API price the indexer had (source indexer); PENDING not priced yet (USD 0, for at most a few minutes)',
+                    'OK is interpolated between two 5 minute prices at most 6 hours apart; STALE between prices further apart (each within 48 hours); EXTRAPOLATED carried flat from the one price within 48 hours; MISSING no price (USD 0). Newer than about a day the price is provisional and replaced later: PROVISIONAL is the latest Beefy API price the indexer had (source indexer); PENDING not priced yet (USD 0, until the next advance, at most about 15 minutes)',
             }),
             source: z.string().openapi({
                 description: 'The 5 minute price source, indexer for the indexer price, empty when MISSING or PENDING',

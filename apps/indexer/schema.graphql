@@ -6,9 +6,8 @@
 #   they are unique across chains in ClickHouse.
 # - Event rows carry blockNumber, blockTimestamp, trxHash, trxFrom (EOA sender, labels zaps), logIndex and the
 #   emitting contract. Event ids: `chainId-trxHash-logIndex`.
-# - Storage: entities without a storage directive follow the config default (ClickHouse only in config.yaml,
-#   Postgres in config.local.yaml). Entities that handlers read, and current-state tables, are stored in both.
-#   schema.local.graphql is this file without storage directives (generated: `pnpm config:generate`).
+# - Storage: entities without a storage directive go to ClickHouse only (config.yaml). Entities that handlers read, and
+#   current-state tables, are stored in Postgres too.
 # - Block numbers use `@config(precision: 20)` so ClickHouse keeps them numeric (sortable).
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -54,7 +53,7 @@ type Contract @storage(postgres: true, clickhouse: true) {
   factsBlock: BigInt @config(precision: 20)
   factsStatus: FactsStatus
   """
-  Price facts (docs/timeline-redesign.md "Price facts on Contract", the rule of productFactsSelect): the product whose
+  Price facts (docs/architecture.md "Price facts on Contract", the rule of productFactsCtes): the product whose
   share price prices this contract's rows (the contract itself for a vault or CLM manager, the staked product for a
   boost or reward pool), and the decimals that price is per (want decimals for a classic vault, share decimals
   otherwise), and the product's kind. `productAddress` is set as soon as known; `priceDecimals` and `productKind`
@@ -288,7 +287,7 @@ type RewardPaid @storage(clickhouse: { orderBy: ["chainId", "contract", "blockNu
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# User timeline (docs/timeline-redesign.md)
+# User timeline (docs/architecture.md)
 # ---------------------------------------------------------------------------------------------------------------------
 
 enum TimelineKind {
@@ -307,7 +306,7 @@ through a router in the same transaction), the CLM rows carry the underlying amo
 Fields that do not apply to a kind are '' or 0.
 """
 type TimelineEvent
-  # Postgres only (config.local.yaml): the balance checks of scripts/correctness.ts read BALANCE rows per token
+  # Postgres only: the balance checks of scripts/correctness.ts read BALANCE rows per token
   @index(fields: ["contract", "account", "blockNumber", "logIndex"])
   @storage(clickhouse: { orderBy: ["account", "chainId", "blockNumber", "logIndex"] })
 {
@@ -333,7 +332,7 @@ type TimelineEvent
   logIndex: Int!
   trxHash: String!
   """
-  Indexer price (docs/timeline-redesign.md "Indexer prices"): the Beefy API share price of `headProduct` cached when
+  Indexer price (docs/architecture.md "Indexer prices"): the Beefy API share price of `headProduct` cached when
   the handler ran, per 10^headDecimals share units, fetched at `headPriceAt`. Set only on events indexed within 10
   minutes of their block with a price at most 15 minutes old (and known price facts); not deterministic (a reindex
   writes another value or none).
@@ -341,7 +340,7 @@ type TimelineEvent
   headPrice: Float
   headPriceAt: Timestamp
   """
-  Price facts of `contract` when the handler ran (as productFactsSelect: the product, the decimals its price is per,
+  Price facts of `contract` when the handler ran (as productFactsCtes: the product, the decimals its price is per,
   the product's kind and the contract's kind: VAULT, CLM_MANAGER, BOOST or REWARD_POOL), whether or not the event got
   a price; unset while the contract's price facts are not known.
   """
