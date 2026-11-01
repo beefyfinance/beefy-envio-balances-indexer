@@ -5,8 +5,10 @@ import {
     ContractFunctionZeroDataError,
     createPublicClient,
     defineChain,
+    HttpRequestError,
     http,
     type PublicClient,
+    TimeoutError,
     type Chain as ViemChain,
 } from 'viem';
 import {
@@ -35,6 +37,7 @@ import {
 } from 'viem/chains';
 
 import { indexerConfig } from './config';
+import { describeError } from './errors';
 import { createFixtureFetch } from './rpcFixtures';
 
 const hyperevm = defineChain({
@@ -125,6 +128,19 @@ const isWholeRequestFailure = (results: MulticallResultEntry[]) => {
     return results.length > 1 || !isContractAnswer(first.error);
 };
 
+/** The longest wait between two attempts at a group during an RPC outage. */
+const OUTAGE_MAX_DELAY_MS = 60_000;
+
+/** The request got no answer, or the node could not serve it for now: a later attempt can get through. */
+const isOutage = (error: unknown) =>
+    error instanceof BaseError &&
+    error.walk(
+        (cause) =>
+            cause instanceof TimeoutError ||
+            (cause instanceof HttpRequestError &&
+                (cause.status === undefined || cause.status === 408 || cause.status >= 500))
+    ) !== null;
+
 const packGroups = (groups: PendingGroup[], maxCalls: number) => {
     const chunks: PendingGroup[][] = [];
     let current: PendingGroup[] = [];
@@ -159,12 +175,16 @@ const createBlockMulticallBatcher = ({
     deploylessAt,
     maxCalls,
     mergeWaitMs,
+    retryDelayMs,
+    logger,
 }: {
     client: PublicClient;
     mergeGroups: boolean;
     deploylessAt: (blockNumber: bigint) => boolean;
     maxCalls: number;
     mergeWaitMs: number;
+    retryDelayMs: number;
+    logger: Logger;
 }) => {
     const queues = new Map<BlockKey, PendingGroup[]>();
 
@@ -185,25 +205,44 @@ const createBlockMulticallBatcher = ({
         }
     };
 
+    /**
+     * One group, on its own. A throw in an effect stops the indexer, and the block range can't be retried by Envio once
+     * its handler runs, so an RPC outage is waited out here, for as long as it lasts: `chain-stalled` reports it.
+     */
+    const executeGroup = async (blockNumber: BlockKey, group: PendingGroup) => {
+        for (let attempt = 0; ; attempt += 1) {
+            try {
+                await execute(blockNumber, [group]);
+                return;
+            } catch {
+                try {
+                    // viem's default chunking, for a group that can't run in one call
+                    await execute(blockNumber, [group], 1_024);
+                    return;
+                } catch (error) {
+                    if (!isOutage(error)) {
+                        group.reject(error);
+                        return;
+                    }
+                    const delayMs = Math.min(retryDelayMs * 2 ** attempt, OUTAGE_MAX_DELAY_MS);
+                    logger.warn('RPC outage, retrying the read', {
+                        block: String(blockNumber),
+                        attempt,
+                        delayMs,
+                        error: describeError(error),
+                    });
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
+                }
+            }
+        }
+    };
+
     const executeWithFallback = async (blockNumber: BlockKey, groups: PendingGroup[]) => {
         try {
             return await execute(blockNumber, groups);
         } catch {
-            // The shared request failed as a whole (gas cap, timeout): isolate each group, then
-            // fall back to viem's default chunking for a group that can't run in one call.
-            await Promise.all(
-                groups.map(async (group) => {
-                    try {
-                        await execute(blockNumber, [group]);
-                    } catch {
-                        try {
-                            await execute(blockNumber, [group], 1_024);
-                        } catch (error) {
-                            group.reject(error);
-                        }
-                    }
-                })
-            );
+            // The shared request failed as a whole (gas cap, timeout): isolate each group.
+            await Promise.all(groups.map((group) => executeGroup(blockNumber, group)));
         }
     };
 
@@ -279,6 +318,8 @@ export const getViemClient = (chainId: EvmChainId, logger: Logger) => {
         deploylessAt,
         maxCalls: config.rpc.multicallMaxCalls,
         mergeWaitMs: config.rpc.multicallMergeWaitMs,
+        retryDelayMs: config.rpc.retryDelayMs,
+        logger,
     });
 
     const client = baseClient.extend((innerClient) => ({

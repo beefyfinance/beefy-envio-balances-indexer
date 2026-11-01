@@ -1,4 +1,5 @@
 import type { VersionStatus } from '@beefy/clickhouse';
+import * as R from 'remeda';
 
 import { log } from '../lib/log.ts';
 import type { Job } from './job.ts';
@@ -16,7 +17,39 @@ export type VersionThresholds = {
     unpricedShareAlert: number;
     /** A version still `building` this long after its deploy: Envio stalled, or it was forgotten. */
     buildingAlertHours: number;
+    /** A chain whose committed checkpoint has not moved for this long: Envio stopped or stalled on it. */
+    chainStallAlertMinutes: number;
 };
+
+/** Each chain's last checkpoint seen, per version, and when it moved: kept between reports. */
+export type ChainProgress = Map<string, { checkpoint: string; movedAt: number }>;
+
+/**
+ * A warning for each chain of a version in use whose checkpoint has not moved for `alertMinutes`. Nothing else shows a
+ * stopped indexer: the watermark follows prices, and a quiet last hour looks the same as a dead one. Retired versions
+ * are stopped on purpose. Updates `progress`; the clock starts at the first report that sees a chain.
+ */
+export const stalledChains = (
+    statuses: readonly VersionStatus[],
+    progress: ChainProgress,
+    alertMinutes: number,
+    now: number
+): ReportLine[] =>
+    R.flatMap(
+        statuses.filter(({ state }) => state !== 'retired'),
+        ({ version, state, frontier }) =>
+            R.flatMap(R.entries(frontier), ([chain, checkpoint]): ReportLine[] => {
+                const key = `${version}:${chain}`;
+                const seen = progress.get(key);
+                if (seen?.checkpoint !== checkpoint) {
+                    progress.set(key, { checkpoint, movedAt: now });
+                    return [];
+                }
+                const stalledMinutes = Math.round((now - seen.movedAt) / 60_000);
+                if (stalledMinutes < alertMinutes) return [];
+                return [{ event: 'chain-stalled', level: 'warn', version, state, chain, checkpoint, stalledMinutes }];
+            })
+    );
 
 /**
  * What to say about the versions not dropped: one info line each, and a warning for an old watermark, a version stuck
@@ -29,7 +62,11 @@ export type VersionThresholds = {
  */
 export const versionReport = (
     statuses: readonly VersionStatus[],
-    { watermarkAlertSeconds, unpricedShareAlert, buildingAlertHours }: VersionThresholds,
+    {
+        watermarkAlertSeconds,
+        unpricedShareAlert,
+        buildingAlertHours,
+    }: Omit<VersionThresholds, 'chainStallAlertMinutes'>,
     now: number
 ): ReportLine[] => {
     const lines: ReportLine[] = [];
@@ -92,10 +129,18 @@ export const versionStatusJob = ({
     thresholds: VersionThresholds;
     read: () => Promise<VersionStatus[]>;
     now?: () => number;
-}): Job => ({
-    name: 'version-status',
-    intervalMs: intervalMinutes * 60_000,
-    run: async () => {
-        for (const { level = 'info', ...line } of versionReport(await read(), thresholds, now())) log[level](line);
-    },
-});
+}): Job => {
+    const progress: ChainProgress = new Map();
+    return {
+        name: 'version-status',
+        intervalMs: intervalMinutes * 60_000,
+        run: async () => {
+            const statuses = await read();
+            const lines = [
+                ...versionReport(statuses, thresholds, now()),
+                ...stalledChains(statuses, progress, thresholds.chainStallAlertMinutes, now()),
+            ];
+            for (const { level = 'info', ...line } of lines) log[level](line);
+        },
+    };
+};

@@ -23,6 +23,8 @@ export type WorkerConfig = {
     reprice: RepriceConfig;
     /** advance: minutes between the end of one run and the next. */
     advanceIntervalMinutes: number;
+    /** advance: how long a version other than the active one may run each time. */
+    advanceOtherVersionsMinutes: number;
     /** cleanup: hours between runs. */
     cleanupIntervalHours: number;
     /** version-status: minutes between reports, and what it warns about. */
@@ -31,6 +33,7 @@ export type WorkerConfig = {
     /** Percentage of the active version's last hour of events without an indexer price above which it warns. */
     unpricedAlertPercent: number;
     buildingAlertHours: number;
+    chainStallAlertMinutes: number;
     /** `PENDING` events older than this mean the advance does not write provisional rows: it warns on any. */
     pendingAlertMinutes: number;
     /** On SIGTERM, how long a running job gets before the process exits anyway. */
@@ -44,6 +47,8 @@ export const loadConfig = (env: Env): WorkerConfig =>
         reprice: repriceSettings(),
         // the watermark stays a day behind now, so every 15 minutes is plenty; each run only reprices what it passed
         advanceIntervalMinutes: integer('ADVANCE_INTERVAL_MINUTES', 15, { min: 1, max: 24 * 60 }),
+        // well under the interval, so the active version never waits behind a first advance
+        advanceOtherVersionsMinutes: integer('ADVANCE_OTHER_VERSIONS_MINUTES', 5, { min: 1, max: 24 * 60 }),
         cleanupIntervalHours: integer('CLEANUP_INTERVAL_HOURS', 24, { min: 1, max: 24 * 7 }),
         statusIntervalMinutes: integer('VERSION_STATUS_INTERVAL_MINUTES', 5, { min: 1, max: 24 * 60 }),
         watermarkAlertSeconds: integer('WATERMARK_ALERT_SECONDS', 2 * 86_400, { min: 3600, max: 30 * 86_400 }),
@@ -51,6 +56,8 @@ export const loadConfig = (env: Env): WorkerConfig =>
         unpricedAlertPercent: integer('UNPRICED_ALERT_PERCENT', 50, { min: 0, max: 100 }),
         // a reindex of every chain takes days: warn only once it is clearly longer than one
         buildingAlertHours: integer('BUILDING_ALERT_HOURS', 7 * 24, { min: 1, max: 24 * 90 }),
+        // Envio commits a checkpoint with every batch, even empty, so a quiet chain still moves
+        chainStallAlertMinutes: integer('CHAIN_STALL_ALERT_MINUTES', 30, { min: 5, max: 24 * 60 }),
         pendingAlertMinutes: integer('PENDING_ALERT_MINUTES', 30, { min: 1, max: 24 * 60 }),
         // Heroku gives a process 30 seconds after SIGTERM
         shutdownGraceSeconds: integer('SHUTDOWN_GRACE_SECONDS', 10, { min: 1, max: 30 }),

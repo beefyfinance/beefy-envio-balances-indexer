@@ -3,9 +3,11 @@ import {
     type Deployment,
     type DeploymentState,
     type RepriceSettings,
+    envioTablesExist,
     hasHeadColumns,
     listDeployments,
     pendingEvents,
+    readFrontier,
     readWatermark,
 } from './deployments.ts';
 import { committedFrontier, timelineEventsCtes } from './events.ts';
@@ -32,6 +34,8 @@ export type VersionStatus = {
     /** null before the first advance: no watermark yet, nothing stored. */
     watermark: string | null;
     watermarkAgeSeconds: number | null;
+    /** Envio's committed checkpoint per chain: it stops moving when the chain stalls. Empty before Envio's first run. */
+    frontier: Readonly<Record<string, string>>;
     /** The active version only (null for the others, and for one without indexer price columns). */
     headPrices: HeadPriceStatus | null;
 };
@@ -104,6 +108,9 @@ export const versionStatuses = async (
             watermark: watermark?.watermark ?? null,
             watermarkAgeSeconds:
                 watermark === undefined ? null : Math.round((Date.now() - msOf(watermark.watermark)) / 1000),
+            frontier: (await envioTablesExist(client, deployment.envioDatabase))
+                ? await readFrontier(client, deployment.envioDatabase)
+                : {},
             headPrices,
         });
     }

@@ -290,7 +290,15 @@ describe('GET /v1/users/{address}/timeline', () => {
         };
         expect(R.keys(doc.paths)).toContain('/v1/users/{address}/timeline');
         const price = doc.components.schemas.TimelineItem.properties.price.properties;
-        expect(price['flag']?.enum).toEqual(['OK', 'PROVISIONAL', 'EXTRAPOLATED', 'STALE', 'MISSING', 'PENDING']);
+        expect(price['flag']?.enum).toEqual([
+            'OK',
+            'PROVISIONAL',
+            'EXTRAPOLATED',
+            'STALE',
+            'MISSING',
+            'FALLBACK',
+            'PENDING',
+        ]);
         expect(price['resolution']?.enum).toEqual(['5m', 'latest', null]);
     });
 });

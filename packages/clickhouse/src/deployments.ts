@@ -1,4 +1,4 @@
-import type { RepriceConfig } from '@beefy/config';
+import { describeError, type RepriceConfig } from '@beefy/config';
 import * as R from 'remeda';
 
 import type { ClickhouseClient, ClickhouseSettings } from './client.ts';
@@ -400,15 +400,33 @@ export const pendingEvents = async (
 /** What the switch gate needs: how old an unpriced event may be, and how to size and limit its statements. */
 export type GateSettings = RepriceSettings;
 
+/** How far behind {@link watermarkTarget} a version may be: further, and advance has not caught up with history. */
+const GATE_WATERMARK_MAX_LAG_MS = 86_400_000;
+/** A chain with less than this share of the active version's events is missing or still syncing. */
+const GATE_MIN_EVENTS_SHARE = 0.9;
+
+/** The chains of `active` for which `events` holds less than {@link GATE_MIN_EVENTS_SHARE} of the events. */
+export const shortChains = (
+    events: Readonly<Record<string, number>>,
+    active: Readonly<Record<string, number>>
+): string[] =>
+    R.pipe(
+        R.entries(active),
+        R.filter(([chain, count]) => (events[chain] ?? 0) < count * GATE_MIN_EVENTS_SHARE),
+        R.map(([chain]) => chain)
+    );
+
 /**
  * Why the API could not serve a version as it is, or undefined when it can: Envio's `TimelineEvent` has no indexer price
- * columns (a version indexed before them: the view reads them), or some events older than the grace have no price at
- * all (an advance has not given them their provisional row yet).
+ * columns (a version indexed before them: the view reads them), a chain has far fewer events than in the active version
+ * (users would get truncated timelines), some events older than the grace have no price at all (an advance has not given
+ * them their provisional row yet), or the watermark is far from where the price sources allow it to be.
  */
 const unservable = async (
     client: ClickhouseClient,
-    schema: Pick<Schema, 'database'>,
+    schema: Pick<Schema, 'database' | 'prices' | 'watermarkPriceSources'>,
     deployment: Pick<Deployment, 'version' | 'envioDatabase'>,
+    active: Pick<Deployment, 'version' | 'envioDatabase'> | undefined,
     settings: GateSettings
 ): Promise<string | undefined> => {
     const { pendingGraceSeconds } = settings;
@@ -422,23 +440,38 @@ const unservable = async (
     if (pending > 0) {
         return `version ${deployment.version} has ${pending} events older than ${pendingGraceSeconds / 60} minutes with no price (PENDING): run advance first`;
     }
+    if (active !== undefined && active.version !== deployment.version) {
+        const short = shortChains(
+            await eventsPerChain(client, deployment.envioDatabase),
+            await eventsPerChain(client, active.envioDatabase)
+        );
+        if (short.length > 0) {
+            return `version ${deployment.version} has far fewer events than version ${active.version} on chains ${short.join(', ')}: Envio has not caught up, or a chain is missing`;
+        }
+    }
+    const watermark = await readWatermark(client, schema, deployment.version);
+    const target = await watermarkTarget(client, schema, settings);
+    if (watermark !== undefined && msOf(target) - msOf(watermark.watermark) > GATE_WATERMARK_MAX_LAG_MS) {
+        return `version ${deployment.version}: its watermark ${watermark.watermark} is far behind ${target}: run advance first`;
+    }
     return undefined;
 };
 
 /**
  * Marks a building version ready to be switched to. Called by an operator or the worker once its checks pass (see
  * {@link readiness}): Envio at the chain head, the watermark current, event counts close to the active version's.
- * Refused, unless forced, while the API could not serve it: no indexer price columns, or `PENDING` events.
+ * Refused, unless forced, while the API could not serve it ({@link unservable}).
  */
 export const markReady = async (
     client: ClickhouseClient,
-    schema: Pick<Schema, 'database'>,
+    schema: Pick<Schema, 'database' | 'prices' | 'watermarkPriceSources'>,
     version: number,
     { force = false, ...gate }: GateSettings & { force?: boolean }
 ): Promise<void> => {
     const deployment = await getDeployment(client, schema, version);
     if (deployment.state !== 'building') throw new Error(`version ${version} is ${deployment.state}, not building`);
-    const refusal = force ? undefined : await unservable(client, schema, deployment, gate);
+    const active = (await listDeployments(client, schema)).find((d) => d.state === 'active');
+    const refusal = force ? undefined : await unservable(client, schema, deployment, active, gate);
     if (refusal !== undefined) throw new Error(`${refusal} (use --force to mark it ready anyway)`);
     await updateDeployment(client, schema, version, { state: 'ready', now: ['ready_at'] });
 };
@@ -470,7 +503,8 @@ export const switchVersion = async (
     if (target.state !== 'ready' && target.state !== 'active' && !force) {
         throw new Error(`version ${version} is ${target.state}, not ready (use --force to switch anyway)`);
     }
-    const refusal = force ? undefined : await unservable(client, schema, target, gate);
+    const current = deployments.find((d) => d.state === 'active');
+    const refusal = force ? undefined : await unservable(client, schema, target, current, gate);
     if (refusal !== undefined) throw new Error(`${refusal} (use --force to switch anyway)`);
     const active: ActiveVersion = { version: target.version, envioDatabase: target.envioDatabase };
     if (target.state !== 'active') {
@@ -736,6 +770,10 @@ export type AdvanceResult = {
      * overwritten; `to` is where this advance had got to, the next run starts from the new watermark.
      */
     superseded?: boolean;
+    /** Stopped for this run: it spent its time budget. The next run goes on from `to`. */
+    paused?: boolean;
+    /** It failed with this error. The other versions still ran. */
+    failed?: string;
     from?: string;
     to?: string;
     /** Reprice statements run (each one INSERT): late rows, the retry window, the watermark step, the provisional rows. */
@@ -749,7 +787,7 @@ FROM ${qualified(envioDatabase, timelineEventHistoryTable())}
 WHERE envio_checkpoint_id <= ${frontierParam(frontier)}[chain_id] AND envio_change = 'SET'`;
 
 /** Whether a version's Envio database has the tables we read. */
-const envioTablesExist = async (client: ClickhouseClient, envioDatabase: string): Promise<boolean> =>
+export const envioTablesExist = async (client: ClickhouseClient, envioDatabase: string): Promise<boolean> =>
     (await existingTables(client, databaseName(envioDatabase), [timelineEventHistoryTable(), envioChainsTable()]))
         .length === 2;
 
@@ -843,9 +881,11 @@ export const advanceVersion = async (
     client: ClickhouseClient,
     schema: Schema,
     deployment: Pick<Deployment, 'version' | 'envioDatabase'>,
-    settings: RepriceSettings
+    settings: RepriceSettings,
+    { budgetMs }: { budgetMs?: number } = {}
 ): Promise<AdvanceResult> => {
     const { version, envioDatabase } = deployment;
+    const startedAt = Date.now();
     if (!(await envioTablesExist(client, envioDatabase)))
         return { version, waiting: 'no-envio-database', statements: 0 };
     if (!(await hasFactsColumn(client, schema, version))) {
@@ -888,64 +928,102 @@ export const advanceVersion = async (
         movedAt = next;
         return true;
     };
+    const provisional = () =>
+        run('provisional', { from: reached }, { where: sql`1`, latest: sql`head_price IS NULL`, changedOnly: true });
 
-    if (current !== undefined) {
-        if (!sameFrontier(current.checkpoints, checkpoints)) {
-            await run(
-                'late',
-                { from: timeOf(0), to: current.watermark },
-                { where: sql`envio_checkpoint_id > ${frontierParam(current.checkpoints)}[chain_id]` }
-            );
-        }
-        const retry = {
-            from: timeOf(msOf(current.watermark) - settings.retryDays * 86_400_000),
-            to: current.watermark,
-        };
-        await run('retry', retry, {
-            ctes: sql`final_rows AS
+    let from = current?.watermark ?? timeOf(0);
+    let reached = from;
+    /** Steps 1 to 3; a result when the advance stops there. */
+    const store = async (): Promise<AdvanceResult | undefined> => {
+        if (current !== undefined) {
+            if (!sameFrontier(current.checkpoints, checkpoints)) {
+                await run(
+                    'late',
+                    { from: timeOf(0), to: current.watermark },
+                    { where: sql`envio_checkpoint_id > ${frontierParam(current.checkpoints)}[chain_id]` }
+                );
+            }
+            const retry = {
+                from: timeOf(msOf(current.watermark) - settings.retryDays * 86_400_000),
+                to: current.watermark,
+            };
+            await run('retry', retry, {
+                ctes: sql`final_rows AS
 (
     SELECT account, event_id, timestamp FROM ${qualified(schema.database, eventPriceTable(version))} FINAL
     WHERE ${rangeWhere(ident('timestamp'), retry)}
         AND price_flag IN ${param('Array(String)', finalPriceFlags())} AND facts_complete = 1
 )`,
-            where: sql`(account, id, block_timestamp) NOT IN final_rows`,
-            changedOnly: true,
-        });
-    }
-    let start = current?.watermark;
-    if (start === undefined) {
-        const [row] = await client.query<{ first: string; n: string }>(firstEventStatement(envioDatabase, checkpoints));
-        if (row === undefined || Number(row.n) === 0) return { version, waiting: 'no-events', statements };
-        start = row.first;
-    }
-    const from = start;
-    let reached = start;
-    if (msOf(start) < msOf(target)) {
-        const completed = await run('watermark', { from: start, to: target }, { where: sql`1` }, async (range) => {
-            const to = range.to ?? target;
-            if (!(await move(to))) return false;
-            reached = to;
-            return true;
-        });
-        if (!completed) return { version, superseded: true, from, to: reached, statements };
-    } else if (!(await move(start))) {
-        // nothing to move (the target did not pass the watermark): still record the frontier step 1 covered
-        return { version, superseded: true, from, to: start, statements };
-    }
-    await run('provisional', { from: reached }, { where: sql`1`, latest: sql`head_price IS NULL`, changedOnly: true });
+                where: sql`(account, id, block_timestamp) NOT IN final_rows`,
+                changedOnly: true,
+            });
+        }
+        let start = current?.watermark;
+        if (start === undefined) {
+            const [row] = await client.query<{ first: string; n: string }>(
+                firstEventStatement(envioDatabase, checkpoints)
+            );
+            if (row === undefined || Number(row.n) === 0) return { version, waiting: 'no-events', statements };
+            start = row.first;
+        }
+        from = start;
+        reached = start;
+        if (msOf(start) < msOf(target)) {
+            let paused = false as boolean;
+            const completed = await run('watermark', { from: start, to: target }, { where: sql`1` }, async (range) => {
+                const to = range.to ?? target;
+                if (!(await move(to))) return false;
+                reached = to;
+                paused = budgetMs !== undefined && Date.now() - startedAt >= budgetMs && msOf(to) < msOf(target);
+                return !paused;
+            });
+            if (paused) return { version, paused, from, to: reached, statements };
+            if (!completed) return { version, superseded: true, from, to: reached, statements };
+        } else if (!(await move(start))) {
+            // nothing to move (the target did not pass the watermark): still record the frontier step 1 covered
+            return { version, superseded: true, from, to: start, statements };
+        }
+        return undefined;
+    };
+
+    const stopped = await store().catch(async (failure: unknown) => {
+        // recent events still get a price when the older steps fail, or they stay `PENDING` at USD 0 until those recover
+        if (current !== undefined) await provisional().catch(() => undefined);
+        throw failure;
+    });
+    if (stopped !== undefined) return stopped;
+    await provisional();
     return { version, from, to: reached, statements };
 };
+
+/** Active first, then the others from the oldest. */
+export const advanceOrder = <T extends Pick<Deployment, 'state'>>(deployments: readonly T[]): T[] => [
+    ...deployments.filter((d) => d.state === 'active'),
+    ...deployments.filter((d) => d.state !== 'active'),
+];
 
 /** {@link advanceVersion} for every version not dropped: the worker's loop. */
 export const advance = async (
     client: ClickhouseClient,
     schema: Schema,
-    settings: RepriceSettings
+    settings: RepriceSettings,
+    /** How long a version other than the active one may run, so a long first advance does not hold back the next run. */
+    { otherVersionsBudgetMs }: { otherVersionsBudgetMs?: number } = {}
 ): Promise<AdvanceResult[]> => {
     const results: AdvanceResult[] = [];
-    for (const deployment of await listDeployments(client, schema)) {
+    for (const deployment of advanceOrder(await listDeployments(client, schema))) {
         if (deployment.state === 'dropped' || deployment.tablesDroppedAt !== null) continue;
-        results.push(await advanceVersion(client, schema, deployment, settings));
+        const budget =
+            deployment.state === 'active' || otherVersionsBudgetMs === undefined
+                ? {}
+                : { budgetMs: otherVersionsBudgetMs };
+        results.push(
+            await advanceVersion(client, schema, deployment, settings, budget).catch((failure: unknown) => ({
+                version: deployment.version,
+                failed: describeError(failure),
+                statements: 0,
+            }))
+        );
     }
     return results;
 };

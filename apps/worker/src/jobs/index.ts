@@ -17,7 +17,10 @@ const FACTORIES: Record<JobName, (config: WorkerConfig, deps: JobDeps) => Job> =
     advance: (config, { client }) =>
         advanceJob({
             intervalMinutes: config.advanceIntervalMinutes,
-            advance: () => advance(client, schemaFromConfig(config.clickhouse), config.reprice),
+            advance: () =>
+                advance(client, schemaFromConfig(config.clickhouse), config.reprice, {
+                    otherVersionsBudgetMs: config.advanceOtherVersionsMinutes * 60_000,
+                }),
         }),
     cleanup: (config, { client }) =>
         cleanupJob({
@@ -33,6 +36,7 @@ const FACTORIES: Record<JobName, (config: WorkerConfig, deps: JobDeps) => Job> =
                 watermarkAlertSeconds: config.watermarkAlertSeconds,
                 unpricedShareAlert: config.unpricedAlertPercent / 100,
                 buildingAlertHours: config.buildingAlertHours,
+                chainStallAlertMinutes: config.chainStallAlertMinutes,
             },
             read: () =>
                 versionStatuses(client, schema, {

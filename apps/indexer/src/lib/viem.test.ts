@@ -9,6 +9,9 @@ import { getViemClient } from './viem';
 // so src/lib/config.ts reads it when it loads.
 vi.hoisted(() => {
     process.env.RPC_FIXTURES = 'off';
+    process.env.RPC_RETRY_COUNT = '0';
+    process.env.RPC_RETRY_DELAY_MS = '1';
+    process.env.RPC_TIMEOUT_MS = '1000';
 });
 
 const DEAD = '0x000000000000000000000000000000000000dead';
@@ -19,6 +22,9 @@ const decimalsAbi = [
 const ADDRESS_RETURNER = '0x00000000000000000000000000000000000000aa';
 /** Any request that reads it is refused with a JSON-RPC rate limit error, as public RPCs answer. */
 const RATE_LIMITED = '0x00000000000000000000000000000000000000cc' as const;
+/** A request that reads it takes the next failure from `outage`, if any: an HTTP status, or no answer at all. */
+const UNAVAILABLE = '0x00000000000000000000000000000000000000dd' as const;
+const outage: (number | 'timeout')[] = [];
 const TOKENS = [
     '0xca3f508b8e4dd382ee878a314789373d80a5190a',
     '0x55d398326f99059ff775485246999027b3197955',
@@ -32,13 +38,25 @@ const ethCalls: number[] = [];
 /** Block tag of every eth_call received, in order. */
 const ethCallBlocks: string[] = [];
 
-vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
+vi.stubGlobal('fetch', async (_url: string, init: { body: string; signal: AbortSignal }) => {
     const request = JSON.parse(init.body) as { id: number; method: string; params: [{ data: Hex }, string] };
     if (request.method !== 'eth_call') throw new Error(`unexpected ${request.method}`);
     const { args } = decodeFunctionData({ abi: multicall3Abi, data: request.params[0].data });
     const calls = args[0] as readonly { target: string }[];
     ethCalls.push(calls.length);
     ethCallBlocks.push(request.params[1]);
+    const failure = calls.some(({ target }) => target.toLowerCase() === UNAVAILABLE) ? outage.shift() : undefined;
+    if (failure === 'timeout') {
+        return new Promise<Response>((_, reject) => {
+            init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+        });
+    }
+    if (failure !== undefined) {
+        return new Response(JSON.stringify({ error: 'unavailable' }), {
+            status: failure,
+            headers: { 'content-type': 'application/json' },
+        });
+    }
     if (calls.some(({ target }) => target.toLowerCase() === RATE_LIMITED)) {
         return new Response(
             JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code: 429, message: 'Too Many Requests' } }),
@@ -71,6 +89,7 @@ const logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {
 beforeEach(() => {
     ethCalls.length = 0;
     ethCallBlocks.length = 0;
+    outage.length = 0;
 });
 
 describe('getViemClient multicall batching', () => {
@@ -161,6 +180,39 @@ describe('getViemClient multicall batching', () => {
             });
         await expect(read(3)).rejects.toThrow(/Too Many Requests|429/);
         await expect(read(1)).rejects.toThrow(/Too Many Requests|429/);
+    });
+
+    it('waits out an RPC outage instead of rejecting the read', async () => {
+        // regression: a timed out eth_call threw in an effect, which stopped the indexer
+        const warn = vi.fn<Logger['warn']>();
+        // first client created for chain 100 in this file, so it logs through this logger
+        const client = getViemClient(100, { ...logger, warn });
+        outage.push('timeout', 'timeout', 503, 502, 503);
+
+        const [result] = await client.multicall({
+            allowFailure: true,
+            blockNumber: BLOCK,
+            contracts: [{ address: UNAVAILABLE, abi: ierc20Abi, functionName: 'totalSupply' as const }],
+        });
+
+        expect(result?.status).toBe('success');
+        // the shared request, then each attempt tries the group whole and chunked
+        expect(ethCalls).toHaveLength(6);
+        expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects a request the node refuses, without waiting', async () => {
+        const client = getViemClient(56, logger);
+        outage.push(400, 400, 400);
+
+        const read = client.multicall({
+            allowFailure: true,
+            blockNumber: BLOCK,
+            contracts: [{ address: UNAVAILABLE, abi: ierc20Abi, functionName: 'totalSupply' as const }],
+        });
+
+        await expect(read).rejects.toThrow(/HTTP request failed/);
+        expect(ethCalls).toHaveLength(3);
     });
 
     it('merges concurrent unpinned (latest) multicalls into one eth_call at latest', async () => {

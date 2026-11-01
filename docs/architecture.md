@@ -95,6 +95,8 @@ effects. Facts run once per contract, at `latest`, because they are immutable on
 
 - A complete answer is cached. An incomplete one, failed token metadata included (a public RPC under load fails like a
   revert), sets `factsStatus = PARTIAL` and is retried at most once per 10 000 blocks.
+- An RPC outage (a timeout, no answer, a 5xx) is retried for as long as it lasts, because a throw in an effect stops the
+  indexer. A request the node refuses still throws.
 - Classification: `vault()`, `strategy()`, `rewardToken()`, once per proxy of unknown kind. Exactly one must succeed.
 - CLM pool state: once per `(strategy, block)`, pinned to the block. This is the only read that scales with events.
 
@@ -113,7 +115,8 @@ first ([how Envio splits them](envio-3.14-notes.md#multi-process)). `src/perChai
 ## Timeline and prices
 
 The timeline is every action of an account on Beefy products, with its USD value. Envio's database `envio_<env>_N` holds
-`envio_history_TimelineEvent`, sorted by account, the product facts and `envio_chains`. Our database
+`envio_history_TimelineEvent`, sorted by account and partitioned by quarter so the worker's reads by time skip most of it,
+the product facts and `envio_chains`. Our database
 (`CLICKHOUSE_ANALYTICS_DATABASE`) holds `event_price_<N>`, `price_watermark_<N>` (with Envio's frontier per chain at each
 move), `deployments`, and the only objects the API reads: `user_timeline_api(account)`, `product_contracts_api`, `api_status`.
 
@@ -157,8 +160,8 @@ Handlers cannot read `ContractLink` (ClickHouse only), so `Contract` carries the
 
 1. **Events**: filter by account first (the sort key), keep rows at or below the committed checkpoint of their chain, take
    the latest row per id, keep it if it is a `SET`.
-2. **Price**: the stored row matching `event_id` and timestamp; else the indexer price (`PROVISIONAL`); else `PENDING`. USD
-   values exist for `BALANCE` rows only.
+2. **Price**: the stored row matching `event_id` and timestamp, unless it is `MISSING` and the indexer has a price; else the
+   indexer price (`PROVISIONAL`, or `FALLBACK` over a `MISSING` row); else `PENDING`. USD values exist for `BALANCE` rows only.
 
 ### Stored prices
 
@@ -193,6 +196,7 @@ side, each within 48 h, so an event's price never depends on the other events in
 | `EXTRAPOLATED` | yes | a price on one side only, carried flat |
 | `MISSING` | yes | no price within reach, USD 0 |
 | `PROVISIONAL` | read only | the indexer's price (`price_source = 'indexer'`, `price_resolution = 'latest'`) |
+| `FALLBACK` | read only | the indexer's price over a stored `MISSING`, until a stored price arrives |
 | `PENDING` | read only | no stored row and no indexer price, USD 0 |
 
 ## Versions and operations
@@ -204,8 +208,9 @@ side, each within 48 h, so an event's price never depends on the other events in
 - **ready**: set by hand once `readiness <N>` looks right. **active**: the API views point at it.
 - **retired**: kept for a grace period, so a switch can be undone with `switch <old> --force`.
 - **dropped**: its tables, then its Envio database, are gone. Envio's Postgres schema stays.
-- **Gates.** `ready` and `switch` refuse a version with no indexer price columns or with `PENDING` events older than
-  `PENDING_GRACE_MINUTES`. `switch` also refuses a version that is not `ready`. `--force` overrides these.
+- **Gates.** `ready` and `switch` refuse a version with no indexer price columns, with `PENDING` events older than
+  `PENDING_GRACE_MINUTES`, with a chain under 90% of the active version's events, or with a watermark over a day behind
+  what the price sources allow. `switch` also refuses a version that is not `ready`. `--force` overrides these.
 - **Switch.** States are recorded first, so a switch that dies halfway leaves nothing cleanup could drop under the API, and
   rerunning converges. Each view is built as `<name>_next` and swapped with `EXCHANGE TABLES`: `CREATE OR REPLACE` with a
   definer leaves dependency records behind.
@@ -225,9 +230,11 @@ side, each within 48 h, so an event's price never depends on the other events in
 | `advance`, `cleanup [--grace-hours H]` | run a worker job once |
 | `rewind <N> <time>`, `reprice <N> <from> <to>` | see [Stored prices](#stored-prices) |
 
-Worker jobs (`WORKER_JOBS`): `advance` every 15 min, `cleanup` daily with 48 h grace, `version-status` every 5 min. They warn on
-a watermark older than 2 days, a version `building` for 7 days, no active version, over 50% of the last hour's events without an
-indexer price, `PENDING` events older than 30 minutes, and refused drops. Variables and defaults are in each `.env.example`.
+Worker jobs (`WORKER_JOBS`): `advance` every 15 min, `cleanup` daily with 48 h grace, `version-status` every 5 min. `advance` runs
+the active version first, a version that fails does not stop the others, and any other version stops its watermark step after
+`ADVANCE_OTHER_VERSIONS_MINUTES`. The jobs warn on a chain whose checkpoint has not moved for 30 minutes, a watermark older than 2
+days, a version `building` for 7 days, no active version, over 50% of the last hour's events without an indexer price, `PENDING`
+events older than 30 minutes, and refused drops. Variables and defaults are in each `.env.example`.
 
 SQL is built only with the `sql` tag (`packages/clickhouse/src/sql.ts`): values through `param`, names through `ident`. A plain
 string fails to compile, and the `beefy/no-untagged-sql` oxlint rule catches what types cannot see.
@@ -293,7 +300,7 @@ not measured.
 ## Open questions
 
 1. A real rollback: can a reader filtering on `envio_chains` see a row Envio is about to delete? Only simulated so far.
-2. `ready` stays manual: nothing compares event counts between versions or checks that Envio reached the chain head.
+2. `ready` stays manual: nothing checks that Envio reached the chain head.
 3. Indexer price unit: confirm on a vault whose want does not have 18 decimals that the API price matches analytics.
 4. Products the Beefy API does not list rely on provisional rows, which lag with the analytics tables. Is that fine?
 5. Claims have no USD value (`claims[].usd` is null). They need reward token prices.

@@ -7,7 +7,7 @@
  *
  * A complete answer is cached. An incomplete one (a revert or a zero address where a value is expected) is returned
  * with `context.cache = false`, so a later retry (registry.ts, at most once per FACTS_RETRY_BLOCKS) reads again.
- * Transport errors throw and are never cached.
+ * An RPC outage is waited out in src/lib/viem.ts; a request the node refuses throws and is never cached.
  */
 
 import { createEffect, type EffectContext, type EvmChainId, S } from 'envio';

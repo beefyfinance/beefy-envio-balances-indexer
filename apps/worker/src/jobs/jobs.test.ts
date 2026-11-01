@@ -4,13 +4,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { captureLog } from '../lib/log.testing.ts';
 import { advanceJob } from './advance.ts';
 import { cleanupJob } from './cleanup.ts';
-import { type ReportLine, versionReport, versionStatusJob } from './versionStatus.ts';
+import {
+    type ChainProgress,
+    type ReportLine,
+    stalledChains,
+    versionReport,
+    versionStatusJob,
+} from './versionStatus.ts';
 
 afterEach(() => vi.restoreAllMocks());
 
 const signal = new AbortController().signal;
 const NOW = Date.parse('2026-10-29T12:00:00Z');
-const THRESHOLDS = { watermarkAlertSeconds: 2 * 86_400, unpricedShareAlert: 0.5, buildingAlertHours: 168 };
+const THRESHOLDS = {
+    watermarkAlertSeconds: 2 * 86_400,
+    unpricedShareAlert: 0.5,
+    buildingAlertHours: 168,
+    chainStallAlertMinutes: 30,
+};
 
 const status = (overrides: Partial<VersionStatus> = {}): VersionStatus => ({
     version: 1,
@@ -19,6 +30,7 @@ const status = (overrides: Partial<VersionStatus> = {}): VersionStatus => ({
     createdAt: '2026-10-01 00:00:00.000000',
     watermark: '2026-10-28 06:00:00.000',
     watermarkAgeSeconds: 108_000,
+    frontier: {},
     headPrices: null,
     ...overrides,
 });
@@ -46,6 +58,14 @@ describe('advance job', () => {
                         version: 5,
                         unsupported: 'event_price_5 has no facts_complete column (deployed before it)',
                         statements: 0,
+                    },
+                    { version: 6, failed: 'clickhouse said no', statements: 0 },
+                    {
+                        version: 7,
+                        paused: true,
+                        from: '2026-10-01 00:00:00.000',
+                        to: '2026-10-03 00:00:00.000',
+                        statements: 9,
                     },
                 ]),
         });
@@ -75,7 +95,46 @@ describe('advance job', () => {
                 version: 5,
                 reason: 'event_price_5 has no facts_complete column (deployed before it)',
             },
+            { event: 'advance-failed', level: 'error', version: 6, error: 'clickhouse said no' },
+            {
+                event: 'watermark-paused',
+                version: 7,
+                from: '2026-10-01 00:00:00.000',
+                to: '2026-10-03 00:00:00.000',
+                statements: 9,
+                reason: 'time budget spent',
+            },
         ]);
+    });
+});
+
+describe('stalled chains', () => {
+    const MINUTE = 60_000;
+    const frontier = { 1: '10', 8453: '20' };
+
+    it('warns about a chain that stopped moving, and only that one', () => {
+        const progress: ChainProgress = new Map();
+        expect(stalledChains([status({ frontier })], progress, 30, NOW)).toEqual([]);
+        const moved = status({ frontier: { 1: '11', 8453: '20' } });
+        expect(stalledChains([moved], progress, 30, NOW + 29 * MINUTE)).toEqual([]);
+        expect(stalledChains([moved], progress, 30, NOW + 31 * MINUTE)).toEqual([
+            {
+                event: 'chain-stalled',
+                level: 'warn',
+                version: 1,
+                state: 'active',
+                chain: '8453',
+                checkpoint: '20',
+                stalledMinutes: 31,
+            },
+        ]);
+    });
+
+    it('ignores retired versions, stopped on purpose', () => {
+        const progress: ChainProgress = new Map();
+        const retired = status({ state: 'retired', frontier });
+        stalledChains([retired], progress, 30, NOW);
+        expect(stalledChains([retired], progress, 30, NOW + 60 * MINUTE)).toEqual([]);
     });
 });
 

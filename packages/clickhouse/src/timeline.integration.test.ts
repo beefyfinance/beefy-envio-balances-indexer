@@ -30,7 +30,7 @@ import {
     testRepriceSettings,
     timelineEvent,
 } from './testing.ts';
-import { apiViews, eventPriceTable, productContractsApi, userTimelineApi } from './timeline.ts';
+import { apiViews, eventPriceTable, priceWatermarkTable, productContractsApi, userTimelineApi } from './timeline.ts';
 
 // Run with: CLICKHOUSE_URL=http://localhost:18123 pnpm test:integration
 const url = integrationClickhouseUrl();
@@ -48,6 +48,7 @@ const schema: Schema = {
 const raw1 = `${envioPrefix}_1`;
 const raw2 = `${envioPrefix}_2`;
 const raw3 = `${envioPrefix}_3`;
+const raw4 = `${envioPrefix}_4`;
 const settings = testRepriceSettings();
 const gate = settings;
 const statusSettings = { pendingAlertSeconds: 30 * 60, lookbackDays: settings.retryDays + 2, reprice: settings };
@@ -185,6 +186,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
             raw1,
             raw2,
             raw3,
+            raw4,
             `${envioPrefix}_99`,
             `${envioPrefix}_other`,
             schema.database,
@@ -442,6 +444,32 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         expect(await priced('late')).toMatchObject({ share_to_usd: 3.5, price_flag: 'OK', price_resolution: '5m' });
     });
 
+    it('falls back on the indexer price over a stored MISSING, until a stored price arrives', async () => {
+        // months from every price of the vault: no price within reach
+        const at = '2023-06-01 10:07:30.000';
+        await commitCheckpoint(client, raw1, 8453, await event(raw1, 'fb', at, '2000000000000000000', 4));
+        await advance(client, schema, settings);
+        expect(await stored('fb')).toBe(0);
+        expect(await priced('fb')).toMatchObject({
+            share_to_usd: 4,
+            price_flag: 'FALLBACK',
+            usd_delta: 8,
+            price_source: 'indexer',
+            price_resolution: 'latest',
+            before: Math.floor(Date.parse('2023-06-01T10:07:30Z') / 1000),
+            product_address: VAULT,
+        });
+        await price('2023-06-01 10:00:00', 7);
+        await price('2023-06-01 10:15:00', 9);
+        await reprice(client, schema, 1, '2023-06-01', '2023-06-02', settings);
+        expect(await priced('fb')).toMatchObject({
+            share_to_usd: 8,
+            price_flag: 'OK',
+            usd_delta: 16,
+            price_resolution: '5m',
+        });
+    });
+
     it('never shows a stored price whose event Envio deleted (a rollback below the watermark)', async () => {
         expect(await stored('a1')).toBe(3.5);
         await client.command(
@@ -491,7 +519,10 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         );
         await advance(client, schema, settings);
         expect(await readiness(client, schema, 2, gate)).toMatchObject({ events: { 8453: 1 }, pendingEvents: 0 });
-        await markReady(client, schema, 2, gate);
+        // a chain with far fewer events than the active version: not ready
+        await expect(markReady(client, schema, 2, gate)).rejects.toThrow('far fewer events');
+        const forced = { ...gate, force: true };
+        await markReady(client, schema, 2, forced);
         // a newer event the indexer did not price and no advance has seen yet: switch refuses until one has
         await commitCheckpoint(client, raw2, 8453, await event(raw2, 'v2late', `${ago(3600)}.000`));
         await expect(switchVersion(client, schema, 2, gate)).rejects.toThrow('PENDING');
@@ -500,7 +531,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         await advance(client, schema, settings);
         expect((await readiness(client, schema, 2, gate)).pendingEvents).toBe(0);
         // the views cannot be built (no such definer): the switch fails after recording where it was going
-        await expect(switchVersion(client, { ...schema, definer: `nobody_${suffix}` }, 2, gate)).rejects.toThrow(
+        await expect(switchVersion(client, { ...schema, definer: `nobody_${suffix}` }, 2, forced)).rejects.toThrow(
             /nobody_/
         );
         expect((await listDeployments(client, schema)).map((d) => [d.version, d.state])).toEqual([
@@ -509,7 +540,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         ]);
         expect((await apiStatus(client, schema, 3000)).version).toBe(1);
         // running it again converges
-        await switchVersion(client, schema, 2, gate);
+        await switchVersion(client, schema, 2, forced);
         expect((await timeline()).map((r) => r.event_id)).toEqual(['v2', 'v2late', 'v2new']);
         expect((await apiStatus(client, schema, 3000)).version).toBe(2);
         const states = (await listDeployments(client, schema)).map((d) => [d.version, d.state]);
@@ -614,5 +645,16 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         await markReady(client, schema, 3, { ...gate, force: true });
         await expect(switchVersion(client, schema, 3, gate)).rejects.toThrow('has no head_price');
         expect((await apiStatus(client, schema, 3000)).version).toBe(2);
+    });
+
+    it('advances the active version first, and a version that fails does not stop the others', async () => {
+        await createScratchRaw(client, raw4);
+        await deploy(client, schema, 4, raw4);
+        await client.command(sql`DROP TABLE ${qualified(schema.database, priceWatermarkTable(4))} SYNC`);
+        const results = await advance(client, schema, settings);
+        expect(results[0]?.version).toBe(2);
+        expect(results.find((r) => r.version === 4)?.failed).toEqual(expect.any(String));
+        expect(results.filter((r) => r.failed !== undefined)).toHaveLength(1);
+        await deploy(client, schema, 4, raw4);
     });
 });

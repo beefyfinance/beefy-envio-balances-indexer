@@ -86,7 +86,7 @@ describe('API views', () => {
         for (const cte of ['events_history', 'events', 'stored']) expect(references(view, cte)).toBe(1);
         expect(view).not.toMatch(/(?:FROM|JOIN)\s*\(\s*SELECT/);
         expect(view).toContain(
-            "multiIf(s.found = 1, s.price_flag, e.head_price IS NOT NULL, 'PROVISIONAL', 'PENDING') AS `price_flag`"
+            "multiIf(s.found = 1 AND NOT (s.price_flag = 'MISSING' AND e.head_price IS NOT NULL), s.price_flag, s.found = 1, 'FALLBACK', e.head_price IS NOT NULL, 'PROVISIONAL', 'PENDING') AS `price_flag`"
         );
         expect(view).toContain('ON s.event_id = e.event_id AND s.timestamp = e.timestamp');
     });

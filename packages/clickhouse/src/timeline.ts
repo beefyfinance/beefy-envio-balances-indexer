@@ -19,11 +19,12 @@ import {
 export const timelineColumns = (): string[] => [...eventColumns(), ...priceColumns()];
 
 /**
- * The flags the API view returns: a stored row's ({@link priceFlags}), `PROVISIONAL` for the indexer's price, and
- * `PENDING` for an event with neither (USD values 0) until the next advance gives it a provisional row.
+ * The flags the API view returns: a stored row's ({@link priceFlags}), `PROVISIONAL` for the indexer's price, `FALLBACK`
+ * for the indexer's price standing in for a stored `MISSING`, and `PENDING` for an event with neither (USD values 0)
+ * until the next advance gives it a provisional row.
  */
-export type TimelinePriceFlag = PriceFlag | 'PENDING';
-export const timelinePriceFlags = (): TimelinePriceFlag[] => [...priceFlags(), 'PENDING'];
+export type TimelinePriceFlag = PriceFlag | 'FALLBACK' | 'PENDING';
+export const timelinePriceFlags = (): TimelinePriceFlag[] => [...priceFlags(), 'FALLBACK', 'PENDING'];
 
 /** `price_source` and `price_resolution` of a row priced by the indexer (the Beefy API's latest price). */
 const INDEXER_PRICE_SOURCE = 'indexer';
@@ -119,26 +120,28 @@ export const productContractsApi = (): ApiViewName => 'product_contracts_api';
 export const apiStatusView = (): ApiViewName => 'api_status';
 
 /**
- * The price columns of the view: the stored row's (`s.found = 1`), else the indexer's (`e.head_price` set), else none;
- * the product facts of a row not stored come from the event's head_* columns ('' and 18 decimals when unknown).
+ * The price columns of the view: the stored row's unless it found no price and the indexer has one, else the indexer's
+ * (`e.head_price` set), else none; the product facts of a row not used come from the event's head_* columns ('' and 18
+ * decimals when unknown).
  */
 const priceSelect = (): Sql => {
     const indexer = sql`e.head_price IS NOT NULL`;
+    const stored = sql`s.found = 1 AND NOT (s.price_flag = 'MISSING' AND ${indexer})`;
     const usd = (amount: 'delta' | 'shares_after'): Sql =>
-        sql`multiIf(s.found = 1, s.${ident(amount === 'delta' ? 'usd_delta' : 'usd_after')}, ${indexer},
+        sql`multiIf(${stored}, s.${ident(amount === 'delta' ? 'usd_delta' : 'usd_after')}, ${indexer},
             if(e.kind = 'BALANCE', ifNull(toFloat64(e.${ident(amount)}) / pow(10, ifNull(e.head_decimals, 18)) * e.head_price, 0.), 0.), 0.)`;
     const columns: Record<PriceColumn, Sql> = {
         // no product facts are read: without a stored row, the facts the indexer wrote on the event (priced or not)
-        product_address: sql`if(s.found = 1, s.product_address, ifNull(e.head_product, ''))`,
-        product_kind: sql`if(s.found = 1, s.product_kind, ifNull(e.head_product_kind, ''))`,
-        contract_kind: sql`if(s.found = 1, s.contract_kind, ifNull(e.head_contract_kind, ''))`,
-        decimals: sql`if(s.found = 1, s.decimals, ifNull(e.head_decimals, toUInt8(18)))`,
-        share_to_usd: sql`multiIf(s.found = 1, s.share_to_usd, ${indexer}, ifNull(e.head_price, 0.), 0.)`,
-        price_flag: sql`multiIf(s.found = 1, s.price_flag, ${indexer}, 'PROVISIONAL', 'PENDING')`,
-        price_source: sql`multiIf(s.found = 1, s.price_source, ${indexer}, ${literal(INDEXER_PRICE_SOURCE)}, '')`,
-        price_resolution: sql`multiIf(s.found = 1, s.price_resolution, ${indexer}, ${literal(INDEXER_PRICE_RESOLUTION)}, '')`,
-        price_before_at: sql`multiIf(s.found = 1, s.price_before_at, ${indexer}, e.head_price_at, NULL)`,
-        price_after_at: sql`if(s.found = 1, s.price_after_at, NULL)`,
+        product_address: sql`if(${stored}, s.product_address, ifNull(e.head_product, ''))`,
+        product_kind: sql`if(${stored}, s.product_kind, ifNull(e.head_product_kind, ''))`,
+        contract_kind: sql`if(${stored}, s.contract_kind, ifNull(e.head_contract_kind, ''))`,
+        decimals: sql`if(${stored}, s.decimals, ifNull(e.head_decimals, toUInt8(18)))`,
+        share_to_usd: sql`multiIf(${stored}, s.share_to_usd, ${indexer}, ifNull(e.head_price, 0.), 0.)`,
+        price_flag: sql`multiIf(${stored}, s.price_flag, s.found = 1, 'FALLBACK', ${indexer}, 'PROVISIONAL', 'PENDING')`,
+        price_source: sql`multiIf(${stored}, s.price_source, ${indexer}, ${literal(INDEXER_PRICE_SOURCE)}, '')`,
+        price_resolution: sql`multiIf(${stored}, s.price_resolution, ${indexer}, ${literal(INDEXER_PRICE_RESOLUTION)}, '')`,
+        price_before_at: sql`multiIf(${stored}, s.price_before_at, ${indexer}, e.head_price_at, NULL)`,
+        price_after_at: sql`if(${stored}, s.price_after_at, NULL)`,
         usd_delta: usd('delta'),
         usd_after: usd('shares_after'),
     };
@@ -153,9 +156,11 @@ const priceSelect = (): Sql => {
  * One row per event of the account ({@link timelineColumns}), unordered. Events come from the active version's Envio
  * database ({@link timelineEventsCtes}); each takes its price from:
  * 1. its `event_price_<N>` row if it has one, final or provisional (the timestamp is part of the match, so a row stored
- *    for an event that a rollback replayed at another time is not used);
- * 2. else the indexer's price (`PROVISIONAL`, `price_source = 'indexer'`, `price_resolution = 'latest'`, `price_before_at`
- *    when the indexer fetched it); USD values for `BALANCE` rows, as the reprice job computes them;
+ *    for an event that a rollback replayed at another time is not used), unless that row is `MISSING` and the indexer
+ *    has a price;
+ * 2. else the indexer's price (`PROVISIONAL`, or `FALLBACK` over a `MISSING` row; `price_source = 'indexer'`,
+ *    `price_resolution = 'latest'`, `price_before_at` when the indexer fetched it); USD values for `BALANCE` rows, as the
+ *    reprice job computes them;
  * 3. else nothing: `PENDING`, USD values 0.
  *
  * No price table and no product facts are read: a lookup only, so the planning stays small. Each source is one CTE,

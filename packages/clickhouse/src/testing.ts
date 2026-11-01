@@ -22,7 +22,8 @@ export const createScratchRaw = async (client: ClickhouseClient, raw: string): P
               head_decimals Nullable(Int32), head_product_kind Nullable(String), head_contract_kind Nullable(String),
               chain_id Int32,
               envio_checkpoint_id UInt64, envio_change Enum8('SET' = 1, 'DELETE' = 2))
-             ENGINE = MergeTree ORDER BY (account, chain_id, block_number, log_index, envio_checkpoint_id)`
+             ENGINE = MergeTree PARTITION BY toYYYYMM(toStartOfQuarter(block_timestamp))
+             ORDER BY (account, chain_id, block_number, log_index, envio_checkpoint_id)`
     );
     await client.command(
         sql`CREATE TABLE ${qualified(raw, envioChainsTable())} (chain_id Int32, checkpoint_id UInt64, updated_at DateTime64(6, 'UTC') DEFAULT now64(6))

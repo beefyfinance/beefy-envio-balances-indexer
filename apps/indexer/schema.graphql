@@ -308,7 +308,14 @@ Fields that do not apply to a kind are '' or 0.
 type TimelineEvent
   # Postgres only: the balance checks of scripts/correctness.ts read BALANCE rows per token
   @index(fields: ["contract", "account", "blockNumber", "logIndex"])
-  @storage(clickhouse: { orderBy: ["account", "chainId", "blockNumber", "logIndex"] })
+  # Quarters: the worker's jobs read by time on a table sorted by account, and without partitions each one scans all of it.
+  # Monthly gains them little and doubles what an account read touches.
+  @storage(
+    clickhouse: {
+      orderBy: ["account", "chainId", "blockNumber", "logIndex"]
+      partitionBy: "toYYYYMM(toStartOfQuarter(block_timestamp))"
+    }
+  )
 {
   "chainId-trxHash-logIndex-account-kind"
   id: ID!
