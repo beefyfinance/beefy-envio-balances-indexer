@@ -28,7 +28,10 @@ const mappings: Answers = {
         { chain: 'arbitrum', earnedToken: 'mooArbA', earnContractAddress: VAULT },
         { chain: 'base', earnedToken: 'mooArbA', earnContractAddress: OTHER },
     ],
-    '/cow-vaults': [{ id: 'uniswap-cow-arb-a', chain: 'arbitrum', earnContractAddress: CLM }],
+    // the price is listed under the oracle id, which can differ from the id
+    '/cow-vaults': [
+        { id: 'uniswap-cow-arb-b-a', oracleId: 'uniswap-cow-arb-a', chain: 'arbitrum', earnContractAddress: CLM },
+    ],
 };
 
 describe('head price cache', () => {
@@ -92,8 +95,8 @@ describe('head price cache', () => {
                 null,
             ],
             '/cow-vaults': [
-                { id: 'uniswap-cow-arb-a', chain: 'arbitrum', earnContractAddress: CLM },
-                { id: { $gt: '' }, chain: 'arbitrum', earnContractAddress: OTHER },
+                { oracleId: 'uniswap-cow-arb-a', chain: 'arbitrum', earnContractAddress: CLM },
+                { oracleId: { $gt: '' }, chain: 'arbitrum', earnContractAddress: OTHER },
             ],
             // Object.fromEntries defines `__proto__` as an own key (as JSON.parse does with a hostile answer), where an
             // object literal or an assignment would set the prototype instead

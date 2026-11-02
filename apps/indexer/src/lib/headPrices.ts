@@ -3,8 +3,8 @@
  * in memory per chain and read synchronously by the timeline writers.
  *
  * - Classic vaults: `/mootokenprices` (API chain -> moo token symbol -> price), mapped to addresses by `/vaults`
- *   (`earnedToken` -> `earnContractAddress`). CLM managers: `/lps` (vault id -> price), mapped by `/cow-vaults`
- *   (`id` -> `earnContractAddress`).
+ *   (`earnedToken` -> `earnContractAddress`). CLM managers: `/lps` (oracle id -> price), mapped by `/cow-vaults`
+ *   (`oracleId` -> `earnContractAddress`; a CLM's `id` can differ from its `oracleId`).
  * - Prices are refreshed every minute and the address mappings every 10 minutes (HEAD_PRICE_REFRESH_MS,
  *   HEAD_PRICE_MAPPINGS_REFRESH_MS), in the background; a failed fetch keeps the previous data. Each price carries the
  *   time its endpoint was fetched (`fetchedAt`).
@@ -45,7 +45,7 @@ const apiVaultSchema = z.object({
     earnContractAddress: addressSchema,
 });
 const apiCowVaultSchema = z.object({
-    id: z.string().min(1),
+    oracleId: z.string().min(1),
     chain: z.string().min(1),
     earnContractAddress: addressSchema,
 });
@@ -55,7 +55,7 @@ const jsonObjectSchema = z.custom<Record<string, unknown>>(
     (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-/** Prices by key (moo token symbol, or CLM vault id); only positive prices are kept. */
+/** Prices by key (moo token symbol, or CLM oracle id); only positive prices are kept. */
 type Prices = ReadonlyMap<string, number>;
 type Fetched<T> = { data: T; fetchedAt: number };
 
@@ -94,7 +94,7 @@ export const createHeadPriceCache = ({
     let cowVaults: Mapping[] = [];
     /** API chain -> moo token symbol -> price */
     let mooPrices: Fetched<ReadonlyMap<string, Prices>> | undefined;
-    /** CLM vault id -> price */
+    /** CLM oracle id -> price */
     let lpPrices: Fetched<Prices> | undefined;
     let byChain = new Map<string, Map<string, HeadPrice>>();
     let timers: ReturnType<typeof setInterval>[] = [];
@@ -218,9 +218,9 @@ export const createHeadPriceCache = ({
         }
         const cowRows = cowList && parseList('/cow-vaults', cowList.data, apiCowVaultSchema);
         if (cowRows) {
-            cowVaults = R.map(cowRows, ({ chain, id, earnContractAddress }) => ({
+            cowVaults = R.map(cowRows, ({ chain, oracleId, earnContractAddress }) => ({
                 chain,
-                key: id,
+                key: oracleId,
                 address: earnContractAddress,
             }));
         }

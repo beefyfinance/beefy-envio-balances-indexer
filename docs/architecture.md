@@ -139,7 +139,7 @@ move), `deployments`, and the only objects the API reads: `user_timeline_api(acc
 ### Indexer prices
 
 `src/lib/headPrices.ts` keeps the latest share price per product in memory: `/mootokenprices` with `/vaults` for classic
-vaults, `/lps` with `/cow-vaults` for CLMs, and boosts and reward pools take the price of `Contract.productAddress`. Prices
+vaults, `/lps` with the `oracleId` of `/cow-vaults` for CLMs, and boosts and reward pools take the price of `Contract.productAddress`. Prices
 refresh every minute and mappings every 10 minutes; a failed fetch keeps the previous data, and handlers never wait. It is
 not an Envio effect, because effects cache by input and this value depends on when it is read.
 
@@ -301,7 +301,9 @@ not measured.
 
 1. A real rollback: can a reader filtering on `envio_chains` see a row Envio is about to delete? Only simulated so far.
 2. `ready` stays manual: nothing checks that Envio reached the chain head.
-3. Indexer price unit: confirm on a vault whose want does not have 18 decimals that the API price matches analytics.
+3. Indexer price unit: non-18 vaults are right only because we divide by want decimals, which cancels a `/mootokenprices`
+   bug. When the API devs fix it ([beefy-api#1966](https://github.com/beefyfinance/beefy-api/pull/1966)), prices become per
+   10^18 share units: move `priceDecimals` and `productFactsCtes` to match, and check the `beefy_api_share` series.
 4. Products the Beefy API does not list rely on provisional rows, which lag with the analytics tables. Is that fine?
 5. Claims have no USD value (`claims[].usd` is null). They need reward token prices.
 6. Cloudflare: that it caches `200` JSON and `308`s, honours `stale-while-revalidate` and collapses concurrent misses.
