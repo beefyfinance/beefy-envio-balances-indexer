@@ -146,6 +146,15 @@ describe('price facts', () => {
         });
     });
 
+    it('prices a reward pool per the plain token it stakes, until that token registers', async () => {
+        const { context, contracts } = fakeContext(
+            { [POOL]: [share], [WANT]: [usdc] },
+            { [POOL]: [{ stakedToken: WANT }] }
+        );
+        await ensureContract(context, event(BLOCK, POOL), 'REWARD_POOL');
+        expect(priceFacts(contracts, POOL)).toEqual({ productAddress: WANT, priceDecimals: 6, productKind: 'UNKNOWN' });
+    });
+
     it('completes a boost once the vault it stakes is registered', async () => {
         const { context, contracts } = fakeContext(
             // the vault's token is read as the staked token, then again as a share when the vault registers

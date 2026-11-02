@@ -57,7 +57,8 @@ type Contract @storage(postgres: true, clickhouse: true) {
   share price prices this contract's rows (the contract itself for a vault or CLM manager, the staked product for a
   boost or reward pool), and the decimals that price is per (want decimals for a classic vault, share decimals
   otherwise), and the product's kind. `productAddress` is set as soon as known; `priceDecimals` and `productKind`
-  together once the product is registered (and, for a vault, its want's decimals read). Never set for other kinds.
+  together once the product is registered (and, for a vault, its want's decimals read), or from the token's decimals
+  with kind UNKNOWN for a plain token staked in a reward pool. Never set for other kinds.
   """
   productAddress: String
   priceDecimals: Int
@@ -339,7 +340,7 @@ type TimelineEvent
   logIndex: Int!
   trxHash: String!
   """
-  Indexer price (docs/architecture.md "Indexer prices"): the Beefy API share price of `headProduct` cached when
+  Indexer price (docs/architecture.md "Indexer prices"): the Beefy API share price of `contract` cached when
   the handler ran, per 10^headDecimals share units, fetched at `headPriceAt`. Set only on events indexed within 10
   minutes of their block with a price at most 15 minutes old (and known price facts); not deterministic (a reindex
   writes another value or none).

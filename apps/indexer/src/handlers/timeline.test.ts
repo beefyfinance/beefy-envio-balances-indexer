@@ -416,9 +416,12 @@ describe('indexer prices', () => {
         );
     });
 
-    it('prices boost stakes and claims with the price of the vault it stakes', async () => {
+    it('prices boost stakes and claims with the price of the boost, in the unit of that price', async () => {
         const now = (TS_BOOST + 60) * 1000;
-        usePrices({ 8453: { [BOOST_VAULT]: 2.5, [BOOST]: 99 } }, now, now);
+        setHeadPriceSource(
+            { get: (_, contract) => (contract === BOOST ? { price: 2.5, fetchedAt: now, decimals: 18 } : undefined) },
+            () => now
+        );
         const indexer = createTestIndexer();
         // the staked vault, registered with its want read (6 decimals here) before the boost's first event
         indexer.Contract.set({
@@ -468,7 +471,7 @@ describe('indexer prices', () => {
             headPrice: 2.5,
             headPriceAt: new Date(now),
             headProduct: BOOST_VAULT,
-            headDecimals: 6,
+            headDecimals: 18,
             headProductKind: 'VAULT',
             headContractKind: 'BOOST',
         };

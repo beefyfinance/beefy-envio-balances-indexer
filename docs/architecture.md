@@ -138,10 +138,13 @@ move), `deployments`, and the only objects the API reads: `user_timeline_api(acc
 
 ### Indexer prices
 
-`src/lib/headPrices.ts` keeps the latest share price per product in memory: `/mootokenprices` with `/vaults` for classic
-vaults, `/lps` with the `oracleId` of `/cow-vaults` for CLMs, and boosts and reward pools take the price of `Contract.productAddress`. Prices
-refresh every minute and mappings every 10 minutes; a failed fetch keeps the previous data, and handlers never wait. It is
-not an Envio effect, because effects cache by input and this value depends on when it is read.
+`src/lib/headPrices.ts` keeps the latest share price per contract in memory, following the Beefy API rule. `/prices` and
+`/lps` merge into one oracle id map. A contract is found by chain and address in `/vaults/all`, or else in `/boosts`, which
+leads to the `/vaults/all` entry whose id is its `poolId`. An entry with a `pricePerFullShare` is priced at oracle price ×
+ppfs × 10^-tokenDecimals, per 10^18 share units, so a priced row's `headDecimals` is 18; any other entry is priced at its
+oracle price, and its row keeps `priceDecimals`. A contract the API lists nowhere gets no indexer price. Prices refresh
+every minute and mappings every 10 minutes; a failed fetch keeps the previous data, and handlers never wait. It is not an
+Envio effect, because effects cache by input and this value depends on when it is read.
 
 An event gets a price only if, when its handler runs, it is at most 10 minutes old, the price is at most 15 minutes old (a
 stuck refresh stops pricing instead of spreading an old price), and the contract's price facts are known. The value is not
@@ -153,7 +156,8 @@ with no indexer price get a provisional stored row from the next `advance`, so t
 
 Handlers cannot read `ContractLink` (ClickHouse only), so `Contract` carries these, set in `src/lib/registry.ts`:
 `productAddress` (the contract itself for a vault or CLM manager, the staked product for a boost or reward pool),
-`priceDecimals` (want decimals for a classic vault, share decimals otherwise) and `productKind`. The rule is the one of
+`priceDecimals` (want decimals for a classic vault, share decimals otherwise) and `productKind`, which is `UNKNOWN` for a
+plain token staked in a reward pool. The rule is the one of
 `productFactsCtes` (`packages/clickhouse/src/events.ts`), the source of truth for stored rows.
 
 ### Read path
@@ -301,9 +305,10 @@ not measured.
 
 1. A real rollback: can a reader filtering on `envio_chains` see a row Envio is about to delete? Only simulated so far.
 2. `ready` stays manual: nothing checks that Envio reached the chain head.
-3. Indexer price unit: non-18 vaults are right only because we divide by want decimals, which cancels a `/mootokenprices`
-   bug. When the API devs fix it ([beefy-api#1966](https://github.com/beefyfinance/beefy-api/pull/1966)), prices become per
-   10^18 share units: move `priceDecimals` and `productFactsCtes` to match, and check the `beefy_api_share` series.
+3. Stored price unit: `/mootokenprices` moved to per 10^18 share units on 2026-11-02
+   ([beefy-api#1966](https://github.com/beefyfinance/beefy-api/pull/1966)), while `beefy_api_share` history and
+   `productFactsCtes` count classic vaults in want decimals. When dbt settles the unit of those series, move
+   `productFactsCtes` to match. Indexer prices are per 10^18 share units on each row, whatever dbt settles.
 4. Products the Beefy API does not list rely on provisional rows, which lag with the analytics tables. Is that fine?
 5. Claims have no USD value (`claims[].usd` is null). They need reward token prices.
 6. Cloudflare: that it caches `200` JSON and `308`s, honours `stale-while-revalidate` and collapses concurrent misses.

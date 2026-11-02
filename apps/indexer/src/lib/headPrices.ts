@@ -1,10 +1,13 @@
 /**
- * Indexer prices (docs/architecture.md "Indexer prices"): the latest Beefy API share price of each product, kept
+ * Indexer prices (docs/architecture.md "Indexer prices"): the latest Beefy API share price of each contract, kept
  * in memory per chain and read synchronously by the timeline writers.
  *
- * - Classic vaults: `/mootokenprices` (API chain -> moo token symbol -> price), mapped to addresses by `/vaults`
- *   (`earnedToken` -> `earnContractAddress`). CLM managers: `/lps` (oracle id -> price), mapped by `/cow-vaults`
- *   (`oracleId` -> `earnContractAddress`; a CLM's `id` can differ from its `oracleId`).
+ * - `/prices` and `/lps` merge into one oracle id -> price map: an oracle id is listed in one of them.
+ * - A contract is found by chain and address in `/vaults/all`. A contract not listed there is found in `/boosts`, and
+ *   takes the `/vaults/all` entry whose id is the boost's `poolId`.
+ * - An entry with a `pricePerFullShare` is priced at oracle price * ppfs * 10^-tokenDecimals, per 10^18 share units
+ *   (`HeadPrice.decimals`); any other is priced at its oracle price, per 10^`Contract.priceDecimals` share units.
+ * - The ppfs is as fresh as the mappings, which is close enough for a temporary price.
  * - Prices are refreshed every minute and the address mappings every 10 minutes (HEAD_PRICE_REFRESH_MS,
  *   HEAD_PRICE_MAPPINGS_REFRESH_MS), in the background; a failed fetch keeps the previous data. Each price carries the
  *   time its endpoint was fetched (`fetchedAt`).
@@ -24,10 +27,11 @@ import { describeError } from './errors';
 import { fetchWithRetry, type RetryOptions } from './fetch';
 import { asHex } from './hex';
 
-export type HeadPrice = { price: number; fetchedAt: number };
+/** `decimals`: the share units the price is per, when they are not the contract's `priceDecimals`. */
+export type HeadPrice = { price: number; fetchedAt: number; decimals?: number | undefined };
 
-/** Product address (lowercase) -> latest price, per chain id. */
-export type HeadPriceSource = { get: (chainId: number, product: string) => HeadPrice | undefined };
+/** Contract address (lowercase) -> latest price, per chain id. */
+export type HeadPriceSource = { get: (chainId: number, contract: string) => HeadPrice | undefined };
 
 /** Beefy API chain name of a chain id (the addressbook names are the API's: checked against `/vaults`). */
 export const apiChainName = (chainId: number): string | undefined => (ChainId as Record<number, string>)[chainId];
@@ -40,12 +44,16 @@ const addressSchema = z
     .regex(/^0x[0-9a-fA-F]{40}$/)
     .transform(asHex);
 const apiVaultSchema = z.object({
+    id: z.string().min(1),
+    oracleId: z.string().min(1),
     chain: z.string().min(1),
-    earnedToken: z.string().min(1),
+    /** A decimal string, sometimes in scientific notation; 0 prices nothing. Absent on CLMs and reward pools. */
+    pricePerFullShare: z.coerce.number().nonnegative().optional(),
+    tokenDecimals: z.number().int().nonnegative(),
     earnContractAddress: addressSchema,
 });
-const apiCowVaultSchema = z.object({
-    oracleId: z.string().min(1),
+const apiBoostSchema = z.object({
+    poolId: z.string().min(1),
     chain: z.string().min(1),
     earnContractAddress: addressSchema,
 });
@@ -55,12 +63,41 @@ const jsonObjectSchema = z.custom<Record<string, unknown>>(
     (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-/** Prices by key (moo token symbol, or CLM oracle id); only positive prices are kept. */
+/** Prices by oracle id; only positive prices are kept. */
 type Prices = ReadonlyMap<string, number>;
 type Fetched<T> = { data: T; fetchedAt: number };
 
-/** The product's address and the key its price is listed under. */
-type Mapping = { chain: string; key: string; address: string };
+/** The share units of a price adjusted by ppfs. */
+const PPFS_PRICE_DECIMALS = 18;
+
+/** A contract's address, the oracle id its price is listed under, and its price for an oracle price of 1. */
+type Mapping = { chain: string; oracleId: string; address: string; factor: number; decimals: number | undefined };
+type ApiVault = z.infer<typeof apiVaultSchema>;
+type ApiBoost = z.infer<typeof apiBoostSchema>;
+
+const vaultMapping = ({
+    chain,
+    oracleId,
+    earnContractAddress,
+    pricePerFullShare,
+    tokenDecimals,
+}: ApiVault): Mapping => ({
+    chain,
+    oracleId,
+    address: earnContractAddress,
+    factor: pricePerFullShare === undefined ? 1 : pricePerFullShare / 10 ** tokenDecimals,
+    decimals: pricePerFullShare === undefined ? undefined : PPFS_PRICE_DECIMALS,
+});
+
+/** The `/vaults/all` entries, then each boost under the entry of its `poolId`. */
+const contractMappings = (vaults: ApiVault[], boosts: ApiBoost[]): Mapping[] => {
+    const byPoolId = new Map(R.map(vaults, (vault) => [`${vault.chain}-${vault.id}`, vault] as const));
+    const boosted = R.flatMap(boosts, ({ chain, poolId, earnContractAddress }) => {
+        const vault = byPoolId.get(`${chain}-${poolId}`);
+        return vault === undefined ? [] : [{ ...vaultMapping(vault), address: earnContractAddress }];
+    });
+    return [...R.map(vaults, vaultMapping), ...boosted];
+};
 
 export type HeadPriceCache = HeadPriceSource & {
     refreshPrices: () => Promise<void>;
@@ -90,12 +127,11 @@ export const createHeadPriceCache = ({
     mappingsRefreshMs?: number;
     onError?: (message: string) => void;
 } = {}): HeadPriceCache => {
-    let vaults: Mapping[] = [];
-    let cowVaults: Mapping[] = [];
-    /** API chain -> moo token symbol -> price */
-    let mooPrices: Fetched<ReadonlyMap<string, Prices>> | undefined;
-    /** CLM oracle id -> price */
+    let vaults: ApiVault[] = [];
+    let boosts: ApiBoost[] = [];
+    let mappings: Mapping[] = [];
     let lpPrices: Fetched<Prices> | undefined;
+    let tokenPrices: Fetched<Prices> | undefined;
     let byChain = new Map<string, Map<string, HeadPrice>>();
     let timers: ReturnType<typeof setInterval>[] = [];
 
@@ -143,18 +179,6 @@ export const createHeadPriceCache = ({
         return new Map(R.filter(prices, (entry): entry is [string, number] => entry[1] !== null && entry[1] > 0));
     };
 
-    const parseMooPrices = (data: unknown): ReadonlyMap<string, Prices> | undefined => {
-        const chains = objectEntries('/mootokenprices', data);
-        if (chains === undefined) return undefined;
-        return new Map(
-            R.pipe(
-                chains,
-                R.map(([chain, prices]) => [chain, parsePrices(`/mootokenprices ${chain}`, prices)] as const),
-                R.filter((entry): entry is readonly [string, Prices] => entry[1] !== undefined)
-            )
-        );
-    };
-
     const parseList = <T>(path: string, data: unknown, schema: z.ZodType<T>): T[] | undefined => {
         if (!Array.isArray(data)) {
             onError(`head prices: ${path}: unexpected answer (not a list)`);
@@ -164,24 +188,18 @@ export const createHeadPriceCache = ({
     };
 
     /** The priced mappings of one endpoint; none before its first successful fetch. */
-    const priced = <T>(
-        mappings: Mapping[],
-        fetched: Fetched<T> | undefined,
-        priceOf: (data: T, mapping: Mapping) => number | undefined
-    ) =>
+    const priced = (fetched: Fetched<Prices> | undefined) =>
         fetched === undefined
             ? []
             : R.flatMap(mappings, (mapping) => {
-                  const price = priceOf(fetched.data, mapping);
-                  return price === undefined ? [] : [{ ...mapping, head: { price, fetchedAt: fetched.fetchedAt } }];
+                  const price = (fetched.data.get(mapping.oracleId) ?? 0) * mapping.factor;
+                  const { decimals } = mapping;
+                  return price > 0 ? [{ ...mapping, head: { price, fetchedAt: fetched.fetchedAt, decimals } }] : [];
               });
 
     const rebuild = () => {
         byChain = R.pipe(
-            [
-                ...priced(vaults, mooPrices, (data, { chain, key }) => data.get(chain)?.get(key)),
-                ...priced(cowVaults, lpPrices, (data, { key }) => data.get(key)),
-            ],
+            [...priced(lpPrices), ...priced(tokenPrices)],
             R.groupBy(({ chain }) => chain),
             R.mapValues((group) => new Map(R.map(group, ({ address, head }) => [address, head] as const))),
             R.entries(),
@@ -200,36 +218,23 @@ export const createHeadPriceCache = ({
     };
 
     const refreshPrices = async () => {
-        const [moo, lps] = await Promise.all([fetchJson('mootokenprices'), fetchJson('lps')]);
-        mooPrices = refreshed(mooPrices, moo, parseMooPrices);
+        const [lps, tokens] = await Promise.all([fetchJson('lps'), fetchJson('prices')]);
         lpPrices = refreshed(lpPrices, lps, (data) => parsePrices('/lps', data));
+        tokenPrices = refreshed(tokenPrices, tokens, (data) => parsePrices('/prices', data));
         rebuild();
     };
 
     const refreshMappings = async () => {
-        const [vaultList, cowList] = await Promise.all([fetchJson('vaults'), fetchJson('cow-vaults')]);
-        const vaultRows = vaultList && parseList('/vaults', vaultList.data, apiVaultSchema);
-        if (vaultRows) {
-            vaults = R.map(vaultRows, ({ chain, earnedToken, earnContractAddress }) => ({
-                chain,
-                key: earnedToken,
-                address: earnContractAddress,
-            }));
-        }
-        const cowRows = cowList && parseList('/cow-vaults', cowList.data, apiCowVaultSchema);
-        if (cowRows) {
-            cowVaults = R.map(cowRows, ({ chain, oracleId, earnContractAddress }) => ({
-                chain,
-                key: oracleId,
-                address: earnContractAddress,
-            }));
-        }
+        const [vaultList, boostList] = await Promise.all([fetchJson('vaults/all'), fetchJson('boosts')]);
+        vaults = (vaultList && parseList('/vaults/all', vaultList.data, apiVaultSchema)) ?? vaults;
+        boosts = (boostList && parseList('/boosts', boostList.data, apiBoostSchema)) ?? boosts;
+        mappings = contractMappings(vaults, boosts);
         rebuild();
     };
 
     // no mappings yet (the first fetch failed): prices would attach to nothing until the next mappings period
     const refresh = async () => {
-        if (vaults.length === 0 || cowVaults.length === 0) await refreshMappings();
+        if (vaults.length === 0 || boosts.length === 0) await refreshMappings();
         await refreshPrices();
     };
 
@@ -248,9 +253,9 @@ export const createHeadPriceCache = ({
         timers = [];
     };
 
-    const get = (chainId: number, product: string) => {
+    const get = (chainId: number, contract: string) => {
         const chain = apiChainName(chainId);
-        return chain === undefined ? undefined : byChain.get(chain)?.get(asHex(product));
+        return chain === undefined ? undefined : byChain.get(chain)?.get(asHex(contract));
     };
 
     return { get, refreshPrices, refreshMappings, start, stop };
@@ -293,14 +298,14 @@ export const setHeadPriceSource = (next: HeadPriceSource | undefined, clock: () 
 };
 
 /**
- * The cached price of `product` for an event at `blockTimestamp` (seconds), under the age rules: the event at most
+ * The cached price of `contract` for an event at `blockTimestamp` (seconds), under the age rules: the event at most
  * HEAD_PRICE_EVENT_MAX_AGE_MS old and the price at most HEAD_PRICE_MAX_AGE_MS old, now (src/lib/config.ts).
  */
-export const headPriceAt = (chainId: number, product: string, blockTimestamp: number): HeadPrice | undefined => {
+export const headPriceAt = (chainId: number, contract: string, blockTimestamp: number): HeadPrice | undefined => {
     const cache = activeSource();
     const { eventMaxAgeMs, priceMaxAgeMs } = indexerConfig().headPrices;
     const now = (override()?.clock ?? Date.now)();
     if (now - blockTimestamp * 1000 > eventMaxAgeMs) return undefined;
-    const price = cache.get(chainId, product);
+    const price = cache.get(chainId, contract);
     return price !== undefined && now - price.fetchedAt <= priceMaxAgeMs ? price : undefined;
 };

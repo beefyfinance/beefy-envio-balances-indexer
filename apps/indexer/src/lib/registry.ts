@@ -215,15 +215,22 @@ type PriceFacts = Pick<Contract, 'priceDecimals' | 'productKind'>;
 
 /**
  * Price decimals and kind of `product` (a staked token), the rule of productFactsCtes: a vault's or CLM's own price
- * decimals, the token's decimals for any other known kind, unknown for an unregistered or UNKNOWN contract.
+ * decimals, the token's decimals for any other known kind. An unregistered or UNKNOWN contract is unknown too, except
+ * under a reward pool, which can stake a plain token: its decimals, kind UNKNOWN (what productFactsCtes gives it), until
+ * the product registers.
  */
 const stakedPriceFacts = async (
     context: Context,
     chainId: number,
+    kind: ContractKind,
     product: string
 ): Promise<PriceFacts | undefined> => {
     const row = await context.Contract.get(contractId(chainId, product));
-    if (row === undefined || row.kind === 'UNKNOWN') return undefined;
+    if (row === undefined || row.kind === 'UNKNOWN') {
+        if (kind !== 'REWARD_POOL') return undefined;
+        const decimals = (await context.Token.get(contractId(chainId, product)))?.decimals;
+        return decimals === undefined ? undefined : { priceDecimals: decimals, productKind: 'UNKNOWN' };
+    }
     const priceDecimals = PRODUCT_KINDS.has(row.kind)
         ? row.priceDecimals
         : (await context.Token.get(contractId(chainId, product)))?.decimals;
@@ -232,13 +239,16 @@ const stakedPriceFacts = async (
 
 /**
  * Price facts of a staking contract whose product is known but whose decimals are not yet (the product registered,
- * or its want read, after the stake's facts): one more `Contract.get` per event until they are.
+ * or its want read, after the stake's facts): one more `Contract.get` per event until they are, or while the product
+ * stays UNKNOWN.
  */
 const completePriceFacts = async (context: Context, chainId: number, contract: Contract): Promise<Contract> => {
-    if (contract.productAddress === undefined || contract.priceDecimals !== undefined) return contract;
+    if (contract.productAddress === undefined) return contract;
+    if (contract.priceDecimals !== undefined && contract.productKind !== 'UNKNOWN') return contract;
     if (STAKED_RELATIONS[contract.kind] === undefined) return contract;
-    const facts = await stakedPriceFacts(context, chainId, contract.productAddress);
+    const facts = await stakedPriceFacts(context, chainId, contract.kind, contract.productAddress);
     if (facts === undefined) return contract;
+    if (facts.priceDecimals === contract.priceDecimals && facts.productKind === contract.productKind) return contract;
     const updated: Contract = { ...contract, ...facts };
     context.Contract.set(updated);
     return updated;

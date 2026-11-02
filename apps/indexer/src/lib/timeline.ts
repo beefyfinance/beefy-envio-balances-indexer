@@ -11,8 +11,9 @@
  * - CLM_DEPOSIT / CLM_WITHDRAW: CLM manager Deposit / Withdraw, for the user.
  * - CLAIM: reward pool and boost RewardPaid, for the user.
  * - Price facts (`headProduct`, `headDecimals`, `headProductKind`, `headContractKind`): the emitting contract's,
- *   once known. Indexer price (`headPrice`, `headPriceAt`): the cached Beefy API price of that product
- *   (src/lib/headPrices.ts), on events recent enough when the handler runs; else unset.
+ *   once known. Indexer price (`headPrice`, `headPriceAt`): the cached Beefy API price of the emitting
+ *   contract (src/lib/headPrices.ts), on events recent enough when the handler runs; else unset. A priced row's
+ *   `headDecimals` is the unit of that price.
  *
  * Ids are `chainId-trxHash-logIndex-account-kind`, stable across reindexes.
  */
@@ -53,12 +54,12 @@ const NO_HEAD: HeadColumns = {
 const headColumns = (event: RawEvent, contract: Contract): HeadColumns => {
     const { productAddress, priceDecimals, productKind } = contract;
     if (productAddress === undefined || priceDecimals === undefined || productKind === undefined) return NO_HEAD;
-    const head = headPriceAt(event.chainId, productAddress, event.block.timestamp);
+    const head = headPriceAt(event.chainId, contract.address, event.block.timestamp);
     return {
         headPrice: head?.price,
         headPriceAt: head === undefined ? undefined : new Date(head.fetchedAt),
         headProduct: productAddress,
-        headDecimals: priceDecimals,
+        headDecimals: head?.decimals ?? priceDecimals,
         headProductKind: productKind,
         headContractKind: contract.kind,
     };

@@ -56,7 +56,8 @@ const HEAD_COLUMNS = [
  * latest Beefy API share price it had when it wrote a recent event and when it fetched it (both NULL when it did not
  * price the event: indexed during a sync, no fresh API price), and the price facts of the event's contract as the
  * indexer knew them (product, decimals, product and contract kinds, as {@link productFactsCtes}): set whenever the
- * facts were known, priced or not. Versions indexed before these columns existed cannot be served by the API view.
+ * facts were known, priced or not. On a priced row `head_decimals` is the unit of `head_price`, which can differ from
+ * those facts (per 10^18 share units for a classic vault). Versions indexed before these columns existed cannot be served by the API view.
  */
 export const headColumns = (): string[] => [...HEAD_COLUMNS];
 
