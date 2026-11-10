@@ -123,7 +123,7 @@ describe('identifier', () => {
     it('quotes plain names and refuses anything else', () => {
         expect(ident('beefy_raw').text).toBe('`beefy_raw`');
         expect(qualified('a', 'b_1').text).toBe('`a`.`b_1`');
-        expect(qualifiedName('analytics.token').text).toBe('`analytics`.`token`');
+        expect(qualifiedName('databarn.dim_token').text).toBe('`databarn`.`dim_token`');
         expect(sql`SELECT * FROM ${qualified('a', 'b')}`.text).toBe('SELECT * FROM `a`.`b`');
         for (const name of HOSTILE) {
             expect(() => ident(name)).toThrow('invalid ClickHouse identifier');
@@ -181,7 +181,7 @@ describe('checked values', () => {
 describe('statement builders', () => {
     const schema = {
         database: 'ours',
-        prices: { price5m: 'px.asset_price_5m', token: 'px.token' },
+        prices: { price5m: 'px.fact_asset_price_5m', token: 'px.dim_token' },
         watermarkPriceSources: ['api'],
         envioDatabasePrefix: 'envio_',
     };

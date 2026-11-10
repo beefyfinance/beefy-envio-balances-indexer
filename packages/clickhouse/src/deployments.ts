@@ -718,7 +718,8 @@ hourly AS
 SELECT toString(hour) AS hour, n FROM hourly ORDER BY hour`;
 
 /**
- * Where the watermark may move to now: `min(now - min age, freshest price of each required source - max price gap)`.
+ * Where the watermark may move to now: `min(now - min age, freshest actual price of each required source - max price
+ * gap)`. Carried rows do not count: databarn carries a price a day past its source's last one.
  * If a source stops, the watermark stops too, and the rows past it keep their indexer price or provisional row until its
  * prices arrive: nothing is stored as final with a stale price because of an outage. A source with no price in the last
  * 30 days counts as the epoch (the watermark does not move).
@@ -733,6 +734,7 @@ freshest AS
     SELECT price_source, max(date_time) AS at
     FROM ${qualifiedName(schema.prices.price5m)}
     WHERE price_source IN ${param('Array(String)', schema.watermarkPriceSources)}
+        AND is_carried = 0
         AND date_time >= now() - toIntervalDay(${param('UInt32', SOURCE_LOOKBACK_DAYS)})
     GROUP BY price_source
 )

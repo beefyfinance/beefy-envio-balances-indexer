@@ -21,7 +21,7 @@ import {
 
 const schema: Schema = {
     database: 'beefy_indexer_dev',
-    prices: { price5m: 'analytics.asset_price_5m', token: 'analytics.token' },
+    prices: { price5m: 'databarn.fact_asset_price_5m', token: 'databarn.dim_token' },
     watermarkPriceSources: ['api', 'beefy_db'],
     envioDatabasePrefix: 'envio_dev_',
 };
@@ -79,7 +79,7 @@ describe('API views', () => {
     it('only look prices up, with named CTEs each referenced once and no sub-select in a FROM', () => {
         const view = userTimelineApiView(schema, active).text;
         // no pricing SQL, no product facts, no price table, no watermark: planning stays small
-        for (const absent of ['px_', 'Contract', 'Token', 'analytics.', 'price_watermark'])
+        for (const absent of ['px_', 'Contract', 'Token', 'databarn.', 'price_watermark'])
             expect(view).not.toContain(absent);
         expect(view.split('envio_history_TimelineEvent').length).toBe(2);
         expect(view.split('event_price_4').length).toBe(2);
@@ -135,15 +135,21 @@ describe('reprice statement', () => {
 
     it('prices from the 5 minute table only, with named CTEs and no sub-select in a FROM', () => {
         const { text } = pricedEventsCtes(schema.prices, 'envio_dev_4', 'events');
-        expect(text).toContain('`analytics`.`asset_price_5m`');
-        for (const absent of ['asset_price_1h', 'asset_price_1d', 'bar', "'1h'", "'1d'", 'LIMIT 1 BY event_id'])
+        expect(text).toContain('`databarn`.`fact_asset_price_5m`');
+        for (const absent of ['asset_price_1h', 'asset_price_1d', "'1h'", "'1d'", 'LIMIT 1 BY event_id'])
             expect(text).not.toContain(absent);
+        expect(text).not.toMatch(/\bbar\b/);
         expect(text).not.toMatch(/(?:FROM|JOIN)\s*\(\s*SELECT/);
         for (const name of ctes(text)) {
-            // px_days feeds one scalar subquery, written twice and run once; px_rows feeds it and the price lookup (a
-            // background statement: planning it twice costs nothing that matters, unlike in the API view); px_priced is the
-            // caller's
-            const expected = name === 'px_days' || name === 'px_rows' ? 2 : name === 'px_priced' ? 0 : 1;
+            // px_keys feeds one scalar subquery, written five times and run once; px_rows feeds it and the price lookup
+            // (a background statement: planning it twice costs nothing that matters, unlike in the API view); px_priced
+            // is the caller's
+            const expected =
+                new Map([
+                    ['px_keys', 3],
+                    ['px_rows', 2],
+                    ['px_priced', 0],
+                ]).get(name) ?? 1;
             expect(references(text, name)).toBe(expected);
         }
     });

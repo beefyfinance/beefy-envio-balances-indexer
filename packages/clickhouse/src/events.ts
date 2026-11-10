@@ -145,12 +145,13 @@ ${ident(name)} AS
  * CTEs ending in `<name>`: which product (vault or CLM manager) a contract's shares belong to, one row per contract
  * (`chain_id`, `contract`, `product_address`, `contract_kind`, `product_kind`, `decimals`, `facts_complete`, and
  * `found` = 1 for a LEFT JOIN to tell a match): itself for
- * vaults and managers, the staked token for boosts and reward pools. `contract_kind` is the kind of the contract,
+ * vaults and managers, the staked token for boosts and reward pools, the wrapped vault for ERC-4626 adapters (a Beefy
+ * wrapper mints one share per vault share, so it is priced as its vault). `contract_kind` is the kind of the contract,
  * `product_kind` of the product (`VAULT`, `CLM_MANAGER`, or `UNKNOWN` while the indexer has not read it). Read live from
  * Envio's entity tables. Each CTE is referenced once (ClickHouse inlines a CTE at every reference).
  *
  * `decimals` is the unit the share price is quoted in: the product's share token decimals, for classic vaults (whose
- * price counts 10^18 share units, as `/mootokenprices` since beefy-api#1966 and the analytics series) and CLMs alike,
+ * price counts 10^18 share units, as `/mootokenprices` since beefy-api#1966 and the databarn series) and CLMs alike,
  * 18 for a token without decimals. Read when the query runs, so decimals read late show up at once.
  *
  * `facts_complete` (0 or 1) says whether `decimals` rests on facts rather than on a fallback: a known product kind needs
@@ -178,9 +179,10 @@ ${cte('_mapping')} AS
     WHERE kind IN ('VAULT', 'CLM_MANAGER')
     UNION ALL
     SELECT toInt32(chain_id) AS chain_id, lower(from_address) AS contract, lower(to_address) AS product_address,
-        if(relation = 'BOOST_STAKED', 'BOOST', 'REWARD_POOL') AS kind, toUInt8(1) AS priority, toUInt64(since_block) AS since
+        multiIf(relation = 'BOOST_STAKED', 'BOOST', relation = 'REWARD_POOL_STAKED', 'REWARD_POOL', 'ERC4626_ADAPTER') AS kind,
+        toUInt8(1) AS priority, toUInt64(since_block) AS since
     FROM ${link}
-    WHERE relation IN ('BOOST_STAKED', 'REWARD_POOL_STAKED')
+    WHERE relation IN ('BOOST_STAKED', 'REWARD_POOL_STAKED', 'ADAPTER_VAULT')
 ),
 ${cte('_products')} AS
 (

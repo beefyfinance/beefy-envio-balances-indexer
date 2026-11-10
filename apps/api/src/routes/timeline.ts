@@ -34,7 +34,7 @@ const ItemSchema = z
             share_to_usd: z.number(),
             flag: z.enum(timelinePriceFlags()).openapi({
                 description:
-                    'OK is interpolated between two 5 minute prices at most 6 hours apart; STALE between prices further apart (each within 48 hours); EXTRAPOLATED carried flat from the one price within 48 hours; MISSING no price (USD 0). Newer than about a day the price is provisional and replaced later: PROVISIONAL is the latest Beefy API price the indexer had (source indexer); FALLBACK the same price standing in for a MISSING one, at any age, until a 5 minute price arrives; PENDING not priced yet (USD 0, until the next advance, at most about 15 minutes)',
+                    "The price of the event's 5 minute slot. OK is an actual price of the slot, or one carried from at most 6 hours before; STALE carried from further back; MISSING no price for the slot (USD 0); EXTRAPOLATED only on rows stored by the older interpolating pricing and not repriced since. Newer than about a day the price is provisional and replaced later: PROVISIONAL is the latest Beefy API price the indexer had (source indexer); FALLBACK the same price standing in for a MISSING one, at any age, until a 5 minute price arrives; PENDING not priced yet (USD 0, until the next advance, at most about 15 minutes)",
             }),
             source: z.string().openapi({
                 description: 'The 5 minute price source, indexer for the indexer price, empty when MISSING or PENDING',
@@ -43,8 +43,17 @@ const ItemSchema = z
                 description:
                     '5m for prices from the 5 minute table; latest for the indexer price; null when MISSING or PENDING',
             }),
-            as_of: z.string().nullable().openapi({ description: 'The last price at or before the event' }),
-            as_of_next: z.string().nullable().openapi({ description: 'The first price at or after the event' }),
+            as_of: z.string().nullable().openapi({
+                description:
+                    "When the price was observed: the 5 minute slot of the actual price the event's slot holds or carries; for PROVISIONAL and FALLBACK, when the indexer fetched it",
+            }),
+            as_of_next: z
+                .string()
+                .nullable()
+                .openapi({
+                    description:
+                        'Null, except on rows stored by the older interpolating pricing: the first price at or after the event',
+                }),
         }),
         usd_balance: z.number(),
         usd_diff: z.number(),

@@ -18,7 +18,7 @@ const suffix = randomUUID().replaceAll('-', '').slice(0, 8);
 const priceDatabase = `test_px_s${suffix}`;
 const schema: Schema = {
     database: `test_bi_s${suffix}`,
-    prices: { price5m: `${priceDatabase}.asset_price_5m`, token: `${priceDatabase}.token` },
+    prices: { price5m: `${priceDatabase}.fact_asset_price_5m`, token: `${priceDatabase}.dim_token` },
     watermarkPriceSources: ['api'],
     envioDatabasePrefix: `test_envio_s${suffix}_`,
 };

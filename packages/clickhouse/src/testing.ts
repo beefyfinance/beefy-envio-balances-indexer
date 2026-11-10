@@ -1,6 +1,6 @@
 import type { ClickhouseClient } from './client.ts';
 import { envioChainsTable, timelineEventHistoryTable } from './events.ts';
-import { ident, param, qualified, sql } from './sql.ts';
+import { ident, msOf, param, qualified, sql, timeOf } from './sql.ts';
 
 /**
  * An empty stand-in for one of Envio's version databases with what we read: the `TimelineEvent` history table (Envio's
@@ -129,3 +129,6 @@ export const testRepriceSettings = () => ({
     pendingGraceSeconds: 15 * 60,
     watermarkMinAgeSeconds: 86_400,
 });
+
+/** The 5 minute price slot a time falls in (`YYYY-MM-DD HH:MM:SS`, UTC), the `date_time` of its price row. */
+export const slotOf = (time: string): string => timeOf(Math.floor(msOf(time) / 300_000) * 300_000).slice(0, 19);

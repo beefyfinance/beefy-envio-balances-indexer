@@ -39,7 +39,7 @@ import { createTimelineService } from './timeline/service.ts';
 // The whole path: Envio's TimelineEvent rows → user_timeline_api of the active version → repository (ArrowStream) →
 // response.
 const url = integrationClickhouseUrl();
-// the administrator writes what Envio and the analytics tables would hold, and creates the users; the pipeline user
+// the administrator writes what Envio and the databarn tables would hold, and creates the users; the pipeline user
 // deploys, switches and advances (it is the views' definer); the API reads as the API user, with the profile `access`
 // gives it (readonly, uncompressed Arrow)
 const client = createClickhouseClient({ url: url ?? 'http://localhost:0', username: 'default', password: '' });
@@ -60,7 +60,7 @@ const api = createClickhouseClient({
 const priceDatabase = `api_px_${suffix}`;
 const schema: Schema = {
     database: `api_bi_${suffix}`,
-    prices: { price5m: `${priceDatabase}.asset_price_5m`, token: `${priceDatabase}.token` },
+    prices: { price5m: `${priceDatabase}.fact_asset_price_5m`, token: `${priceDatabase}.dim_token` },
     watermarkPriceSources: ['api', 'beefy_db'],
     envioDatabasePrefix: `api_envio_${suffix}_`,
     definer: users.pipeline,
@@ -110,9 +110,17 @@ const event = (
         }),
     ]);
 
-const price = (at: string, value: number, source = 'test', asset = 1): Promise<void> =>
-    client.insert(qualified(priceDatabase, 'asset_price_5m'), [
-        { asset_id: asset, date_time: at, price: value, price_source: source },
+/** The price row of one 5 minute slot: an actual price, or one carried forward from the slot `carriedFrom`. */
+const price = (at: string, value: number, source = 'test', asset = 1, carriedFrom?: string): Promise<void> =>
+    client.insert(qualified(priceDatabase, 'fact_asset_price_5m'), [
+        {
+            asset_id: asset,
+            date_time: at,
+            price: value,
+            price_source: source,
+            is_carried: carriedFrom === undefined ? 0 : 1,
+            observed_at: carriedFrom ?? at,
+        },
     ]);
 
 /**
@@ -147,7 +155,7 @@ describe.skipIf(url === undefined)('timeline over ClickHouse', () => {
         }
         await client.command(sql`CREATE DATABASE ${ident(priceDatabase)}`);
         for (const statement of priceStubs(schema.prices)) await client.command(statement);
-        await client.insert(qualified(priceDatabase, 'token'), [
+        await client.insert(qualified(priceDatabase, 'dim_token'), [
             { chain_id: 8453, representation_address: VAULT, decimals: 18, asset_id: 1 },
             { chain_id: 8453, representation_address: CLM, decimals: 18, asset_id: 3 },
         ]);
@@ -166,13 +174,14 @@ describe.skipIf(url === undefined)('timeline over ClickHouse', () => {
             { chain_id: 8453, from_address: VAULT, to_address: VAULT, relation: 'VAULT_WANT', since_block: 1 },
         ]);
         for (const [at, value] of [
-            ['2024-01-01 07:00:00', 1],
-            ['2024-01-01 14:00:00', 2],
+            ['2024-01-01 05:00:00', 1],
             ['2024-01-02 10:00:00', 2],
             ['2024-01-03 10:00:00', 4],
         ] as const) {
             await price(at, value);
         }
+        // the deposit's slot carries a share rate 7 hours old (times its want's price of the slot)
+        await price('2024-01-01 12:00:00', 1.5, 'test', 1, '2024-01-01 05:00:00');
         await price('2024-01-05 00:00:00', 0.1 + 0.2, 'beefy_db', 3);
         await migrate(pipeline, schema);
         await deploy(pipeline, schema, 1, raw);
@@ -305,9 +314,8 @@ describe.skipIf(url === undefined)('timeline over ClickHouse', () => {
             share_diff: '10',
             price: { flag: 'STALE', resolution: '5m' },
         });
-        // the bracketing prices are 7 hours apart (more than the trusted gap), so the value is interpolated but flagged
-        // stale: 12:00 is five hours into the seven between prices 1 and 2
-        expect(deposit?.price.share_to_usd).toBeCloseTo(1 + 5 / 7, 6);
+        // its slot carries an actual price 7 hours old (more than the trusted 6): priced, but flagged stale
+        expect(deposit?.price.share_to_usd).toBe(1.5);
         expect(stake).toMatchObject({
             actions: ['stake'],
             share_balance: '10',
@@ -362,7 +370,7 @@ describe.skipIf(url === undefined)('timeline over ClickHouse', () => {
         await compare(EVERYTHING);
     });
 
-    it('serves the history newest first with interpolated prices and the product balance across vault and boost, once stored', async () => {
+    it('serves the history newest first with slot prices and the product balance across vault and boost, once stored', async () => {
         // both required sources are fresh: the watermark moves to a day ago, past every event
         const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
         await price(now, 1, 'api', 2);

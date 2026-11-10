@@ -34,8 +34,8 @@ describe('worker config', () => {
         });
         expect(config.clickhouse).toMatchObject({
             analyticsDatabase: 'beefy_analytics',
-            price5mTable: 'analytics.asset_price_5m',
-            tokenTable: 'analytics.token',
+            price5mTable: 'databarn.fact_asset_price_5m',
+            tokenTable: 'databarn.dim_token',
             watermarkPriceSources: ['api', 'beefy_db'],
             definer: undefined,
             envioDatabasePrefix: 'envio_dev_',

@@ -27,6 +27,7 @@ import {
     commitCheckpoint,
     createScratchRaw,
     insertTimelineEvents,
+    slotOf,
     testRepriceSettings,
     timelineEvent,
 } from './testing.ts';
@@ -41,7 +42,7 @@ const priceDatabase = `test_px_v${suffix}`;
 const envioPrefix = `test_envio_v${suffix}`;
 const schema: Schema = {
     database: `test_bi_v${suffix}`,
-    prices: { price5m: `${priceDatabase}.asset_price_5m`, token: `${priceDatabase}.token` },
+    prices: { price5m: `${priceDatabase}.fact_asset_price_5m`, token: `${priceDatabase}.dim_token` },
     watermarkPriceSources: ['api', 'beefy_db'],
     envioDatabasePrefix: `${envioPrefix}_`,
 };
@@ -99,9 +100,17 @@ const event = async (
     return checkpoint;
 };
 
-const price = (at: string, value: number, source = 'api', asset = ASSET): Promise<void> =>
-    client.insert(qualified(priceDatabase, 'asset_price_5m'), [
-        { asset_id: asset, date_time: at, price: value, price_source: source },
+/** The price row of one 5 minute slot: an actual price, or one carried forward from the slot `carriedFrom`. */
+const price = (at: string, value: number, source = 'api', asset = ASSET, carriedFrom?: string): Promise<void> =>
+    client.insert(qualified(priceDatabase, 'fact_asset_price_5m'), [
+        {
+            asset_id: asset,
+            date_time: at,
+            price: value,
+            price_source: source,
+            is_carried: carriedFrom === undefined ? 0 : 1,
+            observed_at: carriedFrom ?? at,
+        },
     ]);
 
 /** Both required sources have prices up to `secondsAgo`. */
@@ -155,7 +164,7 @@ const storedVersion = async (id: string): Promise<number> => {
 
 const setPrice = (at: string, value: number): Promise<void> =>
     client.command(
-        sql`ALTER TABLE ${qualified(priceDatabase, 'asset_price_5m')} UPDATE price = ${param('Float64', value)}
+        sql`ALTER TABLE ${qualified(priceDatabase, 'fact_asset_price_5m')} UPDATE price = ${param('Float64', value)}
          WHERE asset_id = ${param('UInt64', ASSET)} AND date_time = ${param("DateTime('UTC')", at)} SETTINGS mutations_sync = 2`
     );
 
@@ -163,7 +172,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
     beforeAll(async () => {
         await client.command(sql`CREATE DATABASE ${ident(priceDatabase)}`);
         for (const statement of priceStubs(schema.prices)) await client.command(statement);
-        await client.insert(qualified(priceDatabase, 'token'), [
+        await client.insert(qualified(priceDatabase, 'dim_token'), [
             { chain_id: 8453, representation_address: VAULT, decimals: 18, asset_id: ASSET },
         ]);
         for (const raw of [raw1, raw2]) {
@@ -178,8 +187,8 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         await migrate(client, schema);
         await deploy(client, schema, 1, raw1);
         await switchVersion(client, schema, 1, { ...gate, force: true });
-        await price('2024-01-01 10:00:00', 1);
-        await price('2024-01-01 10:15:00', 2);
+        // the slot of the events at 10:07:30
+        await price('2024-01-01 10:05:00', 1.5);
     });
     afterAll(async () => {
         for (const name of [
@@ -256,8 +265,9 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
     });
 
     it('does not move the watermark while a required source is behind, and stores provisional rows above it', async () => {
-        // only api is fresh: beefy_db has nothing, so the watermark only gets to the oldest event
+        // only api is fresh: beefy_db has a carried row only, so the watermark only gets to the oldest event
         await price(ago(3600), 1, 'api', FRESHNESS_ASSET);
+        await price(ago(3600), 1, 'beefy_db', FRESHNESS_ASSET, ago(7200));
         await advance(client, schema, settings);
         const watermark = await readWatermark(client, schema, 1);
         expect(watermark?.watermark).toBe('2024-01-01 00:00:00.000');
@@ -276,7 +286,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         expect(Date.now() - Date.parse(`${watermark?.watermark.replace(' ', 'T')}Z`)).toBeLessThan(87_000_000);
         expect(await stored('a1')).toBe(1.5);
         // a price correction below the watermark does not show until the row is repriced: the stored value is used
-        await setPrice('2024-01-01 10:15:00', 4);
+        await setPrice('2024-01-01 10:05:00', 2.5);
         expect(await row('a1')).toMatchObject({ share_to_usd: 1.5 });
     });
 
@@ -289,7 +299,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
     });
 
     it('keeps the stored rows once rewound, and stores them again on the next advance', async () => {
-        await setPrice('2024-01-01 10:15:00', 6);
+        await setPrice('2024-01-01 10:05:00', 3.5);
         expect(await row('a1')).toMatchObject({ share_to_usd: 2.5 });
         await rewind(client, schema, 1, '2023-12-01');
         expect(await row('a1')).toMatchObject({ share_to_usd: 2.5 });
@@ -340,9 +350,12 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
     });
 
     it('gives a recent event without an indexer price a provisional row, written again only when it changes', async () => {
+        const at = ago(2 * 3600);
+        // its slot carries the actual price of an hour before
         await price(ago(3 * 3600), 10);
+        await price(slotOf(at), 10, 'api', ASSET, ago(3 * 3600));
         // indexed during a sync: no indexer price, but the facts it knew
-        await commitCheckpoint(client, raw1, 8453, await event(raw1, 'r1', `${ago(2 * 3600)}.000`, undefined, null));
+        await commitCheckpoint(client, raw1, 8453, await event(raw1, 'r1', `${at}.000`, undefined, null));
         expect(await priced('r1')).toMatchObject({
             share_to_usd: 0,
             price_flag: 'PENDING',
@@ -351,17 +364,15 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
             contract_kind: 'VAULT',
         });
         await advance(client, schema, settings);
-        expect(await row('r1')).toMatchObject({ share_to_usd: 10, price_flag: 'EXTRAPOLATED' });
+        expect(await row('r1')).toMatchObject({ share_to_usd: 10, price_flag: 'OK' });
         const first = await storedVersion('r1');
         await advance(client, schema, settings);
         expect(await storedVersion('r1')).toBe(first);
-        // a late price snaps it back on the next advance
-        await price(ago(3600), 20);
-        expect(await row('r1')).toMatchObject({ share_to_usd: 10, price_flag: 'EXTRAPOLATED' });
+        // a late actual price of its slot replaces it on the next advance
+        await price(slotOf(at), 15);
+        expect(await row('r1')).toMatchObject({ share_to_usd: 10, price_flag: 'OK' });
         await advance(client, schema, settings);
-        const r1 = await row('r1');
-        expect(r1?.price_flag).toBe('OK');
-        expect(r1?.share_to_usd).toBeCloseTo(15, 0);
+        expect(await row('r1')).toMatchObject({ share_to_usd: 15, price_flag: 'OK' });
         expect(await storedVersion('r1')).toBeGreaterThan(first);
     });
 
@@ -371,14 +382,16 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         // a source only this test uses says how far the watermark may go: its freshest price minus the 6 hour gap
         const held = { ...schema, watermarkPriceSources: ['held'] };
         await price(iso(base + 5 * 3_600_000), 1, 'held', FRESHNESS_ASSET);
+        // the event's slot carries the actual price of 10 minutes before
         await price(iso(base - 600_000), 5);
+        await price(slotOf(iso(base)), 5, 'api', ASSET, iso(base - 600_000));
         await commitCheckpoint(client, raw1, 8453, await event(raw1, 'p1', `${iso(base)}.000`));
         await advance(client, held, settings);
         expect((await readWatermark(client, schema, 1))?.watermark).toBe(`${iso(base - 3_600_000)}.000`);
-        expect(await row('p1')).toMatchObject({ share_to_usd: 5, price_flag: 'EXTRAPOLATED' });
+        expect(await row('p1')).toMatchObject({ share_to_usd: 5, price_flag: 'OK' });
         const provisional = await storedVersion('p1');
-        // the next price lands, and the watermark passes the event: its final row, with a higher version
-        await price(iso(base + 600_000), 7);
+        // an actual price of the slot lands, and the watermark passes the event: its final row, with a higher version
+        await price(slotOf(iso(base)), 6);
         await price(iso(base + 2 * 86_400_000 + 6 * 3_600_000), 1, 'held', FRESHNESS_ASSET);
         await advance(client, held, settings);
         expect((await readWatermark(client, schema, 1))?.watermark).toBe(`${iso(base + 2 * 86_400_000)}.000`);
@@ -394,7 +407,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         // committed under a checkpoint id the last advance already recorded (a rollback lowered the frontier, the
         // replayed batch reused the id): the late-row step cannot see it, the retry window does
         const recorded = Number(watermark.checkpoints['8453']);
-        // two and a half days ago: more than 48 hours from every price of the vault (no price within reach)
+        // two and a half days ago: no price row for its slot
         const base = Date.now() - 2.5 * 86_400_000;
         const at = `${iso(base)}.000`;
         await insertTimelineEvents(client, raw1, [
@@ -409,7 +422,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
             }),
         ]);
         expect(await row('reused')).toMatchObject({ share_to_usd: 0, price_flag: 'PENDING' });
-        // no price within reach: stored MISSING, not final
+        // no price: stored MISSING, not final
         await advance(client, schema, settings);
         expect(await row('reused')).toMatchObject({ share_to_usd: 0, price_flag: 'MISSING' });
         const missing = await storedVersion('reused');
@@ -418,8 +431,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
         await advance(client, schema, settings);
         expect(await storedVersion('reused')).toBe(missing);
         // the prices arrive: the next advance replaces it
-        await price(iso(base - 600_000), 7);
-        await price(iso(base + 600_000), 9);
+        await price(slotOf(at), 8);
         expect(await row('reused')).toMatchObject({ price_flag: 'MISSING' });
         await advance(client, schema, settings);
         expect(await row('reused')).toMatchObject({ share_to_usd: 8, price_flag: 'OK' });
@@ -445,7 +457,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
     });
 
     it('falls back on the indexer price over a stored MISSING, until a stored price arrives', async () => {
-        // months from every price of the vault: no price within reach
+        // months from every price of the vault: no price row for its slot
         const at = '2023-06-01 10:07:30.000';
         await commitCheckpoint(client, raw1, 8453, await event(raw1, 'fb', at, '2000000000000000000', 4));
         await advance(client, schema, settings);
@@ -459,8 +471,7 @@ describe.skipIf(url === undefined)('versions: watermark, stored prices, switch a
             before: Math.floor(Date.parse('2023-06-01T10:07:30Z') / 1000),
             product_address: VAULT,
         });
-        await price('2023-06-01 10:00:00', 7);
-        await price('2023-06-01 10:15:00', 9);
+        await price('2023-06-01 10:05:00', 8);
         await reprice(client, schema, 1, '2023-06-01', '2023-06-02', settings);
         expect(await priced('fb')).toMatchObject({
             share_to_usd: 8,

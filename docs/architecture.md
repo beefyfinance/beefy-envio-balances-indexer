@@ -7,7 +7,7 @@ Paths starting with `src/` are relative to `apps/indexer/`. Envio's behaviour is
 ```
  chains, Beefy API ──▶ indexer ──▶ Envio database: events, facts, indexer prices
                                      │                    │
- analytics prices ──▶ worker (advance) ◀──────────────────┤
+ databarn prices  ──▶ worker (advance) ◀──────────────────┤
                                      ▼                    ▼
                            event_price_<N> ──▶ user_timeline_api(account) ──▶ API ──▶ Cloudflare ──▶ client
 ```
@@ -155,7 +155,8 @@ with no indexer price get a provisional stored row from the next `advance`, so t
 ### Price facts on Contract
 
 Handlers cannot read `ContractLink` (ClickHouse only), so `Contract` carries these, set in `src/lib/registry.ts`:
-`productAddress` (the contract itself for a vault or CLM manager, the staked product for a boost or reward pool),
+`productAddress` (the contract itself for a vault or CLM manager, the staked product for a boost or reward pool, the
+wrapped vault for an ERC-4626 adapter, which mints one share per vault share),
 `priceDecimals` (the share token's decimals for a vault or CLM, the staked product's for a stake) and `productKind`,
 which is `UNKNOWN` for a plain token staked in a reward pool. The rule is the one of
 `productFactsCtes` (`packages/clickhouse/src/events.ts`), the source of truth for stored rows.
@@ -178,8 +179,9 @@ the events above it that the indexer did not price. `advance` runs for each live
 3. **Watermark**: events between the old and new watermark. The first advance starts at the day of the oldest event.
 4. **Provisional rows**: events at or above the new watermark without `headPrice`, stored only if the result changed.
 
-- **Watermark rule**: `min(now - WATERMARK_MIN_AGE_HOURS, freshest price of each required source - 6 h)`, sources from
-  `CLICKHOUSE_WATERMARK_PRICE_SOURCES`. If a source stops, the watermark stops: nothing is final with a stale price.
+- **Watermark rule**: `min(now - WATERMARK_MIN_AGE_HOURS, freshest actual price of each required source - 6 h)`, sources
+  from `CLICKHOUSE_WATERMARK_PRICE_SOURCES`; carried rows (`is_carried = 1`) do not count. If a source stops, the watermark
+  stops: nothing is final with a stale price.
 - **Bounded statements.** Each covers at most `ADVANCE_STEP_DAYS` and about `REPRICE_MAX_EVENTS` events, with per-query limits,
   so its cost never depends on the length of history.
 - **Repricing history.** `rewind` moves the watermark back. The next advances reprice the rows above it without an indexer
@@ -188,17 +190,19 @@ the events above it that the indexer did not price. `advance` runs for each live
 
 ### Prices
 
-The SQL is `pricedEventsCtes` (`packages/clickhouse/src/pricing.ts`). `analytics.token` maps the product's share token to one
-`asset_id`, never its want's. Prices from `analytics.asset_price_5m` are interpolated linearly between the nearest price each
-side, each within 48 h, so an event's price never depends on the other events in the statement. `share_to_usd` is per
-10^(share decimals) share units, 10^18 for classic vaults and CLMs alike. Every pick is deterministic.
+The SQL is `pricedEventsCtes` (`packages/clickhouse/src/pricing.ts`). `databarn.dim_token` maps the product's share token to one
+`asset_id`, never its want's. `databarn.fact_asset_price_5m` holds one row per asset per 5 minute slot, resolved and carried
+forward by databarn. An event takes the row of its slot, looked up by key (no interpolation, no ASOF join), so its price
+never depends on the other events in the statement. `price_before_at` is the row's `observed_at`, the slot of the actual
+price it holds or carries, so the age needs no second read of the table. `share_to_usd` is per 10^(share decimals) share units, 10^18 for classic vaults and CLMs
+alike. Every pick is deterministic.
 
 | Flag | Stored | Meaning |
 |---|---|---|
-| `OK` | yes | interpolated between prices at most 6 h apart |
-| `STALE` | yes | interpolated between prices further apart |
-| `EXTRAPOLATED` | yes | a price on one side only, carried flat |
-| `MISSING` | yes | no price within reach, USD 0 |
+| `OK` | yes | an actual price of the slot, or one carried from at most 6 h before |
+| `STALE` | yes | a price carried from further back |
+| `EXTRAPOLATED` | yes | only rows stored by the older interpolating pricing |
+| `MISSING` | yes | no row for the slot, USD 0 |
 | `PROVISIONAL` | read only | the indexer's price (`price_source = 'indexer'`, `price_resolution = 'latest'`) |
 | `FALLBACK` | read only | the indexer's price over a stored `MISSING`, until a stored price arrives |
 | `PENDING` | read only | no stored row and no indexer price, USD 0 |
@@ -305,7 +309,7 @@ not measured.
 
 1. A real rollback: can a reader filtering on `envio_chains` see a row Envio is about to delete? Only simulated so far.
 2. `ready` stays manual: nothing checks that Envio reached the chain head.
-3. Products the Beefy API does not list rely on provisional rows, which lag with the analytics tables. Is that fine?
+3. Products the Beefy API does not list rely on provisional rows, which lag with the databarn tables. Is that fine?
 4. Claims have no USD value (`claims[].usd` is null). They need reward token prices.
 5. Cloudflare: that it caches `200` JSON and `308`s, honours `stale-while-revalidate` and collapses concurrent misses.
 6. The response has not been compared with a databarn v1 timeline sample.

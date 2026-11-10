@@ -34,7 +34,7 @@ const raw1 = `${envioPrefix}1`;
 const raw2 = `${envioPrefix}2`;
 const schema: Schema = {
     database: `acc_bi_${suffix}`,
-    prices: { price5m: `${priceDatabase}.asset_price_5m`, token: `${priceDatabase}.token` },
+    prices: { price5m: `${priceDatabase}.fact_asset_price_5m`, token: `${priceDatabase}.dim_token` },
     watermarkPriceSources: ['api'],
     definer: users.pipeline,
     envioDatabasePrefix: envioPrefix,
@@ -64,11 +64,27 @@ describe.skipIf(url === undefined)('access', () => {
         }
         await admin.command(sql`CREATE DATABASE ${ident(priceDatabase)}`);
         for (const statement of priceStubs(schema.prices)) await admin.command(statement);
-        await admin.insert(qualified(priceDatabase, 'token'), [
+        await admin.insert(qualified(priceDatabase, 'dim_token'), [
             { chain_id: 8453, representation_address: '0xvault', decimals: 18, asset_id: 1 },
         ]);
-        await admin.insert(qualified(priceDatabase, 'asset_price_5m'), [
-            { asset_id: 1, date_time: '2026-01-01 09:45:00', price: 2, price_source: 'api' },
+        await admin.insert(qualified(priceDatabase, 'fact_asset_price_5m'), [
+            // the event's slot, carrying the actual price of 15 minutes before
+            {
+                asset_id: 1,
+                date_time: '2026-01-01 09:45:00',
+                price: 2,
+                price_source: 'api',
+                is_carried: 0,
+                observed_at: '2026-01-01 09:45:00',
+            },
+            {
+                asset_id: 1,
+                date_time: '2026-01-01 10:00:00',
+                price: 2,
+                price_source: 'api',
+                is_carried: 1,
+                observed_at: '2026-01-01 09:45:00',
+            },
         ]);
         // Envio's databases, written by Envio's own user (the admin here)
         for (const raw of [raw1, raw2]) {

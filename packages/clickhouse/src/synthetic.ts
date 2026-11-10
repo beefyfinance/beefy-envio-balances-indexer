@@ -74,7 +74,7 @@ export const seedSynthetic = async (
          SELECT ${chain}, ${address}, 18, number + 1 FROM numbers(${productCount})`
     );
 
-    // a slowly drifting price per product, one row per 5 minutes; the first day of history is missing for half the
+    // a slowly drifting actual price per product, one row per 5 minute slot; the first day of history is missing for half the
     // products. Inserted a block of products at a time.
     const steps = days * 288;
     const productsPerChunk = Math.max(1, Math.floor(CHUNK / steps));
@@ -84,8 +84,9 @@ export const seedSynthetic = async (
              WITH
              products AS (SELECT number AS product FROM numbers(${param('UInt64', first)}, ${param('UInt64', Math.min(productsPerChunk, products - first))})),
              steps AS (SELECT number AS step FROM numbers(${param('UInt64', steps)}))
-             SELECT product + 1, toDateTime(toUInt32(toUnixTimestamp(now()) - ${param('UInt32', days)} * 86400 + step * 300), 'UTC'),
-                 toDecimal256(1 + product % 7 + 0.0001 * step, 20), 'api'
+             SELECT product + 1,
+                 toDateTime(toUInt32(toUnixTimestamp(toStartOfFiveMinutes(now())) - ${param('UInt32', days)} * 86400 + step * 300), 'UTC') AS slot,
+                 1 + product % 7 + 0.0001 * step, 'api', 0, slot
              FROM products CROSS JOIN steps
              WHERE NOT (product % 2 = 1 AND step < 288)`,
             long

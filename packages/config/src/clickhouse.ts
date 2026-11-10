@@ -14,9 +14,9 @@ export type ClickhouseReaderConfig = {
 
 /** The databarn tables prices are read from. Read only (written by tests and dev seeds). */
 export type PriceTablesConfig = {
-    /** `database.table` of the 5 minute prices (`analytics.asset_price_5m`: asset_id, date_time, price, price_source). */
+    /** `database.table` of the 5 minute prices (`databarn.fact_asset_price_5m`: asset_id, date_time, price, price_source). */
     price5mTable: string;
-    /** `database.table` mapping a token (chain, address) to its price asset (`analytics.token`). */
+    /** `database.table` mapping a token (chain, address) to its price asset (`databarn.dim_token`). */
     tokenTable: string;
 };
 
@@ -125,8 +125,8 @@ export const clickhousePipeline = () =>
     group(
         {
             ...readerShape,
-            price5mTable: optionalString('CLICKHOUSE_PRICE_5M_TABLE', 'analytics.asset_price_5m'),
-            tokenTable: optionalString('CLICKHOUSE_TOKEN_TABLE', 'analytics.token'),
+            price5mTable: optionalString('CLICKHOUSE_PRICE_5M_TABLE', 'databarn.fact_asset_price_5m'),
+            tokenTable: optionalString('CLICKHOUSE_TOKEN_TABLE', 'databarn.dim_token'),
             watermarkPriceSources: commaList('CLICKHOUSE_WATERMARK_PRICE_SOURCES', 'api,beefy_db'),
             definer: (env: Env): string | undefined => {
                 const value = optionalString('CLICKHOUSE_DEFINER', '')(env, []);
