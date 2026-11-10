@@ -205,10 +205,14 @@ const needsFacts = (contract: Contract, block: number) =>
 /** Kinds priced by their own share price. */
 const PRODUCT_KINDS: ReadonlySet<ContractKind> = new Set(['VAULT', 'CLM_MANAGER']);
 
-/** The relation naming the product a staking contract is priced by. */
+/**
+ * The relation naming the product a staking or wrapping contract is priced by: the staked token, or the vault an ERC-4626
+ * adapter wraps (one adapter share per vault share).
+ */
 const STAKED_RELATIONS: Partial<Record<ContractKind, LinkRelation>> = {
     BOOST: 'BOOST_STAKED',
     REWARD_POOL: 'REWARD_POOL_STAKED',
+    ERC4626_ADAPTER: 'ADAPTER_VAULT',
 };
 
 type PriceFacts = Pick<Contract, 'priceDecimals' | 'productKind'>;

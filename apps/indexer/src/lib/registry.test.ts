@@ -1,7 +1,13 @@
 import type { Contract, EvmOnEventContext, Token } from 'envio';
 import { describe, expect, it } from 'vitest';
 
-import { readBoostFacts, readClmManagerFacts, readRewardPoolFacts, readVaultFacts } from '../effects/facts.effects';
+import {
+    readAdapterFacts,
+    readBoostFacts,
+    readClmManagerFacts,
+    readRewardPoolFacts,
+    readVaultFacts,
+} from '../effects/facts.effects';
 import { getTokenMetadata } from '../effects/token.effects';
 import { ensureContract, ensureToken, factsRetryBlocks } from './registry';
 
@@ -37,7 +43,14 @@ const fakeContext = (
                 if (next === undefined) throw new Error(`no metadata answer left for ${input.address}`);
                 return next;
             }
-            if ([readVaultFacts, readBoostFacts, readRewardPoolFacts, readClmManagerFacts].includes(effect as never)) {
+            const factReads = [
+                readVaultFacts,
+                readBoostFacts,
+                readRewardPoolFacts,
+                readClmManagerFacts,
+                readAdapterFacts,
+            ];
+            if (factReads.includes(effect as never)) {
                 calls.push(`facts ${input.address}`);
                 const answers = facts[input.address];
                 if (answers === undefined) return { want: WANT };
@@ -152,6 +165,22 @@ describe('price facts', () => {
             priceDecimals: 18,
             productKind: 'CLM_MANAGER',
         });
+    });
+
+    it('prices an ERC-4626 adapter per the vault it wraps', async () => {
+        const ADAPTER = '0x0000000000000000000000000000000000000abc';
+        const { context, contracts } = fakeContext(
+            { [VAULT]: [share], [WANT]: [usdc], [ADAPTER]: [share] },
+            { [ADAPTER]: [{ vault: VAULT }] }
+        );
+        await ensureContract(context, event(BLOCK), 'VAULT');
+        await ensureContract(context, event(BLOCK, ADAPTER), 'ERC4626_ADAPTER');
+        expect(priceFacts(contracts, ADAPTER)).toEqual({
+            productAddress: VAULT,
+            priceDecimals: 18,
+            productKind: 'VAULT',
+        });
+        expect(contracts.get(`42161-${ADAPTER}`)).toMatchObject({ factsStatus: 'OK' });
     });
 
     it('prices a reward pool per the plain token it stakes, until that token registers', async () => {
