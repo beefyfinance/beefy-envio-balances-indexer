@@ -55,10 +55,10 @@ type Contract @storage(postgres: true, clickhouse: true) {
   """
   Price facts (docs/architecture.md "Price facts on Contract", the rule of productFactsCtes): the product whose
   share price prices this contract's rows (the contract itself for a vault or CLM manager, the staked product for a
-  boost or reward pool), and the decimals that price is per (want decimals for a classic vault, share decimals
-  otherwise), and the product's kind. `productAddress` is set as soon as known; `priceDecimals` and `productKind`
-  together once the product is registered (and, for a vault, its want's decimals read), or from the token's decimals
-  with kind UNKNOWN for a plain token staked in a reward pool. Never set for other kinds.
+  boost or reward pool), the decimals that price is per (the product's share decimals), and the product's kind.
+  `productAddress` is set as soon as known; `priceDecimals` and `productKind` together once the product is registered
+  and its share decimals read, or from the token's decimals with kind UNKNOWN for a plain token staked in a reward pool.
+  Never set for other kinds.
   """
   productAddress: String
   priceDecimals: Int

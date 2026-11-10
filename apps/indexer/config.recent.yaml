@@ -1,0 +1,1258 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: beefy-balance-indexer
+description: Beefy Finance raw-events indexer - share transfers, balances, stakes, rewards, harvests, swapper routes
+handlers: src/handlers
+address_format: lowercase
+raw_events: false
+save_full_history: false
+# Per-chain entity/effect isolation (recommended; default in HyperIndex v4)
+disable_default_cross_chain: true
+storage:
+  # Append-only event tables live in ClickHouse only (schema default); entities that handlers read (and
+  # current-state tables) opt into Postgres with a storage directive in schema.graphql.
+  postgres:
+    default: false
+    column_name_format: snake_case
+  clickhouse:
+    default: true
+    column_name_format: snake_case
+
+# Event source per chain: HyperSync, with the rpc entry as fallback and for contract reads. `ENVIO_RPC_FOR=sync` makes
+# the rpc entry the event source instead (RPC only, no HyperSync); hyperevm and metis always sync over RPC.
+# `from` labels zaps (EOA that sent the transaction). Block number / timestamp are selected by default.
+field_selection:
+  transaction_fields: [hash, from]
+
+contracts:
+  # factories
+  - name: ClassicVaultFactory
+    abi_file_path: abis/beefy/classic/ClassicVaultFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: VaultOrStrategyCreated
+        field_selection:
+          # `input` classifies the proxy (cloneVault / cloneContract / booooost) without an eth_call
+          transaction_fields: [hash, from, input]
+
+  - name: ClassicStrategyFactory
+    abi_file_path: abis/beefy/classic/ClassicStrategyFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: StrategyCreated
+      - event: "ProxyCreated(string strategyName, address proxy)"
+        name: StrategyCreatedWithName
+
+  - name: ClassicBoostFactory
+    abi_file_path: abis/beefy/classic/ClassicBoostFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: BoostCreated
+      - event: "BoostDeployed(address boost)"
+
+  - name: RewardPoolFactory
+    abi_file_path: abis/beefy/common/RewardPoolFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: RewardPoolCreated
+      - event: "ProxyCreated(string rewardPoolName, address proxy)"
+        name: RewardPoolCreatedWithName
+
+  - name: ClmManagerFactory
+    abi_file_path: abis/beefy/clm/ClmManagerFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: ClmManagerCreated
+
+  - name: ClmStrategyFactory
+    abi_file_path: abis/beefy/clm/ClmStrategyFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: ClmStrategyCreated
+      - event: "ProxyCreated(string strategyName, address proxy)"
+        name: ClmStrategyCreatedWithName
+
+  - name: ContractFactory
+    abi_file_path: abis/beefy/ContractFactory.json
+    events:
+      - event: "ContractDeployed(bytes32 contractName,address proxy)"
+
+  - name: Erc4626AdapterFactory
+    abi_file_path: abis/beefy/common/Erc4626AdapterFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: Erc4626AdapterCreated
+
+  # contracts
+  - name: ClassicVault
+    abi_file_path: abis/beefy/classic/ClassicVault.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "UpgradeStrat(address implementation)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  - name: ClassicStrategy
+    abi_file_path: abis/beefy/classic/ClassicStrategy.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
+      - event: "ChargedFees(uint256 callFees, uint256 beefyFees, uint256 strategistFees)"
+        name: ChargedFeesV2
+      - event: "Paused(address account)"
+      - event: "Unpaused(address account)"
+
+  - name: ClassicStrategyStratHarvest0
+    abi_file_path: abis/beefy/classic/ClassicStrategyStratHarvest0.json
+    events:
+      - event: "StratHarvest(address indexed harvester, uint256 wantHarvested, uint256 tvl)"
+
+  - name: ClassicStrategyStratHarvest1
+    abi_file_path: abis/beefy/classic/ClassicStrategyStratHarvest1.json
+    events:
+      - event: "StratHarvest(address indexed harvester, uint256 indexed wantHarvested, uint256 indexed tvl)"
+
+  - name: ClassicBoost
+    abi_file_path: abis/beefy/classic/ClassicBoost.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Staked(address indexed user, uint256 amount)"
+      - event: "Withdrawn(address indexed user, uint256 amount)"
+      - event: "RewardAdded(uint256 reward)"
+      - event: "RewardPaid(address indexed user, uint256 reward)"
+
+  - name: RewardPool
+    abi_file_path: abis/beefy/common/RewardPool.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+      - event: "NotifyReward(address indexed reward, uint256 amount, uint256 duration)"
+      - event: "RewardPaid(address indexed user, address indexed reward, uint256 amount)"
+      - event: "AddReward(address indexed reward)"
+
+  - name: ClmManager
+    abi_file_path: abis/beefy/clm/ClmManager.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+      - event: "Deposit(address indexed user, uint256 shares, uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1)"
+      - event: "Withdraw(address indexed user, uint256 shares, uint256 amount0, uint256 amount1)"
+
+  - name: ClmStrategy
+    abi_file_path: abis/beefy/clm/ClmStrategy.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Harvest(uint256 fee0, uint256 fee1)"
+      - event: "HarvestRewards(uint256 fees)"
+      - event: "ClaimedFees(uint256 feeMain0, uint256 feeMain1, uint256 feeAlt0, uint256 feeAlt1)"
+      - event: "ClaimedRewards(uint256 fees)"
+      - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
+      - event: "ChargedFees(uint256 callFeeAmount, uint256 beefyFeeAmount, uint256 strategistFeeAmount)"
+        name: ChargedFeesV2
+      - event: "TVL(uint256 bal0, uint256 bal1)"
+      - event: "Paused(address account)"
+      - event: "Unpaused(address account)"
+
+  - name: LstVault
+    abi_file_path: abis/beefy/lst/LstVault.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  - name: Erc4626Adapter
+    abi_file_path: abis/beefy/common/Erc4626Adapter.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  # Explicit list of non-vault share tokens (mooBIFI, beTokens, BIFI). Never add want tokens here (volume).
+  - name: Token
+    abi_file_path: abis/IERC20/IERC20.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  - name: BeefySwapper
+    abi_file_path: abis/beefy/common/BeefySwapper.json
+    events:
+      - event: "SetSwapInfo(address indexed fromToken, address indexed toToken, (address router, bytes data, uint256 amountIndex, uint256 minIndex, int8 minAmountSign) swapInfo)"
+      - event: "SetOracle(address oracle)"
+      - event: "SetSlippage(uint256 slippage)"
+      - event: "Initialized(uint8 version)"
+
+chains:
+  - id: 1 # ethereum
+    start_block: 24919527
+    rpc:
+      - url: ${ENVIO_RPC_URL_1}
+        initial_block_interval: 5000
+        interval_ceiling: 5000
+        query_timeout_millis: 300000
+        for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: ClassicVaultFactory
+        address:
+          - 0xC551dDCE8e5E657503Cd67A39713c06F2c0d2e97
+      - name: ClassicStrategyFactory
+        address:
+          - 0x52941De3eDE234ae6B8608597440Ac3394C64Ae8
+      - name: ClassicBoostFactory
+        address:
+          - 0x6f168346aed66f37cd972191ec4c3db11b8e5ecd
+      - name: RewardPoolFactory
+        address:
+          - 0xf8a577A29C85Bb379Ef9CEf2eAe5AB11c3965C1b
+          - 0xbdE5D2e961fCdfaA7BfEae62E1a510703cF64767
+      - name: ClmManagerFactory
+        address:
+          - 0x2BD7d9e64Fc136F13203dd7070fD2D5A90D693FE
+      - name: ClmStrategyFactory
+        address:
+          - 0xE296007Fd2224651A463667c53CaD1e3E182C294
+      - name: ContractFactory
+        address: []
+      - name: Erc4626AdapterFactory
+        address:
+          - 0x62fcbc7c3235950eD6dE4168fbd373aF9e8ee0fc
+      - name: ClassicVault
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x000d8a90f10c3f47728f5c69990b116d2608bd9f
+          - 0x11baa40e8821e4df0b09c7087246c8e97d179938
+          - 0x1a85938bc4719f9a6bcabda377bdd42b584be678
+          - 0x1b47d70e564aff83f09515b405c8af32a0f988a4
+          - 0x25afc8b0536bc3c04a177b64ad60dd6c26b4152d
+          - 0x35574114ea193ebef17402a6b07bf0dccdd58c54
+          - 0x3988c372513f854bb5fb980ff135567909012bda
+          - 0x48c845d0818baa17d22b2c0be41915ec084599bd
+          - 0x4fb81f52e8606f5eaf5e840dcabf8611286cc46b
+          - 0x59e3460c619d1484b73a4d08fe83834df0e9a860
+          - 0x5e293d57f13269cf40729042356c30b083c1ac29
+          - 0x65515f81c7da273dc540747f14dee6c4ae0e8a5f
+          - 0x71218655131360d4826838f4dac5dbe869ad9aed
+          - 0x78446686966d11644df5851a1b1debf5138b36cd
+          - 0x84e6a8374658fdab50cb6c39e92b83c51f84fa28
+          - 0x98e2e221d3fae4e14c4e56a8f7dee7d15cf2a557
+          - 0xa26984caf7cefdd30613b1bb58e2ee656e67167d
+          - 0xaa5e4eedfec704c0f4c63a35cf34b4ec62c737cc
+          - 0xae6d37534f2c219a8a276c8801a882ee1e3285cb
+          - 0xb0a119a592e3e24341112d2a2f3083d5f0184dcb
+          - 0xb1dfa5239a3619cfde62e4a0053b81080dfc63e2
+          - 0xb8e63b5a00b59dca4dc275a1f91a5f14d7c2058f
+          - 0xc24391ab15d086e49ac81a5cd995ac9f16fcd78d
+          - 0xc2578655ae7397c7efc4bc8e0b876c08275694d3
+          - 0xc28f78fedcf9e1c9a83af8bffeed010c5253f437
+          - 0xc4fa3d52ac82b00c45020dfabfce6826a76942e4
+          - 0xd6bdd48be79932904a1c53068dd232f875a0b611
+          - 0xd84f7431ce7b4c5289c0de346c7bc7dc5ffbf6f5
+          - 0xde2cda87d8c9efce4c363edcbc74fd3857e0cfd7
+          - 0xf15e182a37a8be577ee7840df30cca16184627f4
+          - 0xf78a16767ee47decdc79bdd1cf9fadbfe509a5b4
+          - 0xfa0346e0afad914307738d8451dd7dd7c8f28cbd
+          - 0xfa8c3e8aad32b2819c371b205c5ba1aeb72f7f29
+          - 0xffa2e326c59709f9751a8bb617c0e8026fc9dcd7
+          # end generated
+      - name: ClassicBoost
+        address: []
+      - name: ClassicStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x09715a866fc223891591662541d305fbecea95b6
+          - 0x148f9ec3c18e6263a55801aa53d4e7fba11ae2de
+          - 0x1a69c930379eb3f8b30d39ca7e3b3158847fa427
+          - 0x1aea38a962c5ebe83dd73a4272abd41df0ccf6eb
+          - 0x261cebe110761e3bd9e1e000bcfb22c5d3f360de
+          - 0x3fb835e01aa4e6c6db5fe1e6cfae28a159c0c1e3
+          - 0x5971bd74e5e1f55f0c661fce1af0a037a664614f
+          - 0x5c646fc931209f90c9bc0d1ccfdff785ab78b776
+          - 0x6b2c8db89f955968abd1767a2a9f9f70e636f5ac
+          - 0x76c0efaebfdd4fac0cd8ed6a785e74ea2e36d3de
+          - 0x7cdb12711ee0b1551d27c71e0dd00515571bb051
+          - 0x7f6e203712904a682cb699e46e9bcae86826a6f7
+          - 0x8256253d156cc76a6f842caefc0d86697bf80a30
+          - 0x838b8708b2f83c521c92b895e64364023b1b9a7f
+          - 0x84aeb7149892f766f71e37868da39e424cd0829e
+          - 0x869d21f6641bcd9833e452611c18d5625e82363f
+          - 0x92cf584ce353c3d410ee10a23db9c7511d605f9b
+          - 0x96bfe44d3958bc30b9f7edfde6b8029856d7f64c
+          - 0x9be14cd78f3eb9aa8d8e324d5ab95519901ebf05
+          - 0x9fbba3faf00786a675425784967715ec29a5e8d2
+          - 0xa8bd1a969bf4e5606054b0744956052fe9ae1ab3
+          - 0xb2a8f1e83c277f56991a064f52436522a03e814b
+          - 0xb50d373a65fcfc39c7e2d6ab78d71ac1b9f7b58d
+          - 0xbb7783a010ae9ce6429462c8d2b97686a847be37
+          - 0xbc35b29e6100ea08f49a39cb0e4592d8425aa74e
+          - 0xbe8f3a226299275058f46d732df8e981d3a6a75b
+          - 0xc22f0b298146b32cd8e324b24907d05c1685adbc
+          - 0xc50a3c111f7138eb246cd20a6b05a878598c3631
+          - 0xd6657b915a20f900abdc30cb4311111088352fc3
+          - 0xf0282ad59951c6921352327cd8ea788fb88aa324
+          - 0xf251fab3bbbb922da243cf072fb031f020d4c981
+          - 0xf4fe844839c1cbc17dc9ec52e12a8448b354c6ff
+          - 0xf8ac0f265850c5b7fe1f940c5be852ae50bc9a43
+          - 0xf8df385d7343eee14a676ecb535dec21829319ba
+          # end generated
+      - name: ClassicStrategyStratHarvest0
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x09715a866fc223891591662541d305fbecea95b6
+          - 0x148f9ec3c18e6263a55801aa53d4e7fba11ae2de
+          - 0x1a69c930379eb3f8b30d39ca7e3b3158847fa427
+          - 0x1aea38a962c5ebe83dd73a4272abd41df0ccf6eb
+          - 0x261cebe110761e3bd9e1e000bcfb22c5d3f360de
+          - 0x3fb835e01aa4e6c6db5fe1e6cfae28a159c0c1e3
+          - 0x5971bd74e5e1f55f0c661fce1af0a037a664614f
+          - 0x5c646fc931209f90c9bc0d1ccfdff785ab78b776
+          - 0x6b2c8db89f955968abd1767a2a9f9f70e636f5ac
+          - 0x76c0efaebfdd4fac0cd8ed6a785e74ea2e36d3de
+          - 0x7cdb12711ee0b1551d27c71e0dd00515571bb051
+          - 0x7f6e203712904a682cb699e46e9bcae86826a6f7
+          - 0x8256253d156cc76a6f842caefc0d86697bf80a30
+          - 0x838b8708b2f83c521c92b895e64364023b1b9a7f
+          - 0x84aeb7149892f766f71e37868da39e424cd0829e
+          - 0x869d21f6641bcd9833e452611c18d5625e82363f
+          - 0x92cf584ce353c3d410ee10a23db9c7511d605f9b
+          - 0x96bfe44d3958bc30b9f7edfde6b8029856d7f64c
+          - 0x9be14cd78f3eb9aa8d8e324d5ab95519901ebf05
+          - 0x9fbba3faf00786a675425784967715ec29a5e8d2
+          - 0xa8bd1a969bf4e5606054b0744956052fe9ae1ab3
+          - 0xb2a8f1e83c277f56991a064f52436522a03e814b
+          - 0xb50d373a65fcfc39c7e2d6ab78d71ac1b9f7b58d
+          - 0xbb7783a010ae9ce6429462c8d2b97686a847be37
+          - 0xbc35b29e6100ea08f49a39cb0e4592d8425aa74e
+          - 0xbe8f3a226299275058f46d732df8e981d3a6a75b
+          - 0xc22f0b298146b32cd8e324b24907d05c1685adbc
+          - 0xc50a3c111f7138eb246cd20a6b05a878598c3631
+          - 0xd6657b915a20f900abdc30cb4311111088352fc3
+          - 0xf0282ad59951c6921352327cd8ea788fb88aa324
+          - 0xf251fab3bbbb922da243cf072fb031f020d4c981
+          - 0xf4fe844839c1cbc17dc9ec52e12a8448b354c6ff
+          - 0xf8ac0f265850c5b7fe1f940c5be852ae50bc9a43
+          - 0xf8df385d7343eee14a676ecb535dec21829319ba
+          # end generated
+      - name: ClassicStrategyStratHarvest1
+        address: []
+      - name: ClmStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x05d9915e1f299e2aa496c821485ccb32bd0c76ae
+          - 0x2f553a901a71d0a6b97af86f929ebbb6d55dc060
+          - 0x2f5d4dc841f0ad04e7c8562f0eb6da168418ea13
+          - 0x3a50abeff8a0d0363b0bf613a0346da7853a6e97
+          - 0x49d2ae1cd73e3ba10b898829295e406bad09c6a9
+          - 0x5654f9b89ac6952f09043c1282114dbd32bcc2e5
+          - 0x5f5457685151b87cd029430a3f2508d528535e89
+          - 0xf1baa1626e1ef554e5ea4c04aaa13277d0212001
+          # end generated
+      - name: ClmManager
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x136363ca1219c943a560f22eefbb2beb4c92ef3c
+          - 0x2ae85f4a9c16e2daa65c624452332f74314f2ec8
+          - 0x2f16815c6f7c705dec15f28b40a4e63d9763a27e
+          - 0xae49310171df9a46bf57b56e2672b99714b45980
+          - 0xc7afdb8ef47c058e8f4094cca09080bcab662e80
+          - 0xdcfbfc35173ecf5a4451f86600b741cc365ceb60
+          - 0xe97ce6404ea5847bfcd11a6f7eb3ff8f30f619ee
+          - 0xed64dd50515e6a1fe5a4b1a2f514b6e847514be1
+          # end generated
+      - name: RewardPool
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x484966d04b230a110e594de2769eaf00449b2dbe
+          - 0x5fca009de68595fc4f746f88429370a2a79e37d9
+          - 0x7431d63132167d3ddd7990a90e26601d3ea9e6eb
+          - 0x846039afb24e12fa36c60b03967f6e1967e97f29
+          - 0x8e15fcaa3eb4f7b111c4d3dd237b36ca49331786
+          - 0xa9101ef1288259bd61c4eedd852679c355aa29db
+          - 0xa92a0defcb618143ea89245b00d28edcb881819b
+          - 0xef958e249c089fb2c378fdf5fedfb8a6d6374000
+          # end generated
+      - name: LstVault
+        address: []
+      - name: Erc4626Adapter
+        address: []
+      - name: Token
+        address: []
+      - name: BeefySwapper
+        address:
+          - 0x0000830DF56616D58976A12D19d283B40e25BEEF
+  - id: 8453 # base
+    start_block: 45010113
+    rpc:
+      - url: ${ENVIO_RPC_URL_8453}
+        initial_block_interval: 1000
+        interval_ceiling: 1000
+        query_timeout_millis: 300000
+        for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: ClassicVaultFactory
+        address:
+          - 0xBC4a342B0c057501E081484A2d24e576E854F823
+      - name: ClassicStrategyFactory
+        address:
+          - 0x705A3168F2c48263B1249A11940E6602A4f22a9A
+      - name: ClassicBoostFactory
+        address: []
+      - name: RewardPoolFactory
+        address:
+          - 0x13F518Aa15CA3296E51CEAFB44A8D86660E97B3a
+      - name: ClmManagerFactory
+        address:
+          - 0x7bC78990AC1ef0754CFdE935B2D84E9acF13ed29
+      - name: ClmStrategyFactory
+        address:
+          - 0x9476284d81121613DA5DF5C72f50853a455448F1
+      - name: ContractFactory
+        address: []
+      - name: Erc4626AdapterFactory
+        address:
+          - 0x917447f8f52E7Db26cE7f52BE2F3fcb4d4D00832
+      - name: ClassicVault
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0cbe68943519ebbeb024f20e85db39f6b51a29ed
+          - 0x15f91999e54452139258079355f057aa66c9f196
+          - 0x193e4f77f94cc6fdbc7e68df2e6e0dea0f8c6bf0
+          - 0x1da48d1c79d527859acd341a0b9456b27f4b6f5b
+          - 0x2d02766b0722a5843c61d287fcbd3e561d428cf0
+          - 0x36b6726d6f2c980605c6c753da24259a2b1d2cd5
+          - 0x3d4f7cc6c534c9b34914dffcec52bb8214455a74
+          - 0x3e5bbfedc570112440b4abb61cba7909824b2d58
+          - 0x406c482bccf0b8e06f0c18083046f843f8f6c01f
+          - 0x420c6bf66b38853b94c94514fe504e463867e7ba
+          - 0x477be62364c44c3683bad6bf978f12cd76d959ab
+          - 0x575da7570b4ee677bd6002569de9d88b269cbae4
+          - 0x5bf3101a7f695c1c4a28246bafb2e717a11806f4
+          - 0x5fe3e9166eb8ee5409750bbcaf8b9b55ec6e6792
+          - 0x63bdde9412f22a009f78513393c501cc504ea302
+          - 0x66cf69c5b780240b1eb1879020453d81b1c816da
+          - 0x722a0b2664cac3c826ecb85dcad97383e1645db1
+          - 0x7388aa8b467bee0eb46a822876ed3fc7ca12d3b7
+          - 0x7818b61cfa261d9940173698a15fedb2dc238fab
+          - 0x7839135edc52b77428a3823d9439a0ad9e65f514
+          - 0x7a027b2d77db12ff54c274f21497094c21824d6f
+          - 0x81336f242caa6cf779d56a775ac1f642e3ac3b84
+          - 0x82fc3ba31f8df868a1158cf0f2fbf16e03b85c68
+          - 0x8d7f7fdf3c0176b5bc14830406c3deae1db16dde
+          - 0x944a37603ca610ccbac7a09264b3e73c3b7fba28
+          - 0xa2b1c7da608ad0c247a9f3f6c84d70228932f6d2
+          - 0xafc09a027f62b1a9378d9bdd46f6afa177e3ffdd
+          - 0xaff0f5f8a5b24dea502c58c29c05111d87ae6ef7
+          - 0xb13384c75f019d0f7a9fe661b90e18e660a6e9b9
+          - 0xb24189f9b68f654016e2c8f8166b12b516e29cb6
+          - 0xb65a7e6749c01f35ccb9258803f5ee15e1b375ae
+          - 0xb6e0d141475bcfa210055b0e90c1acdcb8fc06e8
+          - 0xbac7b50d30d497f6e02ccdaa5160f4aa35e78ffb
+          - 0xc39457cc00d032704d30fc432ea732ad281b70d0
+          - 0xc51bc86a279435c5f06804ac0ce96db26f098e0d
+          - 0xc71f9270d046a7978088c913e16e7d5d8d772e7b
+          - 0xc8e3a1e5b9b6583475cd414955b961513306e60c
+          - 0xd0ab1bb92b689236dc0bc7a2f9aedc5f90ce4389
+          - 0xd1b518f6a171ec24a9428b257202b7fd2370cc4e
+          - 0xd47f71d0802342d87aaf3471d83dde6b31de4499
+          - 0xe7d7698af404f790a3339610de0e3a6b01c5b818
+          - 0xf43af31b6cb38bfef068403f11c83c5a3146c0cf
+          - 0xf638acbb5afa238af95e77f24963335018f51bcc
+          - 0xfca983ea00d87de9bb7eaf5561cc1ec4050ad1ba
+          # end generated
+      - name: ClassicBoost
+        address: []
+      - name: ClassicStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0300a8b1bb5e55f834a3ce65c757f599679be115
+          - 0x0438f263900a624028df790373a8338a80bcd6fe
+          - 0x07421db65cae0df71c5c173adab37282098eb6ef
+          - 0x0f4b1df3395f91a2ebd7108b36bcc9e7dddbdf24
+          - 0x15366e8d9fc409f2d3baa9cadbe62ffa65ce833c
+          - 0x176b2c3d0aa5b344a9b87fd26c1ab1abd2d07179
+          - 0x2014bc461243c9535d65f08edecb9700853cc444
+          - 0x22ba3806a6c98a74a25dda0e81d0244eb98b0b72
+          - 0x2d845b976d07c40d576913c2c9d637e127449508
+          - 0x3724127b026eb3d1c6f3735683661667d72a56d9
+          - 0x3baf4ba6cc85e6171f7acd2342b149bfe7d4a45b
+          - 0x5390df92b31dd5f369878110abd9e0401de4669c
+          - 0x54f29185563cf8a590591ea5f646f8f5f74997cc
+          - 0x572abb7496f170a3fbfeda91979bc7de6ae8baf8
+          - 0x5f381fe96b57e43a54c4c0f683b8cb7e0084c67a
+          - 0x62548f8a2661a399417ade11ac0a0c9b9fe8641b
+          - 0x6aea497106845bce2cce35e770a12a63288c5b65
+          - 0x7061f70d97675c32e4db69cb6a4b3d2a2656e8d6
+          - 0x7b0ef57cca2031fcc073445c48db75f46f91deb2
+          - 0x7ba5d8f622ceebcc5c1407cec48282276222ba1e
+          - 0x7f802e6e9cd1410554f947a45c3a048581862111
+          - 0x83bf9a60787141f103ee965d2a05044f1651e9cf
+          - 0x8839494227ff33fcb3a4f2338c7826fbc396634a
+          - 0x8d3960fe3d8fed272b6de1b02751a3edff195b21
+          - 0x8ec621411b5d1e4c2fbc0dce88277ba3a9a2ce3b
+          - 0x938d1e3cf9383bfd3a9a4fbb22e8cb1a70b0bb7e
+          - 0x9645e3254ef3e7cf65d540b938cb73006b5f3f0c
+          - 0x9c23e7c0c8b8f1b94959214da77c35f2a97de602
+          - 0xa2e2f2a5a223e1d7ea063539a70958917bc18576
+          - 0xa7cf5a6844fbd128c6b301d6b5acf46629407d66
+          - 0xab9d79c796dee9755aa023cb5756de19e2fe28c3
+          - 0xac3c1d42e3f26fc2c6fe3737b2665373304e1891
+          - 0xaf53e7202b57a8e2855dbf7359e914de9f08ec80
+          - 0xaff4f20e5f340f11944db3ec9ade6a29c13fe67d
+          - 0xcc5b8984303aedb2ad44b9cbc46daf90aacf647f
+          - 0xd33548bb01f392e0a6161ad87d4b0aa121244d2b
+          - 0xd44ed87c930d8fb82db80f914f2f7bb5989d288a
+          - 0xdcb99f7261dc635e4c213956613713f05fd08535
+          - 0xdcc336c07e596528fb9f33e916bcddcff5b6eb4e
+          - 0xedb3d191e7844823ec6b2ee8301734bd393ae33e
+          - 0xeedfa33721fef376425b5342ea89c1651b8d8517
+          - 0xeff85ab8090b5047c27f859323f9c1293a2287c0
+          - 0xf80e2fe60ccf4d6586a72444f4576e4e1f2978cd
+          - 0xffc371d5f578900ad9df7321c6f1aa176a7754a7
+          # end generated
+      - name: ClassicStrategyStratHarvest0
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0300a8b1bb5e55f834a3ce65c757f599679be115
+          - 0x0438f263900a624028df790373a8338a80bcd6fe
+          - 0x07421db65cae0df71c5c173adab37282098eb6ef
+          - 0x0f4b1df3395f91a2ebd7108b36bcc9e7dddbdf24
+          - 0x15366e8d9fc409f2d3baa9cadbe62ffa65ce833c
+          - 0x176b2c3d0aa5b344a9b87fd26c1ab1abd2d07179
+          - 0x2014bc461243c9535d65f08edecb9700853cc444
+          - 0x22ba3806a6c98a74a25dda0e81d0244eb98b0b72
+          - 0x2d845b976d07c40d576913c2c9d637e127449508
+          - 0x3724127b026eb3d1c6f3735683661667d72a56d9
+          - 0x3baf4ba6cc85e6171f7acd2342b149bfe7d4a45b
+          - 0x5390df92b31dd5f369878110abd9e0401de4669c
+          - 0x54f29185563cf8a590591ea5f646f8f5f74997cc
+          - 0x572abb7496f170a3fbfeda91979bc7de6ae8baf8
+          - 0x5f381fe96b57e43a54c4c0f683b8cb7e0084c67a
+          - 0x62548f8a2661a399417ade11ac0a0c9b9fe8641b
+          - 0x6aea497106845bce2cce35e770a12a63288c5b65
+          - 0x7061f70d97675c32e4db69cb6a4b3d2a2656e8d6
+          - 0x7b0ef57cca2031fcc073445c48db75f46f91deb2
+          - 0x7ba5d8f622ceebcc5c1407cec48282276222ba1e
+          - 0x7f802e6e9cd1410554f947a45c3a048581862111
+          - 0x83bf9a60787141f103ee965d2a05044f1651e9cf
+          - 0x8839494227ff33fcb3a4f2338c7826fbc396634a
+          - 0x8d3960fe3d8fed272b6de1b02751a3edff195b21
+          - 0x8ec621411b5d1e4c2fbc0dce88277ba3a9a2ce3b
+          - 0x938d1e3cf9383bfd3a9a4fbb22e8cb1a70b0bb7e
+          - 0x9645e3254ef3e7cf65d540b938cb73006b5f3f0c
+          - 0x9c23e7c0c8b8f1b94959214da77c35f2a97de602
+          - 0xa2e2f2a5a223e1d7ea063539a70958917bc18576
+          - 0xa7cf5a6844fbd128c6b301d6b5acf46629407d66
+          - 0xab9d79c796dee9755aa023cb5756de19e2fe28c3
+          - 0xac3c1d42e3f26fc2c6fe3737b2665373304e1891
+          - 0xaf53e7202b57a8e2855dbf7359e914de9f08ec80
+          - 0xaff4f20e5f340f11944db3ec9ade6a29c13fe67d
+          - 0xcc5b8984303aedb2ad44b9cbc46daf90aacf647f
+          - 0xd33548bb01f392e0a6161ad87d4b0aa121244d2b
+          - 0xd44ed87c930d8fb82db80f914f2f7bb5989d288a
+          - 0xdcb99f7261dc635e4c213956613713f05fd08535
+          - 0xdcc336c07e596528fb9f33e916bcddcff5b6eb4e
+          - 0xedb3d191e7844823ec6b2ee8301734bd393ae33e
+          - 0xeedfa33721fef376425b5342ea89c1651b8d8517
+          - 0xeff85ab8090b5047c27f859323f9c1293a2287c0
+          - 0xf80e2fe60ccf4d6586a72444f4576e4e1f2978cd
+          - 0xffc371d5f578900ad9df7321c6f1aa176a7754a7
+          # end generated
+      - name: ClassicStrategyStratHarvest1
+        address: []
+      - name: ClmStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x06227304e58ccdd881ac3974c4804d3254cd005d
+          - 0x06b6997e30527f6815eb902b4485657e9cc4f78e
+          - 0x07a2bf16b9e8f9cf66ad8a8cd8250373a4fd4f41
+          - 0x0901da1221544ab68df27c3794a92059f0a30273
+          - 0x0dc60066b04971006cf817f750db755f6431358a
+          - 0x13e5d9f725fb11f285270587633ba4271a6cbbd0
+          - 0x190a99069580c079f82ac061a64c9e0377ab9fdb
+          - 0x1e4c7ea5291ad13d680fe67bebcf008a06b8c688
+          - 0x210b97abe43b42056a63a55e93d42e0891501685
+          - 0x23fe414d7b38cad0e081a703b9c0433a1e885cf8
+          - 0x26a81764e0fd181ae66dff3785ded92a9bfcfea4
+          - 0x28473a26415e674a2458c795883ab6d8223d361b
+          - 0x3138eb8561910ab135daa0813471e272ee6a7944
+          - 0x325d77159175499b76896bbb24de49ef8d24bcc1
+          - 0x351a13bbd6825b57b00e3d123b061e1dea57f0ac
+          - 0x4a4daef94f422fd299a26c9bee49f8b27abe5fac
+          - 0x5515d40983a1feb2c595ecde1954840c4b8cb495
+          - 0x56f9a037925659c17d29a07d589e33859c358a15
+          - 0x5e19e21c6fd65b92aeb01c5a9974bb315b5bb83c
+          - 0x655c6693658790d77379f794ccddac27cacf815e
+          - 0x6ff5cdc987b04093da9dae3a51fd524981a11736
+          - 0x7c6405cbe07d95a1fc4c6a3ca3b0ff0b8ddb0956
+          - 0x7c932c981f3cca756d7b0fcbd37dd84aaf4d7c79
+          - 0x85b62c1ccf2e29017ba92ca7913f35ccf94dcf42
+          - 0x912c3a95c8904d84f789827e75d18bcf69b03c0f
+          - 0x996309e759dcfb8b9043136212f7a4e8aec76bfd
+          - 0x9a067604bdd18649c4803e89b84cd912bf23a82b
+          - 0x9a4cf099a434df3bf17f6028a228b5327ab5babb
+          - 0x9c02e723e696471ee87b9dfb3bda840887641888
+          - 0x9f5ba3b1ebd700b95f95ea70fb77a18125a740e0
+          - 0xa96a2ab942a790b46e9f171a9b7663eeb797f16f
+          - 0xb2528a87601cc0f9e893aa614ad7981c91934bbe
+          - 0xb7a353ce15a5686da6615cab89479f60741d8ddb
+          - 0xce3d0d4fa161fb4d0c8c5512a338d162fa0fc7c8
+          - 0xcee77f825a9099ec40d4b20fbeaa05e3bad0cc6d
+          - 0xd0f8e68d5cada97e93b59301814d0cea2897a5e7
+          - 0xd273b5f1f2009b7e1ef0ed0c0251c493a5e1efc2
+          - 0xd36562ec36ccf70c2a16abd7f7a4794daa4be6c4
+          - 0xd38301cb6882489125bc1c52eccee27671797f50
+          - 0xd7b59e03a8ca4e85bc365c7fa2962665105dc308
+          - 0xd93b22fa01d5260e0d9c791d70b26128e42d4254
+          - 0xe23d5a486f5e7b8601d8de634c6ae9380602ec0e
+          - 0xe5a60944c3eef29aa1c69de49f0b8bc681535e83
+          - 0xe5bcc2c6a9f3dcb9883a2df690e14568b8a354c4
+          - 0xe64826150ad4e266787b768781e3d46b76af8076
+          - 0xe835ef8b2756389946894443be2cd5e1b3e9e161
+          - 0xea0bb3b7ed78685fa138e10d57735666db3a705f
+          - 0xf1aa1ad6f97337eb9f1ce95700d32068357feb65
+          # end generated
+      - name: ClmManager
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x045a4af4a593e7b1d013ccc2fa4457354d584369
+          - 0x0ba637cea9ea07c50ec64197b184a789adb5ea5a
+          - 0x0ffdab7f531064db145ee218976953e8d6c46ab5
+          - 0x11e94d01deed7e781d1ee1941604743e0efe33f7
+          - 0x18fc65ffd4e059ba769f64fae1ee95f38a3b3152
+          - 0x1d14812b4482b17de7268a3049983c03c8c9fd2d
+          - 0x2020d09f8edaff59b35871ee7b981671aa31d314
+          - 0x24d6cd03b3278e5d5f82037383a6ba294921b49b
+          - 0x2e99ad2242a988318fc411c76cc55613c0e7ce83
+          - 0x351fd1c42e44209b4dc7709ddbdee4b6fe19f9d1
+          - 0x3549ce8c62989407342a2bb1742dc1ef4a1cbe71
+          - 0x3e7f8ccc696acef18dcbd07fa6739caee19dfc21
+          - 0x41a19212afb08d369abe18072ac3394f884a41b2
+          - 0x424e7ddf6d0b21d5b48c913c3a3456a3553e2538
+          - 0x4b11f96cf6e559479ec86b25783467eec32a0e38
+          - 0x51e05e2cd6499f9f46d2f3756e0c233361ea6cb3
+          - 0x5365c568aba52688bc2c7930e2b980aa8a8de2f8
+          - 0x58470e3b465d11ad4bf6dbb6b8ac3fcc04020d28
+          - 0x60d0fa1978867b4fc92fcdbfc615149574d4dd43
+          - 0x67d4058032ba1d3b226c5c06e8a2fd2204b75c6f
+          - 0x7380c91da251bfa144a12f225a5c0e9886790fac
+          - 0x77d660acd6ef3b1bbc1e3f27afab45abbd3b4dc5
+          - 0x795f9f5892190b7b4b8c0cba9905399feefdce11
+          - 0x7ec3a9cb1e2512f6318a18aa69ebf113cb1759f0
+          - 0x7fe8df76fbf5657ce2e9a186bb1f7ef7c0cd8e47
+          - 0x914c252c38281c06f370b8553fc4cdc2a36cad68
+          - 0x95f91190d6d09496239588a356a98151904c34af
+          - 0x975955a1813103c6db2cbc7aa4f3887a79ffba65
+          - 0x9e8f058c2360bdd1daebe32a14bcecf28fcdd694
+          - 0xa011f86058af8ecad68de247b134ed0dd6e173b6
+          - 0xa4fe71e31623881b43c63cd3bef89d682b94a57f
+          - 0xaac59344f42c92af77bb3cf23be80a09d85a0811
+          - 0xb48042cd2287c664e1b612b24635b2435704fc89
+          - 0xb7843158c063e31bf621ad7ce066315da369ae07
+          - 0xb81602723517a156e73356da18923eecb058e8ce
+          - 0xb851e73a5a597e67d0af28dde76ed1ea65276bd1
+          - 0xc77adce7ae9a2c694d335ce75f8840ef7263e274
+          - 0xc932daf3d14b45ae20980268b4f192af44a05ef0
+          - 0xca9ca9f65fc5a703091c1995c99f2734443462a9
+          - 0xcbf9deb09aacdf12cb8ff15db6a1f156fb5ae03b
+          - 0xcefcedc6ed2f5f291a563a7e253cfdd402f9ad37
+          - 0xd02d330579f792244061bf81afc8c981004f9bca
+          - 0xd597c585a9b845ed500127d926e7db4dd4d9d63c
+          - 0xd619d7917be5ceeaa104b38b17729b2f72951b02
+          - 0xe52c9267db0cfe862375fff7f342aef60726173d
+          - 0xe69abfcb5524ae3de7f9cfcc1d55666132156590
+          - 0xf57999852b109cdff2ef2b3f1ec405ee03e1767e
+          - 0xfa0643ed98ceb553ab77cead8df998da7ec186ab
+          # end generated
+      - name: RewardPool
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x039a4cbe5354ebb5543de06a9c4461438a99a21d
+          - 0x04db98898487e4c9802a6950257e6a18a8ed68a1
+          - 0x1f4df49e84c9b697b44e5013801c9e37c975c7c1
+          - 0x24e6ba590dfd1c5623e2850d27b8584b088a3e3a
+          - 0x26d66649d9637b5f272c5f8394cde553b7120d18
+          - 0x2d7ac76d23bb0ae430fcb2a089107f33938b2f27
+          - 0x31bd09d99de769e0c7a935d81335e24a5e58e042
+          - 0x32bfa96c4cf3322cd50ca0c980f2378082da681f
+          - 0x35bbdcd14a43b887473ed0a808e7a7856c933b6b
+          - 0x3dc45932476d46793ea29b8d2033657944775c94
+          - 0x3f452f2e0ccb43978c5fe86592a2c876434a322a
+          - 0x48b895889b8b31b87db0b5312e760ecb99f8393c
+          - 0x4ba59b6db004c88b7297fc06e6f6220f5fc6a746
+          - 0x5029d9f392b170775e35b87909c35e55e202b004
+          - 0x512c59eb3a16e9fb2ebf625671600cb44474eac4
+          - 0x55de75c7baac9caa4f8820a03cc4546cbe753132
+          - 0x5aed150ecc86465d0b4ae5ae60d8b99ddaf42d2b
+          - 0x5f394f3c9cd9d7e3af7165a311fd24e4c9f9b7bb
+          - 0x645aa1c516cccd6c54c9b40826215ada74a3b537
+          - 0x6a1bffe0850679aef51a404222feb5eb14cef0ba
+          - 0x6fff5bc0f64c180d0da3469216510e3bfc5c6cc8
+          - 0x704d5df3ffc88cb2bd66e77a7aac960e2d737754
+          - 0x7c3e2276d9c9f42d8645f05aef8e03a68493cf88
+          - 0x81181ba5b00152e0298ef3c6917870f7114665ee
+          - 0x822386a7ee14e1cfd314addb1dce2ae3706a63ec
+          - 0x83655c90b930ae49a4d255c50a30c49cfe1f43d9
+          - 0x84c2a61a79eba7776fc194dac09deac9369d4408
+          - 0x8e539ead6055f94cf3f323ca407b85701cb47b1c
+          - 0x8f2837c57cad782eda89b63c92adbbd6eb5ba8b0
+          - 0x902469ec4a9fde9679b02660b40746d608115be5
+          - 0x987c1ed184b9f6bc0507da9a29f5c1db202209b3
+          - 0x9f2e28958dd6b53d5d1a45f7efd0290d257d49de
+          - 0xa05f1583438f62c8a64be70abff68ad6bafa0c8f
+          - 0xa1056f8e74d06f6222cb8acbea0a36e4bc206e6e
+          - 0xa3d6aa11f3c1078c44cf57866df5938a88e37128
+          - 0xa9361a3a28a919d0136092adbb74cd286be6ada6
+          - 0xabe16425c4898a3e9986ecff6ff9935172e5460b
+          - 0xac59ebfe91b2ebb2023b367f9aa3c8eb08ffc002
+          - 0xac63a5d5f8247cd4b978af9adc8227e453cfc898
+          - 0xb418b23da6d6d1f5b7198551550060c604c095a4
+          - 0xbea08fc199f796faf7d94735df28ec9d90ad789b
+          - 0xbec3790efd2e5bdbc6a0b1549e76673d34f6d040
+          - 0xbedc28c4dbae074ba41ba8ab56786187ca0f015e
+          - 0xd4894bb709fa6e388a5f5f4a41438b2a88fe71d0
+          - 0xdd1174b8ffcb2f4a4f9556f4456c6b978de2a7c6
+          - 0xe7936b24f37d058a6fdc6abd75a665c61025df01
+          - 0xec28ca7b09fb911a7233f70738154d4c61f7d01f
+          - 0xf2acb22c14df8d12fc36420e35c5393686978d5a
+          # end generated
+      - name: LstVault
+        address: []
+      - name: Erc4626Adapter
+        address: []
+      - name: Token
+        address: []
+      - name: BeefySwapper
+        address:
+          - 0x9F8c6a094434C6E6f5F2792088Bb4d2D5971DdCc
+  - id: 10 # optimism
+    start_block: 150776281
+    rpc:
+      - url: ${ENVIO_RPC_URL_10}
+        initial_block_interval: 2000
+        interval_ceiling: 2000
+        query_timeout_millis: 300000
+        for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: ClassicVaultFactory
+        address:
+          - 0xA6D3769faC465FC0415e7E9F16dcdC96B83C240B
+      - name: ClassicStrategyFactory
+        address:
+          - 0x6e206FE9C629c37e34C49D31796807254F87AE58
+      - name: ClassicBoostFactory
+        address: []
+      - name: RewardPoolFactory
+        address:
+          - 0x4399457CB360fC37242d2BE326579Caf3981c769
+      - name: ClmManagerFactory
+        address:
+          - 0x55D0efec44ee905fC3e12CcB9f25bBd5ccE0ab9C
+      - name: ClmStrategyFactory
+        address:
+          - 0x3B2D461464b9052Dfe52a17f10aA9e3b17332F2d
+      - name: ContractFactory
+        address: []
+      - name: Erc4626AdapterFactory
+        address:
+          - 0x182be93E1C0C4d305fe43bD093292F21fd679797
+      - name: ClassicVault
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x12ece1fd1d781e67cfb9752bc045536569b72fb1
+          - 0x52a6086a6705d3b83bce6b9710969f616a9c8847
+          - 0xab4bb34981a1f8b20897eca40c7c435075d1adc0
+          - 0xaf326e02c709a45fa1db9d3e3c8e946bb8f9ea6a
+          - 0xc3f2799043c047c7550bc8838cb1d3cd7ff0acff
+          - 0xe9487274208c0db8e9caefbf5d319fd5b846de33
+          - 0xf648e813922b7ede87818ee6bdc91b40843434f6
+          # end generated
+      - name: ClassicBoost
+        address: []
+      - name: ClassicStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0b95ae29f2f8c86706d7d465f3c022abed4f9078
+          - 0x2c5d582842668e6f5b3ea0d599f50fdbdf1a4d32
+          - 0x5a44640de029ab09f155e4bbed22306c2f6bf7c7
+          - 0x6f1e8a8037dcf0bb93ea022d93cf56e0f6cdf413
+          - 0x969d802b313ff51a7cb1383e05e8529a6b5ab81f
+          - 0xf1f539733a8a7576fab3517414390d2d88876019
+          - 0xfffbc9b36fab2577d32b8d25be1ef4ca0218d740
+          # end generated
+      - name: ClassicStrategyStratHarvest0
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0b95ae29f2f8c86706d7d465f3c022abed4f9078
+          - 0x2c5d582842668e6f5b3ea0d599f50fdbdf1a4d32
+          - 0x5a44640de029ab09f155e4bbed22306c2f6bf7c7
+          - 0x6f1e8a8037dcf0bb93ea022d93cf56e0f6cdf413
+          - 0x969d802b313ff51a7cb1383e05e8529a6b5ab81f
+          - 0xf1f539733a8a7576fab3517414390d2d88876019
+          - 0xfffbc9b36fab2577d32b8d25be1ef4ca0218d740
+          # end generated
+      - name: ClassicStrategyStratHarvest1
+        address: []
+      - name: ClmStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x24081b1bc5c7a25ccbedb33b94c8c3aa4ae32efd
+          - 0x2828c649ab2eaf55b938650dbf7b62d0d250d2f4
+          - 0x8e7027eff928286dc0fdd72ea7e3a49d534bcd36
+          - 0xb2c27c8b3b76c79d523718efe17af695d1668f25
+          - 0xc65f4ca9a8b3b66eb35870792a18dd498d630db6
+          - 0xc9f4322b06b177d99f7080190c485dac3fdf1a95
+          - 0xde87d24faf9e1e1962c1da2b33f1c295aaca0c41
+          # end generated
+      - name: ClmManager
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x5b3434216fa9644904cbcb23f76614c494ee478b
+          - 0x73615c5bbb4b9dcd7bfdc480bde483260cb116d6
+          - 0x75860421b28131457c31ddf58bac2440c359d995
+          - 0x865586be190e4bfcde9caf33e3e0c6957e8d3c50
+          - 0xaa7802d27b24fbd8df284a0aaef0153bc1b777c7
+          - 0xb26cab3fd0ce5a5902026f42082c19ad8efe96c1
+          - 0xf8b1f2a3470f65638e7bd772d0feabdf67585518
+          # end generated
+      - name: RewardPool
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x1b0313ee524822f4909bcaf338eb5bcec96cbda1
+          - 0x661cc078a30868497912f8f03c1c81ecc887327d
+          - 0xc37ba18a8375335a796b6a5add2defd022be1491
+          - 0xc77c6375508e5570e19205093d583def6d7d111a
+          - 0xdfc21473a10e5f7d44a954c0a9a02c1248afef44
+          - 0xebd879fa2e93a264918afa5a4a4d55926f06bf62
+          - 0xebe7e888597f48ddcb8a277b2dcef841abbdbe8e
+          # end generated
+      - name: LstVault
+        address: []
+      - name: Erc4626Adapter
+        address: []
+      - name: Token
+        address: []
+      - name: BeefySwapper
+        address:
+          - 0xe115b50c52cB5624fD76232cDF498ADA6ECD1e69
+  - id: 4663 # robinhood
+    start_block: 3548752
+    rpc:
+      - url: ${ENVIO_RPC_URL_4663}
+        initial_block_interval: 5000
+        interval_ceiling: 5000
+        query_timeout_millis: 300000
+        for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: ClassicVaultFactory
+        address:
+          - 0x2f99004ed581bc0fe35749047cAc44F0ee410cdf
+      - name: ClassicStrategyFactory
+        address:
+          - 0x0E141deee4CcDa44212C30FD9242CB977b5Dff0B
+      - name: ClassicBoostFactory
+        address: []
+      - name: RewardPoolFactory
+        address:
+          - 0x45efE862a9c6Dba32221c040885b794A9589103F
+      - name: ClmManagerFactory
+        address:
+          - 0x7881036d5DE71CE2ed5f2916025460A2AcA69ac4
+      - name: ClmStrategyFactory
+        address:
+          - 0xD4E968d673bc2C4Ba5abcB773de6f07e65E94E44
+      - name: ContractFactory
+        address: []
+      - name: Erc4626AdapterFactory
+        address:
+          - 0x704526D6622C99Fb9A809000c6B64BEaA02dF32c
+      - name: ClassicVault
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x25012d654bf9107b6e0af0248656fef0b718dbd3
+          - 0x25b418fcfe8543c25ad9d78246839e5cf3a3b50d
+          - 0x4ed469ac0080be3cd192530d482e4d321823e743
+          - 0x5008aa698d3bedea757c519f5342f861d7ef78ed
+          - 0x544c7ef9265dc08d93b5394116e68ae7d9e60730
+          - 0x56ea4b4afafbb87cfd8fd8a0266a2f86561677b8
+          - 0x612afca34f218f9eb434b6c7458da0670f84ddf0
+          - 0x658b48154b96d4aca3fe9531305c546c0e2de950
+          - 0x75588e48f7b4ed9365d78c6cd509f3c7b804ca47
+          - 0x8353c496114cf66d10545fdc2b4e6dfbafd37e3b
+          - 0x857b3971e8038a8f8e2c0da797145447efbf6b86
+          - 0x87673a619fc4f3fc08068a0bb04f60aa2d04ca62
+          - 0x97dcdc29a3b3e2f556564279f7d09ee40eb74e45
+          - 0xc447184bf75a84ace3087515ccffb54937838fc8
+          - 0xd4a452bb077618b931603dbcb60ea43c05ebea45
+          - 0xe50d89c43d0d13ee1439bb5e94876a1163a26434
+          - 0xebe70034de92614ebe06cde98c12257f9397dc0e
+          - 0xebfb46b7a3e37af48352c1dd2fac61ebbb907ec8
+          # end generated
+      - name: ClassicBoost
+        address: []
+      - name: ClassicStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x08dd85fde0a8504780886fb9c3928e392853e9e8
+          - 0x150eadf2b4d15cd015ca2624bbf4cf50fcf99e4f
+          - 0x1c9484b75ba1ed7a47dc4d6396e35302cf6f238d
+          - 0x3853dfa280f486ba54d69b1e681594e3e0894ef6
+          - 0x5976cad6c93f0bf346962e03d6fe7c93e10200b9
+          - 0x691970d8744a6902c5dd0a120dab0876867b0480
+          - 0x84236fef3026822b7b5fb3289753727ef0056257
+          - 0x9fa6b11836df0ef5d6bdcbed95b745bd49afb5f9
+          - 0xa6343a3c9780b5803bf35abaaa4f951250b1dd49
+          - 0xc13f974547a41783490834e73df53e2ab5af0a69
+          - 0xcaa1843987df56d91586ae12c886428ae117a8c3
+          - 0xd14df0d8797e3a92f6b377c24f8772b232df0808
+          - 0xd9546cb5962a1d9605fb4a8c92002bfd32c30d72
+          - 0xea99fa0d0776d6d097c6069d5c1a70224c6cef5c
+          - 0xf3716d43aeea0af0928a9f86a99623613710a7ff
+          - 0xf9601df1485d6e0b9b9128871e706eacf443b627
+          - 0xfedbf68742feedaedd6319cd0101af06a864544b
+          - 0xff5347a7b0a6e11bb9e34046219b0c1181668a76
+          # end generated
+      - name: ClassicStrategyStratHarvest0
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x08dd85fde0a8504780886fb9c3928e392853e9e8
+          - 0x150eadf2b4d15cd015ca2624bbf4cf50fcf99e4f
+          - 0x1c9484b75ba1ed7a47dc4d6396e35302cf6f238d
+          - 0x3853dfa280f486ba54d69b1e681594e3e0894ef6
+          - 0x5976cad6c93f0bf346962e03d6fe7c93e10200b9
+          - 0x691970d8744a6902c5dd0a120dab0876867b0480
+          - 0x84236fef3026822b7b5fb3289753727ef0056257
+          - 0x9fa6b11836df0ef5d6bdcbed95b745bd49afb5f9
+          - 0xa6343a3c9780b5803bf35abaaa4f951250b1dd49
+          - 0xc13f974547a41783490834e73df53e2ab5af0a69
+          - 0xcaa1843987df56d91586ae12c886428ae117a8c3
+          - 0xd14df0d8797e3a92f6b377c24f8772b232df0808
+          - 0xd9546cb5962a1d9605fb4a8c92002bfd32c30d72
+          - 0xea99fa0d0776d6d097c6069d5c1a70224c6cef5c
+          - 0xf3716d43aeea0af0928a9f86a99623613710a7ff
+          - 0xf9601df1485d6e0b9b9128871e706eacf443b627
+          - 0xfedbf68742feedaedd6319cd0101af06a864544b
+          - 0xff5347a7b0a6e11bb9e34046219b0c1181668a76
+          # end generated
+      - name: ClassicStrategyStratHarvest1
+        address: []
+      - name: ClmStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x03b95224bbb5ce0d923d1bfdafa6306f969d99cd
+          - 0x0623751de86dd51d710c75a89727fa4c46c506a5
+          - 0x06ae875557dd20b9fc0ca0bc75507c694b4f226f
+          - 0x0fcb61953fe02dd143940ffc2099f583986fd526
+          - 0x1366cc8b0473b9f4b1bc5b5220ff2205d5c29055
+          - 0x14cc22d3a69e4125e9e6d42fdca01afbba7c15b3
+          - 0x177ff2938ddac11f8c909fcdb9fdd15dbfa04f37
+          - 0x1938ab4ff4c1d8df16f9a18264a67fbadcb6135e
+          - 0x1c8681c073d1653b7e96c7449f6024ec2ca4ed62
+          - 0x1cd45e0e854027c3506f7c0f9ade592d6da686c1
+          - 0x1ea1518703b68ac77ad2fd24db54b210bfb84cd9
+          - 0x2099c733f44bf0cac3559e333c8dc39e67b0c7b0
+          - 0x223de8a29e65619a8b789d9b44a6a51f692f7d8d
+          - 0x238e7fbb8ceac082c68dd15fa134b74f8c15b0c0
+          - 0x260e2b479f2e6a5d9b638e540641527acf3e0011
+          - 0x27403aba53e1130d94481ebdb3e22af2ebdb26f6
+          - 0x2d541832fe5cf6f666f86eae56d5a613985914cc
+          - 0x30e3b0aa970c44b4f0d1014c2344cd5c2d1a9af2
+          - 0x337d0f2e82eb56bb6901ac7bb3840393bae7bb5d
+          - 0x3509b1f30a265340428a8be428bc01aba852e20f
+          - 0x350fd9b90679371862ea2d03f284edde622f2d7b
+          - 0x36194ac14fd303834e388ad24f08efbd3bc1e249
+          - 0x364a047b0afc04e976c3a59cea55a866d7890bb3
+          - 0x3a1dc923acf55bd8f5d085b12802522c4c8a038f
+          - 0x3dc9f3c829184ca98b602a61b85382f9548b8d35
+          - 0x3e9b3afafe6029f8f080bde8f5f9909fe6600497
+          - 0x3f5dc423117ccfcd0651817c34e1b128dad8f3ff
+          - 0x3fc2f9ecd4370c719e21551d9dca2457c43339f8
+          - 0x44bf994dcb5a162871c9e5facd4e46baf31cb3d6
+          - 0x4a3a354d41577fdc570827e26c13c8a7f5d0aeca
+          - 0x4b4b05acaca64490cfcb51c3f2a77579584f606a
+          - 0x4d5f2fad94a062ddc0a6f60ba0919ccfc0efa988
+          - 0x4fc3dc7eb49105fd6f3e9c773934fd46bb7cb843
+          - 0x5228d2aa669f358c76c8034eec2798fa3f2042ce
+          - 0x538fc480c9b1dc7c34c5fdd920e033370b0e6ef2
+          - 0x54bd0805f549708144c811c14ddeec0714ca5e0c
+          - 0x550c04c6d577a88d7c36f508d4735619fdde8976
+          - 0x558c19a2f1d51a004d484ff05a6c3ac0bec24d11
+          - 0x5961125bc7f129324b687b47fd3a838758d2f2de
+          - 0x5f6972bf4a9f5f964a5e9d4cacda57b782e44e66
+          - 0x64c54158587297f937a24a78691a9964c4caa0a3
+          - 0x665e41e6adf266dd848050fff47b6e2c85e021b1
+          - 0x6859c1e8cb10badc7f2ba702f0d99e3be5e9ef3d
+          - 0x68fe9f832e7fe475b9b5a405015b39f811ab0c23
+          - 0x6af36d931908ac6b447a045ce09f8417765d43e9
+          - 0x724b83d5fb39faeebf0b92bd1ea36c3423059b98
+          - 0x7690ea2bab2f6c906240f7c35fd636515d2eb969
+          - 0x76a2e8bc7eb959a340c459b98b78c5ba8dbda032
+          - 0x7aa97a5e772c8ea6c5f271adff3248b82a36ee7c
+          - 0x7c4bea70fff63006306ea09989a4df3751c50979
+          - 0x7e89c3dd8221c2da41f5942b2a8259496e48bddf
+          - 0x7effc10650f88aca4c7efc12b89a9c432996aa9d
+          - 0x8237f673a33ee64c25b3ec93c1582d589bfeea38
+          - 0x833097e04b65ef2851d7cce5b230cd05671b2d53
+          - 0x8337c691c3afa52cce418178e52ed472f034cb8b
+          - 0x882b2a23233552dfd2ebde82501d67b8dfff58e7
+          - 0x88ad50b48e54a76f71164cd0420e917383c3b4e2
+          - 0x89207bed2935c64d6cb105e9c85e0e2ed99dd8f2
+          - 0x8a500099568729030547d503f3d5aaf75b0ce509
+          - 0x8d46fe4a9555a505b64eb6c4be8cfd14f1b70a73
+          - 0x916b5712b6bd6df6c30fc302f390003bd0b6a747
+          - 0x93f1b9e7bd06056add85abc59cbcac6830d5127e
+          - 0x947c84a189ec771125735ca2e52bf32a35610900
+          - 0x959ac9c121a676164f0c9584a3f360d11d300e30
+          - 0x9605e2b45a72cffc456a899d04a685a14dea8feb
+          - 0x9766aa21bb54b25a90b2e620df60462c33d03254
+          - 0x97ea60578f0bc715a343586f180a00de6b6b3469
+          - 0x9a02caa8a2e63659f8a419a29a3b48bad86d3c7a
+          - 0x9c643a2e5176f35d4a941cd7d89c9c1d49d5814c
+          - 0xa16ad7363697115526bf155a7695fe2156493d07
+          - 0xa282d42da501754194325497b126fbf602f34a3f
+          - 0xa370cdf47ec6215ee26a6bdb2016a66fc45c30d8
+          - 0xa85c0c61b80189213c74c160f0ac213e78bd03d0
+          - 0xa9188bb4c0161c889352bcc6b4495b030ba77002
+          - 0xa918bad42622d516c25ce001e7abcddde2cc10ab
+          - 0xac7ebd89c38dcb5cb5f90703b3ddfca17822d9e9
+          - 0xafc4f2bb3d679d245d4773e6a5a16ae5309fabd4
+          - 0xb0db015b5acca57e5241d12c0ad0dbdd3430bfc6
+          - 0xb625aa9a87ce35ee82a9c19dd853968b82d08f4d
+          - 0xb799a95f9b8fd479a3b1c195c8fedac0af6857e4
+          - 0xb9e392ff95a2addd72b4a9875ea25e8331fb220a
+          - 0xb9fe00ac9de48781c224b1d717dc5af445a787eb
+          - 0xbaee86c9d7de9dc192f17dfa62833b601dc64d23
+          - 0xbb594904f65ce50fd3b3b4fe666d0f413bbe6442
+          - 0xbc226b83e62f39a7c213c0305e931182729692fd
+          - 0xc1c61d227b045401c2588e6291f7391d3447e4af
+          - 0xc64d76ab516b250d6017c9c556a0169e0900a23c
+          - 0xce26885bce9c36c0ffde59335f10b366e601f73c
+          - 0xd6ecb3fe9e26b16aec1c449d091b50f7141f8b54
+          - 0xd756ef199aaf352a33e264149ac9ec43040b7c8e
+          - 0xd7f3bcdafcff0018953bb6944db2683ff2e42b07
+          - 0xd916f48d545c05868c16f55525163bab6bd17650
+          - 0xdb739d906cd5101b65e089a284ec13a3ab21f603
+          - 0xdd2182eeae54e8deab5929833cefc4d3881a2377
+          - 0xdd79a3d74045c04de70a43401478ffe289220129
+          - 0xe1e442c31bc217819bb2c792eac9b8bf7006fc30
+          - 0xe232fbb389b19afe107d731cd27238f04912c9a4
+          - 0xe7eba9327678c5c997d93b5874e1ac611a19ff20
+          - 0xe9e25ad74b77c434cb13f1ebbac9a56fe07e38ba
+          - 0xef9c26122519b4ed1ff8d5bf3accf3eb60c8269a
+          - 0xf11135c440c1782af2b0b766e756deae2210a43e
+          - 0xf54b6d69b863ea141bcf1dd7c033c2832cb3307d
+          # end generated
+      - name: ClmManager
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0151a001b2eab292a36ffd8c1a42396dae221848
+          - 0x0186715deb2d13fe0b440a69da910b442889919c
+          - 0x04aad47f04296cf20231ec2054013193608bc847
+          - 0x05d214ee1a6c0870cc4ef4631d559a698d4edcfe
+          - 0x0674d06804c8e134eda798263a1fb93036212daf
+          - 0x0b7df93bb66e13923a2153217b4a29ec7cc3efc1
+          - 0x0b8871cbd45618307dac9ca3f7c13fa0431f33d0
+          - 0x0bf46176b181d8bb5bbf57c5d200c79daf416221
+          - 0x0ed02734598dfffae5e4f4902918f94da01f562b
+          - 0x104e6823bab0be3fe9b48c5fb0f0413301d935a4
+          - 0x1176141bdbe958576a2c064b15ca0e94f0a5981f
+          - 0x137731b8b2d7cd24ab4a4a9061f2d7b4fd1abfee
+          - 0x13805bafc3800d14a14bdbab038c5750f6d54077
+          - 0x1e8d576f71d5f416e7573b960ff59c4fb77976ad
+          - 0x209761420bcd085788051d166263a07c847cbadd
+          - 0x237f4629df8429959c06a3aeb92804f36a284966
+          - 0x274baf3728092896dd9cbc6587aae99457feda59
+          - 0x2e35f0951cffaf89eb9adde94c60475e3745cc15
+          - 0x2f049ad5f34584e1a97563273d1bc85a05a4fad4
+          - 0x324f6dd622e8ee5ea3d5181d8b927443f9566e42
+          - 0x36759534741e28eb052238738963d684bfe719e4
+          - 0x368877fc3931b7231b98e35091a0e31a0fc90f78
+          - 0x37698c12ecc727178617c5b7d694377eb98de058
+          - 0x3ab58808c6fec9cc0ec56a04800e306c08ffb5e0
+          - 0x3ca0b5eb3133982a982b72bfad4da71a6a6433ef
+          - 0x3dfd9c1f55546e3281866c81ebfa2ec707575529
+          - 0x4177cef2bc8719b84fe0ac474e52ff66aa487cde
+          - 0x429d238c62cb0ba523f268adbc728cf843c6a330
+          - 0x4319c71984790f96ac190a7709b380f6f27dd238
+          - 0x43c67a19df6206f70a843f0a66d26e1afc39e385
+          - 0x449b98bf76e1284e502148d54f42d7af1285fc9e
+          - 0x4acf44e509c5481704eb660a4616ba5de3a1857a
+          - 0x4f702c76dd9d7841784922f87470e3f718aaf6da
+          - 0x4f95d85389de296869a5a815a1aa05ec32f7efb5
+          - 0x530fa5699eb20be4d18bed24e57a6d0defde218c
+          - 0x563267a634a8f762046adebd9b128880f46baaaa
+          - 0x5794bb61e83397049c40d87bbf3d44af583a27ce
+          - 0x599ac767099bb6f01712867bfa1fc1aa27defd37
+          - 0x5a725556514222d0cc81501a9294a3135b7c41c4
+          - 0x5fa82f7e34ea4dfd9fb81dca63d6fdd824356cbb
+          - 0x63185da98b76e7fa49d5d0611a6e211ee2988201
+          - 0x6a2a30a53b96fea920e9b991830714ec46f711e3
+          - 0x6a5057a50178cc9c90577d8df401e7fbe79de9fd
+          - 0x713523c2b3842adc8a99c456868f5fc4670f9893
+          - 0x72fb284b1c86cbf6565200a07cfc02ae9f909d44
+          - 0x73dcff137234f773d5a13fb2f65b508f7dc34d5b
+          - 0x7611d8e8d7d551d325b11c93b714565953710ea9
+          - 0x77907e2a35f3f8db00b24dbc9f2c79d66cb7fc1e
+          - 0x7a03d794bb44e4cfe55da70e0ddfc020a054c5f7
+          - 0x81575bb1316cae13e35e19463bcd4d21b0d517bb
+          - 0x83c2934ff42756e4ffaf0433c9e246e6888f3ef6
+          - 0x8866f1e2b251606e9da67a462d18e4c15c7979e9
+          - 0x8cf7bae9ac9d3e8bf81debcd2b6171335b0d7fc3
+          - 0x8df8a07a294eb8fd8da556901f1fd6a92526f729
+          - 0x938fd2151d61b32140eb172b89d5d03724e64319
+          - 0x94b049eaf61268039a79c9df376f0689983e2a12
+          - 0x9619bfb1f2d97e2b23f23310205e4c2089c1a45d
+          - 0x9818f01edccc3d8eb86b859931c3b877cf44a108
+          - 0x9ccce25f82f37ef777552e3bbb2a01bc5574abe8
+          - 0x9d27627827119f212186698824fb45f660a242c5
+          - 0x9fb0cc34ee0bdd2140dc43146f92d46237a20248
+          - 0x9fb66d84764c66a7f5c11f8ee3074d0e9f610c59
+          - 0xa06fad8b3a6b97a0931e884777a9827690aacd0b
+          - 0xa50967460959477fdf52462ee711fd38a4e810f5
+          - 0xaaa8c1e4f75ec7df802607d827ea0efe8dcddbdd
+          - 0xab094deeb58b8f09533930f653594dbcfc423d53
+          - 0xac82faa24d9139d5abb943dcdee18995847a4525
+          - 0xaea660e8164ea88ce25d75a8f7ecef832c49846d
+          - 0xaee2bef291dffdf178f9b46aa8d254d52da22cc8
+          - 0xaf5bfa1a18a9b1f77b5f240a8275ace8add82716
+          - 0xb29b4dc13bbfe3d83b6e041deeb8663d684c280c
+          - 0xb2d5ce49744ed86a7962e6f64dce597a0126f9d6
+          - 0xb35200b74159b7dbd18b6be47cd2b7c2c50f5dfb
+          - 0xbb18acfeeb566e8549f83bf0f0e01bd0b2a7bdd2
+          - 0xbc712b9726e6346e9c700df14b2a6a558efd222a
+          - 0xc17f60d0278aacb2cfa83f3c1731746329d6dd7c
+          - 0xc1a40784f4aeb84d7469cc93bdb6e23f3fbe5749
+          - 0xc32834ac40a6529b2f7bb2b9af496af0640fc508
+          - 0xc61179279abb6cf3ceccce23641b3d69986ec777
+          - 0xc61b3b381c34a636451ba66a62792bd84a78e112
+          - 0xc7f77395dc6f39cff9e435491ec2286c53454f99
+          - 0xca9567fd9a07971216417291551b07ea5dc40f4e
+          - 0xcb968f8382e3fd875f47fbbde59fdf46feb8b447
+          - 0xcc3f8971d2b30a8e0a4e7ac98b295442a53a2ae9
+          - 0xcc83f9d3e2aba9fcfb048e0fdf46e4724a44acba
+          - 0xd33e849c1bbec3e50f7c2d1211d382611b968bba
+          - 0xd5319d37f56c70f10da99bfb3a38694d5bd1ff22
+          - 0xd60bc30cf5e564e0b956aebb338942273d62f93b
+          - 0xd922173c136443a1f7795a86b28da964ea2bf6bc
+          - 0xd9b95dcecf21528d5e98d4167ebd30eb5fd1666f
+          - 0xdaf08ca084dcba9e801549803de82160adcaa1de
+          - 0xdf1445e0424aecfa5785915c8fef805a8f893509
+          - 0xdfe17eeb4d0de4973f79ccf5d516256f0a11a1b1
+          - 0xe12010f9560bc8b1e54393eda32fb7ae41d412f8
+          - 0xe232cc0841445c39a0de44f887277a6882067ae6
+          - 0xe2b1c9dcdf2cbe25f33b1d245ffd8ad943abaf98
+          - 0xe36274737d99273d353d8d9f0a51c1aea7426c31
+          - 0xe6f3bc3c458597bef1845274dedea0eb20995a1d
+          - 0xe71389553681e8cc0b9164898d58b631fed7586b
+          - 0xea321e8e37ec67ec748005421db8cb057e6a15f2
+          - 0xebba83b76b2c7a627a8e566a306b8db8c8454db3
+          - 0xee429a657b2495336049456745ebba962fb63cec
+          # end generated
+      - name: RewardPool
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x02574d30ba16391be30a479492eee0fa91e44398
+          - 0x0365ce42fbe05c07cb835c06d3b68dd871e94ae4
+          - 0x03b023542f20b0ff3b36c6091a3960daf1a29a3f
+          - 0x03cd8b8e7122f2b9649fb7d3408c26f6617af2aa
+          - 0x093f6613dc96af7c834a439f0a0af18836b2dfdf
+          - 0x0a1aa83108be594dd981bea4fb46c6e23a9f7b46
+          - 0x0d80f05cd739bc057c1d94a5a66dd14d719da7b1
+          - 0x0e7fb97a89b20a682521c5d29868e50a7b693979
+          - 0x0fb72cdddafb710c28dc098da51aff7645c1531c
+          - 0x10f9e8b973b5ea104618bd334f3cc2c0ff7e15f2
+          - 0x11907281043b89f3b507159f37d254941b5f6525
+          - 0x123e8bc882dca28f86174f9f3dc82a8c573c6c84
+          - 0x13e34af4e2cf9ca039a6875a4477fdc7aa533f97
+          - 0x14b7fb2681a0b344eb99e8b0eece321e683ed6a5
+          - 0x18b52a793bc1261661236a7f39e7348659fbfd0a
+          - 0x1d1ca99c4412c5e57f5e3dcd98026390439647b2
+          - 0x28a7d169942bb50f51a2e53262ca736980fe183f
+          - 0x2e752ac0d35e707f6f2f8fcfa3c68844fd238329
+          - 0x2fc28a2c2c8878ed084505b5ff840b17e6acf87f
+          - 0x3021ca1ce7440f445a4ed1f366aff5180cb8e4b8
+          - 0x3161cf7421899ffa37c6387d8ea2434524ba74d2
+          - 0x34980db21351dfda310493ece6f50d0cfcfdafc4
+          - 0x3890b611eb11569072c93244f6a6110074295828
+          - 0x3ad4ab7c15f6051cba66252257cc60bb1ffca0ea
+          - 0x3b2162ea5c3f6f20eb05818f40d54857d1aa3b45
+          - 0x3fca34d254969a7447f64871e5ba5ebad999e911
+          - 0x41691cb706ed97ef1aaf675d627ef5b01145e7d6
+          - 0x41ff461cb153855b17b14ac372ecb53e86970c97
+          - 0x45c08056a1b5dd4af73303b29c0bfdb9b939c8fa
+          - 0x4dcd10275284fe8ed14a007cd8f754358cf9f428
+          - 0x502765c423204413217bb10c4e09bf37d1d0abdb
+          - 0x51e6f4cfb91e1d09a05528aac305edd0d6e74409
+          - 0x527c1cbb12b3e6432d48ba77ff1fcd0b025805b0
+          - 0x53c42366aece357ae947ce675ebf7528d4dce603
+          - 0x55b0d30326ca44b5ab156c0c58fccf47d91c5a95
+          - 0x55fd3b49ef7e5f9a31da68051989f5f749658f99
+          - 0x5bc50aba09c285529c14290179ac345d0baa033e
+          - 0x5ed2b060b7f8809e6ac41dd769fe3528fe44f424
+          - 0x6112e370440fab14844a5baf1e9d5b16a0b39bd9
+          - 0x6149a536035b424ea7fcaabd8c9dc5efd2907538
+          - 0x627ec2b7c8f50eb882a327a2a4200b7792c0ff58
+          - 0x62b90d6f133b0e52ef39a7b5fdccb1df78c392f4
+          - 0x6485817467fd2129622e57b20577cf2697f3dde2
+          - 0x64f71be23663b8fab65878757deab45301237321
+          - 0x68a0bf2e2d48076e0d3c23a675b13f845ba963d9
+          - 0x68a2e1cf0007d28728774619d1ac89f66fa99894
+          - 0x68cdfe4cf9bce685142d029ed9b74e42d5573759
+          - 0x6e80a9ed1717920d82658681747f050998043a78
+          - 0x702480ba16a14dcc42190d47e46d9905b1d7f608
+          - 0x72cf42d5951e3f2f9da265601a064a075600d036
+          - 0x7428405506321c601c6ad622fa1185a7d8ae44b4
+          - 0x75f0245057a593f28ec563ef5a5153fe53cad8d6
+          - 0x7627e96758938951498f071988cb47c6bb52dd7f
+          - 0x7799af7dfc8c372cd7e1dfc508d90805c6f3956e
+          - 0x788d31d39da6252f228b5842d9215bb7abb83f8b
+          - 0x7ac789958ba9a0cf35f8d6cfeae45190c9db573d
+          - 0x7b6a30e2000f7ce3e61ba21fe45b23c851b10c49
+          - 0x7de04ed76bde435df1526a994ac7f864274dc137
+          - 0x7fc80bbae94e72d941aea99647b4cd55fb103907
+          - 0x8202478ab592a6b448cf679969aa7ba3f50c18b3
+          - 0x858dd5aa05c38d94142054eb110892f002814689
+          - 0x892a7c3d9ba8d456e405e35e736b1a44a7a74794
+          - 0x8c241d00ee324162a1a727f0167eb470c5b456e5
+          - 0x8c66a60f4bddff2b1fa05dbc02391ff5d3119b42
+          - 0x8c9f485a9a9f9c147d850e71de2eb25aa2b99d95
+          - 0x8f6e62ac78b06f4f45db8de37c8a8b6e1f3e3a13
+          - 0x8fdb3e3b78341661346c0692086908e2e414c158
+          - 0x911eb23632037dcf7bdf774bdc76e7ce6697f224
+          - 0x965fb567dfe6f8af3c021857f2eec95ef1619f5a
+          - 0x9776f496dfc4464df76b8503ca1ba95d116d1e02
+          - 0x9ea8596752349525786e44d909432663b0680e7d
+          - 0x9f1436072f3560337e6b6ca8f7b6929a36bcdf87
+          - 0xa04bad36b73dd807239f4a7b0fe03b34558c829e
+          - 0xa3eda31c3d7c886a6ff3ccb69d4045c05eaaf3b3
+          - 0xa79ff9ca6250a0ddebc051dd898a4a892caa4859
+          - 0xa9d7dad97aabee16252d71c699892be8a9cb8853
+          - 0xad2e28e9c8f3c4a0753aea2d37a53bb6750a4faa
+          - 0xb1778679ab4bb8f6b80f76ee425c6ecd188a522e
+          - 0xb1fa0b71286443a7abc6f8296acb9c1bca07b5aa
+          - 0xbd6613ea70a3998c10471e55958b660d3cb5d097
+          - 0xc5a4561d4ba56be43dd36547f70e6e8795db9824
+          - 0xc6a55d8e2a0700ffa760d1c8361a82ec4dee0dfe
+          - 0xc887326a6015f279fc68b5f6f93a1be5899a5f2e
+          - 0xc9a35694e569b17eedb32dcf283d9558f8c28e19
+          - 0xcc3db04bb136a34e8569c1eff2ab19e3fa915d48
+          - 0xcd41f03e741e95f126b97a1192901b358ac9bfb8
+          - 0xcd68b5a8850e5a10531bde1bc657329575e40e2c
+          - 0xce84fa38c16b9dd9438397d68fb3c27a2c616e82
+          - 0xd33ff8751f62452e3171ee8cdae8d3ebfb1e9ca9
+          - 0xd6c823b6298463f4ae3c4f4f29a8601fff3d5332
+          - 0xd9993b44e8d014f4ad979cb7706673386cd31520
+          - 0xdaceb29d88ee1b5efe8ac134523dc93a35548703
+          - 0xdb1bc7e2b788fa359d92706d80a6bfdef0cd31bd
+          - 0xdfbecce3a4cfe6f673911a2c871c2052d1d90cce
+          - 0xedbaa34dcba4250f6bf9582dded03244e623268d
+          - 0xeebd4785b6960447af5dca4f85fb90a11f976fde
+          - 0xf46d7ae3473207e88d9b46869ed4c0be069928d0
+          - 0xf4976dc296c76ea73a65bcec91bf7113bb7300d3
+          - 0xf8ab44ea77ce06e9b42de8021449af01b3de977d
+          - 0xf973b83766e8d93d67e0c1e8eb4b25f2b6b91e06
+          - 0xfb7aebca176adfd610e264e7fccf814f08d13d9d
+          - 0xfe8585e7e1925c3cf944772c75820c4df47f1341
+          # end generated
+      - name: LstVault
+        address: []
+      - name: Erc4626Adapter
+        address: []
+      - name: BeefySwapper
+        address:
+          - 0x19123E344Dc22ef22525994FcB801E99fb37fA9E
+

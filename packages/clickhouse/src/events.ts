@@ -149,20 +149,18 @@ ${ident(name)} AS
  * `product_kind` of the product (`VAULT`, `CLM_MANAGER`, or `UNKNOWN` while the indexer has not read it). Read live from
  * Envio's entity tables. Each CTE is referenced once (ClickHouse inlines a CTE at every reference).
  *
- * `decimals` is the unit the share price is quoted in, which is not always the share token's own: a classic vault's
- * price counts shares in its want token's decimals (a USDC vault's `decimals()` says 18, but its price is per 10^6
- * share units; checked against the API on every Arbitrum vault), a CLM's in its share token's. A vault whose want or
- * want decimals the indexer has not read falls back to the share token's decimals, and a token without decimals to 18.
- * Read when the query runs, so a want link that lands late shows up at once.
+ * `decimals` is the unit the share price is quoted in: the product's share token decimals, for classic vaults (whose
+ * price counts 10^18 share units, as `/mootokenprices` since beefy-api#1966 and the analytics series) and CLMs alike,
+ * 18 for a token without decimals. Read when the query runs, so decimals read late show up at once.
  *
- * `facts_complete` (0 or 1) says whether `decimals` rests on facts rather than on a fallback: a `VAULT` product needs
- * its `VAULT_WANT` link and the want token's decimals, any other known product kind its share token's decimals; a
- * product whose kind is not read yet is incomplete (and a contract that is no product at all has no row here). It is
- * stored with each priced row, so the retry window prices again the rows whose facts were incomplete.
+ * `facts_complete` (0 or 1) says whether `decimals` rests on facts rather than on a fallback: a known product kind needs
+ * its share token's decimals; a product whose kind is not read yet is incomplete (and a contract that is no product at
+ * all has no row here). It is stored with each priced row, so the retry window prices again the rows whose facts were
+ * incomplete.
  *
- * Deterministic: when the indexer has several candidates (two `VAULT_WANT` links, a contract that is both a product and
- * a link source), the pick does not depend on the order ClickHouse reads them in: a product's own row first, then the
- * latest link by `since_block`, ties broken by address.
+ * Deterministic: when the indexer has several candidates (a contract that is both a product and a link source), the
+ * pick does not depend on the order ClickHouse reads them in: a product's own row first, then the latest link by
+ * `since_block`, ties broken by address.
  */
 export const productFactsCtes = (envioDatabase: string, name: string): Sql => {
     const cte = (suffix: string) => ident(`${name}${suffix}`);
@@ -195,39 +193,16 @@ ${cte('_share_tokens')} AS
         toUInt8(decimals IS NOT NULL) AS found
     FROM ${token}
 ),
-${cte('_wants')} AS
-(
-    -- the latest want link, the larger address on a tie
-    SELECT toInt32(chain_id) AS chain_id, lower(from_address) AS vault,
-        argMax(lower(to_address), (toUInt64(since_block), lower(to_address))) AS want, toUInt8(1) AS found
-    FROM ${link}
-    WHERE relation = 'VAULT_WANT'
-    GROUP BY chain_id, vault
-),
-${cte('_want_tokens')} AS
-(
-    SELECT toInt32(chain_id) AS chain_id, lower(address) AS address, toInt64(ifNull(decimals, 18)) AS decimals,
-        toUInt8(decimals IS NOT NULL) AS found
-    FROM ${token}
-),
 ${cte('')} AS
 (
     SELECT m.chain_id AS chain_id, m.contract AS contract, m.product_address AS product_address, m.kind AS contract_kind,
         if(p.found = 1, p.product_kind, 'UNKNOWN') AS product_kind,
-        toUInt8(multiIf(
-            p.found = 1 AND p.product_kind = 'VAULT' AND wt.found = 1, wt.decimals,
-            t.found = 1, t.decimals,
-            18)) AS decimals,
-        toUInt8(multiIf(
-            p.found = 0 OR p.product_kind = 'UNKNOWN', 0,
-            p.product_kind = 'VAULT', w.found = 1 AND wt.found = 1,
-            t.found = 1)) AS facts_complete,
+        toUInt8(if(t.found = 1, t.decimals, 18)) AS decimals,
+        toUInt8(p.found = 1 AND p.product_kind != 'UNKNOWN' AND t.found = 1) AS facts_complete,
         toUInt8(1) AS found
     FROM ${cte('_mapping')} AS m
     LEFT JOIN ${cte('_products')} AS p ON p.chain_id = m.chain_id AND p.address = m.product_address
     LEFT JOIN ${cte('_share_tokens')} AS t ON t.chain_id = m.chain_id AND t.address = m.product_address
-    LEFT JOIN ${cte('_wants')} AS w ON w.chain_id = m.chain_id AND w.vault = m.product_address
-    LEFT JOIN ${cte('_want_tokens')} AS wt ON wt.chain_id = m.chain_id AND wt.address = w.want
     ORDER BY chain_id, contract, m.priority, m.since DESC, product_address
     LIMIT 1 BY chain_id, contract
 )`;

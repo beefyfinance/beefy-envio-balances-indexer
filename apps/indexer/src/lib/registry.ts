@@ -257,7 +257,7 @@ const completePriceFacts = async (context: Context, chainId: number, contract: C
 /**
  * Reads the contract's facts (at `latest`) and writes its Token rows and READ links. READ links start at the
  * contract's creation block when known (the facts are immutable since then), else at the reading event's block.
- * Sets the price facts: a vault is priced per its want's decimals, a CLM per its own, a stake per its product's.
+ * Sets the price facts: a vault or CLM is priced per its own share decimals, a stake per its product's.
  */
 const applyFacts = async (context: Context, event: RawEvent, contract: Contract): Promise<Contract> => {
     const chainId = event.chainId;
@@ -282,21 +282,13 @@ const applyFacts = async (context: Context, event: RawEvent, contract: Contract)
     for (const { relation, to } of links) {
         if (to !== undefined) writeReadLink(context, contract, since, relation, to);
     }
-    const linkIndex = links.findIndex(({ relation }) =>
-        contract.kind === 'VAULT' ? relation === 'VAULT_WANT' : relation === STAKED_RELATIONS[contract.kind]
-    );
-    const linked = linkIndex === -1 ? undefined : links[linkIndex]?.to;
+    const linked = links.find(({ relation }) => relation === STAKED_RELATIONS[contract.kind])?.to;
     const productAddress = PRODUCT_KINDS.has(contract.kind)
         ? contract.address
         : linked === undefined
           ? undefined
           : asHex(linked);
-    const priceDecimals =
-        contract.kind === 'VAULT'
-            ? linkTokens[linkIndex]?.decimals
-            : contract.kind === 'CLM_MANAGER'
-              ? ownToken?.decimals
-              : undefined;
+    const priceDecimals = PRODUCT_KINDS.has(contract.kind) ? ownToken?.decimals : undefined;
     const updated: Contract = {
         ...contract,
         factsBlock: BigInt(event.block.number),

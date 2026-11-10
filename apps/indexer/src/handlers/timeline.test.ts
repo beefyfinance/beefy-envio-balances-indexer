@@ -365,7 +365,7 @@ describe('indexer prices', () => {
             headContractKind,
         }));
 
-    it('prices a recent event with a recent price, per the want decimals of a classic vault', async () => {
+    it('prices a recent event with a recent price, per 10^18 shares of a classic vault', async () => {
         const now = (TS_VAULT + 9 * 60) * 1000;
         usePrices({ 56: { [VAULT]: 1.25 } }, now - 14 * 60_000, now);
         const rows = await vaultTimeline([vaultTransfer(1, TS_VAULT)]);
@@ -423,7 +423,7 @@ describe('indexer prices', () => {
             () => now
         );
         const indexer = createTestIndexer();
-        // the staked vault, registered with its want read (6 decimals here) before the boost's first event
+        // the staked vault, registered before the boost's first event
         indexer.Contract.set({
             id: `8453-${BOOST_VAULT}`,
             chainId: 8453,
@@ -437,7 +437,7 @@ describe('indexer prices', () => {
             factsBlock: 2_578_000n,
             factsStatus: 'OK',
             productAddress: BOOST_VAULT,
-            priceDecimals: 6,
+            priceDecimals: 18,
             productKind: 'VAULT',
         });
         const result = await indexer.process({

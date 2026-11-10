@@ -156,8 +156,8 @@ with no indexer price get a provisional stored row from the next `advance`, so t
 
 Handlers cannot read `ContractLink` (ClickHouse only), so `Contract` carries these, set in `src/lib/registry.ts`:
 `productAddress` (the contract itself for a vault or CLM manager, the staked product for a boost or reward pool),
-`priceDecimals` (want decimals for a classic vault, share decimals otherwise) and `productKind`, which is `UNKNOWN` for a
-plain token staked in a reward pool. The rule is the one of
+`priceDecimals` (the share token's decimals for a vault or CLM, the staked product's for a stake) and `productKind`,
+which is `UNKNOWN` for a plain token staked in a reward pool. The rule is the one of
 `productFactsCtes` (`packages/clickhouse/src/events.ts`), the source of truth for stored rows.
 
 ### Read path
@@ -191,7 +191,7 @@ the events above it that the indexer did not price. `advance` runs for each live
 The SQL is `pricedEventsCtes` (`packages/clickhouse/src/pricing.ts`). `analytics.token` maps the product's share token to one
 `asset_id`, never its want's. Prices from `analytics.asset_price_5m` are interpolated linearly between the nearest price each
 side, each within 48 h, so an event's price never depends on the other events in the statement. `share_to_usd` is per
-10^(want decimals) share units for a classic vault, 10^(share decimals) for a CLM. Every pick is deterministic.
+10^(share decimals) share units, 10^18 for classic vaults and CLMs alike. Every pick is deterministic.
 
 | Flag | Stored | Meaning |
 |---|---|---|
@@ -305,11 +305,7 @@ not measured.
 
 1. A real rollback: can a reader filtering on `envio_chains` see a row Envio is about to delete? Only simulated so far.
 2. `ready` stays manual: nothing checks that Envio reached the chain head.
-3. Stored price unit: `/mootokenprices` moved to per 10^18 share units on 2026-11-02
-   ([beefy-api#1966](https://github.com/beefyfinance/beefy-api/pull/1966)), while `beefy_api_share` history and
-   `productFactsCtes` count classic vaults in want decimals. When dbt settles the unit of those series, move
-   `productFactsCtes` to match. Indexer prices are per 10^18 share units on each row, whatever dbt settles.
-4. Products the Beefy API does not list rely on provisional rows, which lag with the analytics tables. Is that fine?
-5. Claims have no USD value (`claims[].usd` is null). They need reward token prices.
-6. Cloudflare: that it caches `200` JSON and `308`s, honours `stale-while-revalidate` and collapses concurrent misses.
-7. The response has not been compared with a databarn v1 timeline sample.
+3. Products the Beefy API does not list rely on provisional rows, which lag with the analytics tables. Is that fine?
+4. Claims have no USD value (`claims[].usd` is null). They need reward token prices.
+5. Cloudflare: that it caches `200` JSON and `308`s, honours `stale-while-revalidate` and collapses concurrent misses.
+6. The response has not been compared with a databarn v1 timeline sample.

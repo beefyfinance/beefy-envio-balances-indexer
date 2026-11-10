@@ -1,0 +1,274 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: beefy-balance-indexer
+description: Beefy Finance raw-events indexer - share transfers, balances, stakes, rewards, harvests, swapper routes
+handlers: src/handlers
+address_format: lowercase
+raw_events: false
+save_full_history: false
+# Per-chain entity/effect isolation (recommended; default in HyperIndex v4)
+disable_default_cross_chain: true
+storage:
+  # Append-only event tables live in ClickHouse only (schema default); entities that handlers read (and
+  # current-state tables) opt into Postgres with a storage directive in schema.graphql.
+  postgres:
+    default: false
+    column_name_format: snake_case
+  clickhouse:
+    default: true
+    column_name_format: snake_case
+
+# Event source per chain: HyperSync, with the rpc entry as fallback and for contract reads. `ENVIO_RPC_FOR=sync` makes
+# the rpc entry the event source instead (RPC only, no HyperSync); hyperevm and metis always sync over RPC.
+# `from` labels zaps (EOA that sent the transaction). Block number / timestamp are selected by default.
+field_selection:
+  transaction_fields: [hash, from]
+
+contracts:
+  # factories
+  - name: ClassicVaultFactory
+    abi_file_path: abis/beefy/classic/ClassicVaultFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: VaultOrStrategyCreated
+        field_selection:
+          # `input` classifies the proxy (cloneVault / cloneContract / booooost) without an eth_call
+          transaction_fields: [hash, from, input]
+
+  - name: ClassicStrategyFactory
+    abi_file_path: abis/beefy/classic/ClassicStrategyFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: StrategyCreated
+      - event: "ProxyCreated(string strategyName, address proxy)"
+        name: StrategyCreatedWithName
+
+  - name: ClassicBoostFactory
+    abi_file_path: abis/beefy/classic/ClassicBoostFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: BoostCreated
+      - event: "BoostDeployed(address boost)"
+
+  - name: RewardPoolFactory
+    abi_file_path: abis/beefy/common/RewardPoolFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: RewardPoolCreated
+      - event: "ProxyCreated(string rewardPoolName, address proxy)"
+        name: RewardPoolCreatedWithName
+
+  - name: ClmManagerFactory
+    abi_file_path: abis/beefy/clm/ClmManagerFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: ClmManagerCreated
+
+  - name: ClmStrategyFactory
+    abi_file_path: abis/beefy/clm/ClmStrategyFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: ClmStrategyCreated
+      - event: "ProxyCreated(string strategyName, address proxy)"
+        name: ClmStrategyCreatedWithName
+
+  - name: ContractFactory
+    abi_file_path: abis/beefy/ContractFactory.json
+    events:
+      - event: "ContractDeployed(bytes32 contractName,address proxy)"
+
+  - name: Erc4626AdapterFactory
+    abi_file_path: abis/beefy/common/Erc4626AdapterFactory.json
+    events:
+      - event: "ProxyCreated(address proxy)"
+        name: Erc4626AdapterCreated
+
+  # contracts
+  - name: ClassicVault
+    abi_file_path: abis/beefy/classic/ClassicVault.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "UpgradeStrat(address implementation)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  - name: ClassicStrategy
+    abi_file_path: abis/beefy/classic/ClassicStrategy.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
+      - event: "ChargedFees(uint256 callFees, uint256 beefyFees, uint256 strategistFees)"
+        name: ChargedFeesV2
+      - event: "Paused(address account)"
+      - event: "Unpaused(address account)"
+
+  - name: ClassicStrategyStratHarvest0
+    abi_file_path: abis/beefy/classic/ClassicStrategyStratHarvest0.json
+    events:
+      - event: "StratHarvest(address indexed harvester, uint256 wantHarvested, uint256 tvl)"
+
+  - name: ClassicStrategyStratHarvest1
+    abi_file_path: abis/beefy/classic/ClassicStrategyStratHarvest1.json
+    events:
+      - event: "StratHarvest(address indexed harvester, uint256 indexed wantHarvested, uint256 indexed tvl)"
+
+  - name: ClassicBoost
+    abi_file_path: abis/beefy/classic/ClassicBoost.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Staked(address indexed user, uint256 amount)"
+      - event: "Withdrawn(address indexed user, uint256 amount)"
+      - event: "RewardAdded(uint256 reward)"
+      - event: "RewardPaid(address indexed user, uint256 reward)"
+
+  - name: RewardPool
+    abi_file_path: abis/beefy/common/RewardPool.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+      - event: "NotifyReward(address indexed reward, uint256 amount, uint256 duration)"
+      - event: "RewardPaid(address indexed user, address indexed reward, uint256 amount)"
+      - event: "AddReward(address indexed reward)"
+
+  - name: ClmManager
+    abi_file_path: abis/beefy/clm/ClmManager.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+      - event: "Deposit(address indexed user, uint256 shares, uint256 amount0, uint256 amount1, uint256 fee0, uint256 fee1)"
+      - event: "Withdraw(address indexed user, uint256 shares, uint256 amount0, uint256 amount1)"
+
+  - name: ClmStrategy
+    abi_file_path: abis/beefy/clm/ClmStrategy.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Harvest(uint256 fee0, uint256 fee1)"
+      - event: "HarvestRewards(uint256 fees)"
+      - event: "ClaimedFees(uint256 feeMain0, uint256 feeMain1, uint256 feeAlt0, uint256 feeAlt1)"
+      - event: "ClaimedRewards(uint256 fees)"
+      - event: "ChargedFees(uint256 beefyFee, uint256 liquidityFee)"
+      - event: "ChargedFees(uint256 callFeeAmount, uint256 beefyFeeAmount, uint256 strategistFeeAmount)"
+        name: ChargedFeesV2
+      - event: "TVL(uint256 bal0, uint256 bal1)"
+      - event: "Paused(address account)"
+      - event: "Unpaused(address account)"
+
+  - name: LstVault
+    abi_file_path: abis/beefy/lst/LstVault.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  - name: Erc4626Adapter
+    abi_file_path: abis/beefy/common/Erc4626Adapter.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  # Explicit list of non-vault share tokens (mooBIFI, beTokens, BIFI). Never add want tokens here (volume).
+  - name: Token
+    abi_file_path: abis/IERC20/IERC20.json
+    events:
+      - event: "Initialized(uint8 version)"
+      - event: "Transfer(address indexed from, address indexed to, uint256 value)"
+
+  - name: BeefySwapper
+    abi_file_path: abis/beefy/common/BeefySwapper.json
+    events:
+      - event: "SetSwapInfo(address indexed fromToken, address indexed toToken, (address router, bytes data, uint256 amountIndex, uint256 minIndex, int8 minAmountSign) swapInfo)"
+      - event: "SetOracle(address oracle)"
+      - event: "SetSlippage(uint256 slippage)"
+      - event: "Initialized(uint8 version)"
+
+chains:
+  - id: 5042 # arc
+    start_block: 27503000
+    rpc:
+      - url: ${ENVIO_RPC_URL_5042}
+        initial_block_interval: 1000
+        interval_ceiling: 1000
+        query_timeout_millis: 300000
+        for: ${ENVIO_RPC_FOR:-fallback}
+    contracts:
+      - name: ClassicVaultFactory
+        address:
+          - 0x19123E344Dc22ef22525994FcB801E99fb37fA9E
+      - name: ClassicStrategyFactory
+        address:
+          - 0xd1Af3f1Aeb525746389C9d76788C1413E8D051fF
+      - name: ClassicBoostFactory
+        address: []
+      - name: RewardPoolFactory
+        address:
+          - 0x45efE862a9c6Dba32221c040885b794A9589103F
+      - name: ClmManagerFactory
+        address:
+          - 0x7881036d5DE71CE2ed5f2916025460A2AcA69ac4
+      - name: ClmStrategyFactory
+        address:
+          - 0xD4E968d673bc2C4Ba5abcB773de6f07e65E94E44
+      - name: ContractFactory
+        address: []
+      - name: Erc4626AdapterFactory
+        address: []
+      - name: ClassicVault
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x6f1df3b2974877f8db9aa42e29621c362ba84d42
+          - 0x98ff4c9bbb06ac23beeef038c14d0b8c485a414a
+          - 0xa798397117c38949796dbbea38b33ea7f880c77d
+          # end generated
+      - name: ClassicBoost
+        address: []
+      - name: ClassicStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0dc65b232a71e9ca81bf451e729312788f97d732
+          - 0x2454d8939334356a6946e4a21c33788d01ec70c0
+          - 0xb542f44de0cc59a78b5d10973891c4207cfcc611
+          # end generated
+      - name: ClassicStrategyStratHarvest0
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0dc65b232a71e9ca81bf451e729312788f97d732
+          - 0x2454d8939334356a6946e4a21c33788d01ec70c0
+          - 0xb542f44de0cc59a78b5d10973891c4207cfcc611
+          # end generated
+      - name: ClassicStrategyStratHarvest1
+        address: []
+      - name: ClmStrategy
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x14cc22d3a69e4125e9e6d42fdca01afbba7c15b3
+          - 0x238e7fbb8ceac082c68dd15fa134b74f8c15b0c0
+          - 0x4a3a354d41577fdc570827e26c13c8a7f5d0aeca
+          - 0x6095947dc613fed93c0e988b2efed9852e6810ac
+          - 0x916b5712b6bd6df6c30fc302f390003bd0b6a747
+          - 0xa16ad7363697115526bf155a7695fe2156493d07
+          # end generated
+      - name: ClmManager
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x104e6823bab0be3fe9b48c5fb0f0413301d935a4
+          - 0x3ab58808c6fec9cc0ec56a04800e306c08ffb5e0
+          - 0x4f95d85389de296869a5a815a1aa05ec32f7efb5
+          - 0x9ccce25f82f37ef777552e3bbb2a01bc5574abe8
+          - 0xcf65c5ab9e90adb45d10d66b81bc9b0d95278423
+          - 0xd5319d37f56c70f10da99bfb3a38694d5bd1ff22
+          # end generated
+      - name: RewardPool
+        address:
+          # generated: known contracts (scripts/knownContracts.ts), do not edit until the end marker
+          - 0x0365ce42fbe05c07cb835c06d3b68dd871e94ae4
+          - 0x28a7d169942bb50f51a2e53262ca736980fe183f
+          - 0x541ec9d0523f18b48309b8914d8e424fc144ceb9
+          - 0x5bc50aba09c285529c14290179ac345d0baa033e
+          - 0x8f6e62ac78b06f4f45db8de37c8a8b6e1f3e3a13
+          - 0xdaceb29d88ee1b5efe8ac134523dc93a35548703
+          # end generated
+      - name: LstVault
+        address: []
+      - name: Erc4626Adapter
+        address: []
+      - name: BeefySwapper
+        address:
+          - 0x3e810a6bf0418c53eaac24221375a166f77841ee
+

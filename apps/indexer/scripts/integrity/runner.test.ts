@@ -82,20 +82,23 @@ describe('createClickHouseClient', () => {
 
     const config = (env: Record<string, string> = {}) => loadScriptsConfig(env).clickhouse;
 
-    it('posts SQL as JSONEachRow, values as query parameters, and validates rows', async () => {
+    it('posts SQL as JSONEachRow with its values as form fields, keeps the URL short, and validates rows', async () => {
         vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
             const url = new URL(input instanceof Request ? input.url : input.toString());
+            expect([...url.searchParams.keys()]).toEqual(['database']);
             expect(url.searchParams.get('database')).toBe('envio');
-            expect(url.searchParams.get('param_p_0')).toBe('[8453,10]');
-            expect(url.searchParams.get('param_p_1')).toBe("['a\\'b','c\\\\d']");
-            expect(url.searchParams.get('param_p_2')).toBe('x\\ty');
-            expect(url.searchParams.get('param_p_3')).toBe("{'1':'a\\'b'}");
+            const body = init?.body;
+            if (!(body instanceof FormData)) throw new Error('expected a multipart body');
+            expect(body.get('param_p_0')).toBe('[8453,10]');
+            expect(body.get('param_p_1')).toBe("['a\\'b','c\\\\d']");
+            expect(body.get('param_p_2')).toBe('x\\ty');
+            expect(body.get('param_p_3')).toBe("{'1':'a\\'b'}");
+            expect(body.get('query')).toContain('FORMAT JSONEachRow');
             expect(init?.method).toBe('POST');
             expect(init?.headers).toMatchObject({
                 'x-clickhouse-user': 'user',
                 'x-clickhouse-key': 'secret',
             });
-            expect(init?.body).toContain('FORMAT JSONEachRow');
             return {
                 ok: true,
                 text: async () => '{"id":"a"}\n{"id":"b"}\n',

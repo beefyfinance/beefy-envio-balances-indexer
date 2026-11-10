@@ -10444,6 +10444,7 @@ chains:
     rpc:
       - url: ${ENVIO_RPC_URL_4326}
         for: ${ENVIO_RPC_FOR:-fallback}
+        query_timeout_millis: 300000 # the free RPCs answer slower than the 20 s default near the head
     contracts:
       - name: ClassicVaultFactory
         address:

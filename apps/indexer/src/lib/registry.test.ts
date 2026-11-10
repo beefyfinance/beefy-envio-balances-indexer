@@ -106,10 +106,14 @@ describe('price facts', () => {
         return { productAddress, priceDecimals, productKind };
     };
 
-    it('prices a classic vault per its want decimals', async () => {
+    it("prices a classic vault per its own share decimals, not its want's", async () => {
         const { context, contracts } = fakeContext({ [VAULT]: [share], [WANT]: [usdc] });
         await ensureContract(context, event(BLOCK), 'VAULT');
-        expect(priceFacts(contracts, VAULT)).toEqual({ productAddress: VAULT, priceDecimals: 6, productKind: 'VAULT' });
+        expect(priceFacts(contracts, VAULT)).toEqual({
+            productAddress: VAULT,
+            priceDecimals: 18,
+            productKind: 'VAULT',
+        });
     });
 
     it('prices a CLM per its own share decimals', async () => {
@@ -138,7 +142,11 @@ describe('price facts', () => {
         await ensureContract(context, event(BLOCK, CLM), 'CLM_MANAGER');
         await ensureContract(context, event(BLOCK, BOOST), 'BOOST');
         await ensureContract(context, event(BLOCK, POOL), 'REWARD_POOL');
-        expect(priceFacts(contracts, BOOST)).toEqual({ productAddress: VAULT, priceDecimals: 6, productKind: 'VAULT' });
+        expect(priceFacts(contracts, BOOST)).toEqual({
+            productAddress: VAULT,
+            priceDecimals: 18,
+            productKind: 'VAULT',
+        });
         expect(priceFacts(contracts, POOL)).toEqual({
             productAddress: CLM,
             priceDecimals: 18,
@@ -170,15 +178,19 @@ describe('price facts', () => {
 
         await ensureContract(context, event(BLOCK), 'VAULT');
         await ensureContract(context, event(BLOCK + 1, BOOST), 'BOOST');
-        expect(priceFacts(contracts, BOOST)).toEqual({ productAddress: VAULT, priceDecimals: 6, productKind: 'VAULT' });
+        expect(priceFacts(contracts, BOOST)).toEqual({
+            productAddress: VAULT,
+            priceDecimals: 18,
+            productKind: 'VAULT',
+        });
     });
 
-    it('leaves a vault unpriced until its want is read, and its boost until then', async () => {
+    it('prices a vault and its boost before the want is read', async () => {
         const { context, contracts } = fakeContext(
-            { [VAULT]: [share, share], [WANT]: [usdc], [BOOST]: [failed], [REWARD]: [usdc] },
+            { [VAULT]: [share, share], [BOOST]: [failed], [REWARD]: [usdc] },
             {
-                // want() reverts at the first read, answers at the retry
-                [VAULT]: [{ want: undefined }, { want: WANT }],
+                // want() reverts
+                [VAULT]: [{ want: undefined }],
                 [BOOST]: [{ stakedToken: VAULT, rewardToken: REWARD }],
             }
         );
@@ -186,14 +198,13 @@ describe('price facts', () => {
         await ensureContract(context, event(BLOCK, BOOST), 'BOOST');
         expect(priceFacts(contracts, VAULT)).toEqual({
             productAddress: VAULT,
-            priceDecimals: undefined,
-            productKind: undefined,
+            priceDecimals: 18,
+            productKind: 'VAULT',
         });
-        expect(priceFacts(contracts, BOOST)).toMatchObject({ priceDecimals: undefined });
-
-        await ensureContract(context, event(BLOCK + Number(factsRetryBlocks())), 'VAULT');
-        await ensureContract(context, event(BLOCK + Number(factsRetryBlocks()), BOOST), 'BOOST');
-        expect(priceFacts(contracts, VAULT)).toEqual({ productAddress: VAULT, priceDecimals: 6, productKind: 'VAULT' });
-        expect(priceFacts(contracts, BOOST)).toEqual({ productAddress: VAULT, priceDecimals: 6, productKind: 'VAULT' });
+        expect(priceFacts(contracts, BOOST)).toEqual({
+            productAddress: VAULT,
+            priceDecimals: 18,
+            productKind: 'VAULT',
+        });
     });
 });

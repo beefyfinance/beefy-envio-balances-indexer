@@ -24,7 +24,8 @@ const ENTITY_KINDS: Record<IndexedEntity, readonly string[]> = {
     Clm: ['CLM_MANAGER'],
     // the gov-vaults list includes old gov vaults, indexed as launchpool-style boosts
     RewardPool: ['REWARD_POOL', 'BOOST'],
-    ClassicBoost: ['BOOST'],
+    // the boosts list includes newer boosts deployed as reward pools staking the vault
+    ClassicBoost: ['BOOST', 'REWARD_POOL'],
     LstVault: ['LST_VAULT'],
     Swapper: ['SWAPPER'],
 };

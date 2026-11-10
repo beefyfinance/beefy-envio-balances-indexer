@@ -3,8 +3,8 @@
  * Tables match the GraphQL entity names (`Contract`, `TimelineEvent`, …) with snake_case columns.
  *
  * Statements are built with the `sql` tag of `@beefy/clickhouse`: values travel as query parameters (`{p_<n>:Type}` in
- * the SQL, encoded by scripts/lib/sql.ts), table names through `ident`, and every row is validated with the caller's
- * zod schema.
+ * the SQL, encoded by scripts/lib/sql.ts, sent with the query as multipart form fields), table names through `ident`,
+ * and every row is validated with the caller's zod schema.
  */
 import { type Identifier, type Sql, ident, isSql, param, sql } from '@beefy/clickhouse';
 import * as R from 'remeda';
@@ -24,14 +24,18 @@ export const createClickHouseClient = (config: ClickHouseConfig): ClickHouseClie
         const request = sql`${statement}\nFORMAT JSONEachRow`;
         const endpoint = new URL(config.url);
         endpoint.searchParams.set('database', config.database);
-        for (const [name, value] of paramEntries(request.params)) endpoint.searchParams.set(name, value);
+        // the query and its parameters travel in a multipart body: id lists in the URL can pass 90 KB, more than a proxy
+        // such as Cloudflare accepts in a header (HTTP/2 FRAME_SIZE_ERROR)
+        const body = new FormData();
+        body.set('query', request.text);
+        for (const [name, value] of paramEntries(request.params)) body.set(name, value);
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'x-clickhouse-user': config.username,
                 'x-clickhouse-key': config.password,
             },
-            body: request.text,
+            body,
         });
         const text = await response.text();
         if (!response.ok) {

@@ -33,15 +33,12 @@ const raw = `test_envio_${suffix}_1`;
 const settings = testRepriceSettings();
 
 const VAULT = '0xvault';
-// a vault whose want has 6 decimals (USDC): its shares are 18-decimal tokens, its price is per 10^6 share units
+// a vault whose want has 6 decimals (USDC): its shares are 18-decimal tokens, its price is per 10^18 share units
 const USDC_VAULT = '0xusdcvault';
 const USDC = '0xusdc';
-// a USDC vault whose want link is read after its first event was priced
+// a vault whose share decimals are read after its first event was priced
 const LATE_VAULT = '0xlatevault';
 const CLM = '0xclm';
-// a vault the indexer linked to two wants
-const TWO_WANTS = '0xtwowants';
-const DAI = '0xdai';
 // a vault priced over gaps of a day or two
 const SPARSE = '0xsparse';
 const ACCOUNT = '0xaccount';
@@ -53,7 +50,6 @@ const ASSETS: Record<string, number> = {
     [LATE_VAULT]: 3,
     [CLM]: 4,
     [USDC]: 5,
-    [TWO_WANTS]: 6,
     [SPARSE]: 7,
 };
 
@@ -151,7 +147,6 @@ describe.skipIf(url === undefined)('pricing, stored by the reprice job and read 
             [CLM, 'CLM_MANAGER'],
             [VAULT, 'VAULT'],
             [USDC_VAULT, 'VAULT'],
-            [TWO_WANTS, 'VAULT'],
             [SPARSE, 'VAULT'],
         ]);
         await tokens([
@@ -159,8 +154,6 @@ describe.skipIf(url === undefined)('pricing, stored by the reprice job and read 
             [VAULT, 18],
             [USDC_VAULT, 18],
             [USDC, 6],
-            [TWO_WANTS, 18],
-            [DAI, 18],
             [SPARSE, 18],
         ]);
         await wants([
@@ -192,42 +185,27 @@ describe.skipIf(url === undefined)('pricing, stored by the reprice job and read 
         expect(kinds).toEqual({ product: 'VAULT', contract: 'VAULT' });
     });
 
-    it('counts vault shares in the want token decimals, the unit the price is quoted in', async () => {
+    it("counts vault shares in the share token decimals, the unit the price is quoted in, never the want's", async () => {
         await price('2024-05-01 10:00:00', 1.1, 'test', USDC_VAULT);
         await price('2024-05-01 10:15:00', 1.1, 'test', USDC_VAULT);
-        // 3 shares as the price counts them: 3 * 10^6 units, not 3 * 10^18
-        const id = await event('2024-05-01 10:05:00.000', '3000000', USDC_VAULT);
+        // 3 shares: 3 * 10^18 units, although the want (USDC) has 6 decimals
+        const id = await event('2024-05-01 10:05:00.000', '3000000000000000000', USDC_VAULT);
         expect(await priced(id)).toMatchObject({ price: 1.1, flag: 'OK' });
         expect((await priced(id))?.usd).toBeCloseTo(3.3, 9);
     });
 
-    it('stores a row whose want link is not read yet as incomplete, and the right value once the link lands', async () => {
+    it('stores a row whose share decimals are not read yet as incomplete, and complete once they land', async () => {
         await contracts([[LATE_VAULT, 'VAULT']]);
-        await tokens([[LATE_VAULT, 18]]);
         await price('2024-06-01 10:00:00', 1, 'test', LATE_VAULT);
         await price('2024-06-01 10:15:00', 1, 'test', LATE_VAULT);
-        const id = await event('2024-06-01 10:05:00.000', '3000000', LATE_VAULT);
-        // no want link yet (a partial facts read): counted in the share's own 18 decimals, stored as incomplete (the
-        // retry window prices it again)
-        expect((await priced(id))?.usd).toBeCloseTo(3e-12, 20);
+        const id = await event('2024-06-01 10:05:00.000', '3000000000000000000', LATE_VAULT);
+        // no share decimals yet (a partial facts read): counted in 18 decimals, stored as incomplete (the retry window
+        // prices it again)
+        expect((await priced(id))?.usd).toBeCloseTo(3, 9);
         expect(await factsComplete(id)).toBe(0);
-        await wants([[LATE_VAULT, USDC, 1]]);
+        await tokens([[LATE_VAULT, 18]]);
         expect((await priced(id))?.usd).toBeCloseTo(3, 9);
         expect(await factsComplete(id)).toBe(1);
-    });
-
-    it('picks the latest want link when there are several, whatever order they are read in', async () => {
-        await price('2024-08-01 10:00:00', 1, 'test', TWO_WANTS);
-        await price('2024-08-01 10:15:00', 1, 'test', TWO_WANTS);
-        const id = await event('2024-08-01 10:05:00.000', '3000000', TWO_WANTS);
-        await wants([
-            [TWO_WANTS, USDC, 10],
-            [TWO_WANTS, DAI, 20],
-        ]);
-        // DAI (18 decimals) is the latest: 3 * 10^6 units are 3e-12 shares
-        for (let i = 0; i < 3; i += 1) expect((await priced(id))?.usd).toBeCloseTo(3e-12, 20);
-        await wants([[TWO_WANTS, USDC, 30]]);
-        expect((await priced(id))?.usd).toBeCloseTo(3, 9);
     });
 
     it('prices a CLM through its share token asset like a vault, and never a vault from its want price', async () => {
