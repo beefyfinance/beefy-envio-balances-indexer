@@ -21,12 +21,15 @@ import {
     parseChainConfig,
     parseCsv,
     parseLogs,
+    multicall3Of,
     psqlArgs,
+    psqlCopyArgs,
     result,
     sampleSizes,
 } from './correctness.ts';
 import { throwingCommand } from './lib/cli.ts';
 import { loadScriptsConfig } from './lib/config.ts';
+import { pgSql, pgValue } from './lib/pgSql.ts';
 
 const TOPICS = eventTopics();
 
@@ -347,6 +350,23 @@ describe('psql and RPC inputs', () => {
         expect(() => psqlArgs(pg, { 'x=1 -c': 1 })).toThrow('invalid psql variable');
         expect(() => psqlArgs(pg, { ON_ERROR_STOP: 0 })).toThrow('invalid psql variable');
         expect(() => psqlArgs(pg, { value: 'a\n\\! rm -rf /' })).toThrow('invalid value');
+    });
+
+    it('runs a \\copy as one -c meta-command, its data on stdin, and refuses one with psql variables', () => {
+        const copy = pgSql`\\copy "s"."T" ("id") from stdin with (format csv, header true)`;
+        expect(psqlCopyArgs(pg, copy)).toEqual([
+            ...['-X', '-v', 'ON_ERROR_STOP=1'],
+            ...['-h', 'localhost', '-p', '5433', '-U', 'postgres', '-d', 'envio-dev'],
+            ...['-c', '\\copy "s"."T" ("id") from stdin with (format csv, header true)'],
+        ]);
+        expect(() => psqlCopyArgs(pg, pgSql`\\copy "s"."T" from ${pgValue('x')}`)).toThrow('no psql variables');
+    });
+
+    it("reads through each chain's own Multicall3, from its deployment block", () => {
+        expect(multicall3Of(324).address.toLowerCase()).toBe('0xf9cda624fbc7e059355ce98a31693d299facd963');
+        expect(multicall3Of(56).address.toLowerCase()).toBe('0xca11bde05977b3631167028862be2a173976ca11');
+        expect(multicall3Of(56).blockCreated).toBeGreaterThan(0);
+        expect(multicall3Of(987_654_321)).toEqual({ address: '0xcA11bde05977b3631167028862bE2a173976CA11' });
     });
 
     it('validates eth_getLogs answers', () => {

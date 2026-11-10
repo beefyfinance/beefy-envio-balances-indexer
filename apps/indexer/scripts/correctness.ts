@@ -1,6 +1,11 @@
 /**
- * Correctness checker: compares what the raw-events indexer stored in Postgres with the chain, at a fixed block
+ * Correctness checker: compares what the raw-events indexer stored with the chain, at a fixed block
  * (docs/architecture.md for the entity meanings and the balances rules).
+ *
+ * The checks are Postgres SQL. The entity tables the schema does not hold (since the storage split, TimelineEvent,
+ * ContractLink and the event tables are in ClickHouse only) are first copied for the chain from Envio's ClickHouse
+ * database (ENVIO_CLICKHOUSE_*) into a scratch schema `<schema>__ch_<chain>`, dropped at the end
+ * (scripts/lib/clickhouseMirror.ts). Only the tables the selected checks read are copied.
  *
  * Checks (each prints PASS / FAIL with counts and the first mismatches; exit code 1 when any check fails):
  *
@@ -26,7 +31,7 @@
  *        [--sample 100] [--concurrency 3] [--config config.yaml]   (pnpm correctness --help)
  * RPC defaults to ENVIO_RPC_URL_<chain>; Postgres comes from ENVIO_PG_HOST / PORT / USER / PASSWORD / DATABASE
  * (defaults: localhost, 5433, postgres, testing, envio-dev) and is read with `psql` (override the binary with PSQL);
- * see scripts/lib/config.ts.
+ * ClickHouse from ENVIO_CLICKHOUSE_HOST / DATABASE / USERNAME / PASSWORD; see scripts/lib/config.ts.
  *
  * SQL: built with the `pgSql` tag (scripts/lib/pgSql.ts): values are psql variables (`:'v_<n>'`, quoted by psql),
  * names go through `pgIdent`, derived tables are named CTEs. eth_getLogs answers are validated (zod).
@@ -34,12 +39,15 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
+import { param, sql } from '@beefy/clickhouse';
 import { Command } from 'commander';
 import * as R from 'remeda';
 import {
     type Abi,
+    type Chain,
     createPublicClient,
     decodeEventLog,
     decodeFunctionResult,
@@ -53,10 +61,19 @@ import {
     toEventSignature,
     zeroAddress,
 } from 'viem';
+import * as viemChains from 'viem/chains';
 import { z } from 'zod';
 
 import { describeError } from '../src/lib/errors.ts';
+import { createClickHouseClient } from './integrity/clickhouse.ts';
 import { blockArg, chainIdArg, choiceListArg, httpUrlArg, identifierArg, integerArg } from './lib/cli.ts';
+import {
+    dropMirrorStatement,
+    type Mirror,
+    type MirrorIo,
+    mirrorSchemaName,
+    mirrorTables,
+} from './lib/clickhouseMirror.ts';
 import { childProcessEnv, type PostgresConfig, type ScriptsConfig, scriptsConfig } from './lib/config.ts';
 import { type PgIdentifier, type PgSql, pgBigint, pgIdent, pgJoin, pgQualified, pgSql, pgValue } from './lib/pgSql.ts';
 
@@ -64,7 +81,14 @@ import { type PgIdentifier, type PgSql, pgBigint, pgIdent, pgJoin, pgQualified, 
 // Constants
 // ---------------------------------------------------------------------------------------------------------------------
 
+/** Multicall3's usual address, for a chain viem does not define. */
 const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
+
+/** A chain's Multicall3 as viem defines it (not at the usual address on every chain: zkSync), with its deployment block. */
+export const multicall3Of = (chainId: number): { address: Hex; blockCreated?: number } =>
+    R.find(R.values(viemChains) as Chain[], (chain) => chain.id === chainId)?.contracts?.multicall3 ?? {
+        address: MULTICALL3,
+    };
 const CALLS_PER_MULTICALL = 200;
 const LOG_RANGE = 100_000n;
 const ADDRESSES_PER_LOG_QUERY = 500;
@@ -608,6 +632,24 @@ type Db = {
 
 const VAR_NAME = /^[a-z_][a-z0-9_]*$/;
 
+/** psql's connection arguments. */
+const psqlConnection = (pg: PostgresConfig): string[] => [
+    '-h',
+    pg.host,
+    '-p',
+    String(pg.port),
+    '-U',
+    pg.user,
+    '-d',
+    pg.database,
+];
+
+/** psql arguments running one `\copy ... from stdin` meta-command (`-c`), its data on psql's stdin. */
+export const psqlCopyArgs = (pg: PostgresConfig, command: PgSql): string[] => {
+    if (R.keys(command.vars).length > 0) throw new Error('a \\copy command takes no psql variables');
+    return ['-X', '-v', 'ON_ERROR_STOP=1', ...psqlConnection(pg), '-c', command.text];
+};
+
 /**
  * psql arguments for a statement read from stdin (`-f -`: unlike `-c`, psql interpolates variables there). The
  * values travel as separate argv entries (no shell) and reach the SQL only through `:'name'` (a {@link PgSql}'s vars).
@@ -618,14 +660,7 @@ export const psqlArgs = (pg: PostgresConfig, vars: SqlVars): string[] => [
     '--csv',
     '-v',
     'ON_ERROR_STOP=1',
-    '-h',
-    pg.host,
-    '-p',
-    String(pg.port),
-    '-U',
-    pg.user,
-    '-d',
-    pg.database,
+    ...psqlConnection(pg),
     ...R.flatMap(R.entries(vars), ([name, value]) => {
         if (!VAR_NAME.test(name) || name === 'on_error_stop')
             throw new Error(`invalid psql variable: ${JSON.stringify(name)}`);
@@ -638,31 +673,56 @@ export const psqlArgs = (pg: PostgresConfig, vars: SqlVars): string[] => [
     '-',
 ];
 
-const createDb = (config: ScriptsConfig, schema: string, chainId: number): Db => {
-    const pg = config.postgres;
-    const query = (statement: PgSql) =>
-        new Promise<Row[]>((resolve, reject) => {
-            const child = spawn(config.psql, psqlArgs(pg, statement.vars), {
-                env: childProcessEnv({ PGPASSWORD: pg.password }),
-            });
-            const stdout: Buffer[] = [];
-            const stderr: Buffer[] = [];
-            child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
-            child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
-            child.on('error', reject);
-            child.on('close', (code) => {
-                if (code !== 0) {
-                    reject(new Error(`psql failed (${code}): ${Buffer.concat(stderr).toString()}\n${statement.text}`));
-                } else {
-                    resolve(parseCsv(Buffer.concat(stdout).toString()));
-                }
-            });
-            child.stdin.end(`${statement.text.trim()};\n`);
+/** Runs psql with `args` and `input` on its stdin (a string, or a stream such as `\copy` data); its stdout. */
+const runPsql = (config: ScriptsConfig, args: string[], input: string | ReadableStream<Uint8Array>) =>
+    new Promise<string>((resolve, reject) => {
+        const child = spawn(config.psql, args, {
+            // ClickHouse writes its DateTime columns in UTC, without an offset: psql must read them as UTC
+            env: childProcessEnv({ PGPASSWORD: config.postgres.password, PGTZ: 'UTC' }),
         });
+        const stdout: Buffer[] = [];
+        const stderr: Buffer[] = [];
+        child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
+        child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+        // psql stopping early (an error) closes its stdin: the exit code below says why, not the broken pipe
+        child.stdin.on('error', () => undefined);
+        child.on('error', reject);
+        child.on('close', (code) => {
+            if (code !== 0) reject(new Error(`psql failed (${code}): ${Buffer.concat(stderr).toString()}`));
+            else resolve(Buffer.concat(stdout).toString());
+        });
+        if (typeof input === 'string') child.stdin.end(input);
+        else Readable.fromWeb(input as Parameters<typeof Readable.fromWeb>[0]).pipe(child.stdin);
+    });
+
+/** The checked tables: the schema's, except those copied from ClickHouse into `mirror` (see lib/clickhouseMirror.ts). */
+const createDb = (config: ScriptsConfig, schema: string, chainId: number, mirror?: Mirror): Db => ({
+    query: (statement: PgSql) =>
+        runPsql(config, psqlArgs(config.postgres, statement.vars), `${statement.text.trim()};\n`).then(
+            parseCsv,
+            (error: unknown) => {
+                throw new Error(`${describeError(error)}\n${statement.text}`);
+            }
+        ),
+    table: (name) => pgQualified(mirror?.rows.has(name) === true ? mirror.schema : schema, name),
+    chainId,
+});
+
+/** Copies between ClickHouse (ENVIO_CLICKHOUSE_*) and Postgres for {@link mirrorTables}. */
+const mirrorIo = (config: ScriptsConfig, db: Db): MirrorIo => {
+    const clickhouse = createClickHouseClient(config.clickhouse);
     return {
-        query,
-        table: (name) => pgQualified(schema, name),
-        chainId,
+        clickhouseColumns: (table) =>
+            clickhouse.query(
+                sql`SELECT name, type FROM system.columns WHERE database = currentDatabase() AND table = ${param('String', table)} ORDER BY position`,
+                z.object({ name: z.string(), type: z.string() })
+            ),
+        clickhouseCsv: (statement) => clickhouse.csv(statement),
+        pg: (statement) => db.query(statement),
+        pgCopy: async (command, data) => {
+            const output = await runPsql(config, psqlCopyArgs(config.postgres, command), data);
+            return Number(/COPY (\d+)/.exec(output)?.[1] ?? 0);
+        },
     };
 };
 
@@ -701,13 +761,39 @@ type CallResult = { ok: true; value: unknown } | { ok: false };
 
 type Rpc = {
     client: PublicClient;
-    /** aggregate3 multicalls of CALLS_PER_MULTICALL calls pinned at `block`, `concurrency` at a time */
+    /**
+     * aggregate3 multicalls of CALLS_PER_MULTICALL calls pinned at `block`, `concurrency` at a time; single calls before
+     * the chain's Multicall3 was deployed
+     */
     read: (calls: readonly Call[], block: bigint) => Promise<CallResult[]>;
     getLogs: (addresses: readonly string[], topics: readonly string[], from: bigint, to: bigint) => Promise<ChainLog[]>;
 };
 
-const createRpc = (url: string, concurrency: number): Rpc => {
+const createRpc = (url: string, concurrency: number, chainId: number): Rpc => {
     const client = createPublicClient({ transport: http(url, { retryCount: 0, timeout: 60_000 }) }) as PublicClient;
+    const multicall = multicall3Of(chainId);
+
+    const decode = (call: Call, returnData: Hex): CallResult => {
+        try {
+            return {
+                ok: true,
+                value: decodeFunctionResult({ abi: call.abi, functionName: call.functionName, data: returnData }),
+            };
+        } catch {
+            return { ok: false };
+        }
+    };
+
+    /** One eth_call; a revert (or an RPC failing after the retries) is `ok: false`. */
+    const readOne = async (call: Call, block: bigint): Promise<CallResult> => {
+        const data = encodeFunctionData({ abi: call.abi, functionName: call.functionName, args: call.args ?? [] });
+        try {
+            const response = await withRetry(() => client.call({ to: call.address as Hex, data, blockNumber: block }));
+            return response.data === undefined || response.data === '0x' ? { ok: false } : decode(call, response.data);
+        } catch {
+            return { ok: false };
+        }
+    };
 
     const readChunk = async (calls: readonly Call[], block: bigint): Promise<CallResult[]> => {
         const data = encodeFunctionData({
@@ -725,7 +811,7 @@ const createRpc = (url: string, concurrency: number): Rpc => {
                 })),
             ],
         });
-        const response = await withRetry(() => client.call({ to: MULTICALL3, data, blockNumber: block }));
+        const response = await withRetry(() => client.call({ to: multicall.address, data, blockNumber: block }));
         const results = decodeFunctionResult({
             abi: multicall3Abi,
             functionName: 'aggregate3',
@@ -733,22 +819,17 @@ const createRpc = (url: string, concurrency: number): Rpc => {
         });
         return R.map(results, ({ success, returnData }, index): CallResult => {
             const call = calls[index];
-            if (!success || returnData === '0x') return { ok: false };
-            try {
-                const value = decodeFunctionResult({
-                    abi: call.abi,
-                    functionName: call.functionName,
-                    data: returnData,
-                });
-                return { ok: true, value };
-            } catch {
-                return { ok: false };
-            }
+            if (!success || returnData === '0x' || call === undefined) return { ok: false };
+            return decode(call, returnData);
         });
     };
 
     const read = async (calls: readonly Call[], block: bigint) =>
-        (await mapLimit(R.chunk(calls, CALLS_PER_MULTICALL), concurrency, (chunk) => readChunk(chunk, block))).flat();
+        multicall.blockCreated !== undefined && block < BigInt(multicall.blockCreated)
+            ? mapLimit(calls, concurrency, (call) => readOne(call, block))
+            : (
+                  await mapLimit(R.chunk(calls, CALLS_PER_MULTICALL), concurrency, (chunk) => readChunk(chunk, block))
+              ).flat();
 
     /** eth_getLogs over [from, to]; a range the node refuses (too many results) is split in halves. */
     const getLogs = async (
@@ -1473,6 +1554,61 @@ const CHECKS: Record<CheckName, (ctx: Ctx) => Promise<CheckResult[]>> = {
     coverage: checkCoverage,
 };
 
+/** The entity tables each check reads (coverage counts the rows of every one). */
+const CHECK_TABLES: Record<CheckName, readonly string[]> = {
+    supply: ['TokenSupply', 'Balance'],
+    balances: ['Balance', 'TimelineEvent'],
+    events: ['ShareTransfer', 'BoostStake', 'ClmDeposit', 'ClmWithdraw'],
+    fields: R.keys(EVENT_TABLES),
+    'clm-pool-state': ['ClmTvl', 'Harvest', 'ClmPoolState'],
+    coverage: ENTITY_TABLES,
+};
+
+/**
+ * The tables the checks of `only` read that the Postgres schema lacks (Envio stores them in ClickHouse only, see
+ * schema.graphql `@storage`), copied for the chain into a scratch schema; undefined when there are none.
+ */
+const mirrorMissingTables = async (
+    config: ScriptsConfig,
+    db: Db,
+    args: Args,
+    root: string
+): Promise<Mirror | undefined> => {
+    const present = new Set(
+        R.map(
+            await db.query(
+                pgSql`select table_name from information_schema.tables where table_schema = ${pgValue(args.schema)}`
+            ),
+            (row) => row.table_name ?? ''
+        )
+    );
+    const missing = R.pipe(
+        args.only,
+        R.flatMap((name) => CHECK_TABLES[name]),
+        R.unique(),
+        R.filter((table) => !present.has(table))
+    );
+    if (missing.length === 0) return undefined;
+    const startedAt = Date.now();
+    const mirror = await mirrorTables(mirrorIo(config, db), {
+        schema: args.schema,
+        chainId: args.chainId,
+        tables: missing,
+        schemaGraphql: readFileSync(join(root, 'schema.graphql'), 'utf8'),
+    });
+    const copied = R.pipe(
+        [...mirror.rows],
+        R.map(([table, rows]) => `${table} ${rows}`),
+        R.join(', ')
+    );
+    console.log(
+        `copied from ClickHouse ${config.clickhouse.database} into ${mirror.schema} in ${Math.round((Date.now() - startedAt) / 1000)} s: ${copied || 'nothing'}`
+    );
+    const absent = R.filter(missing, (table) => !mirror.rows.has(table));
+    if (absent.length > 0) console.log(`WARNING: in neither Postgres nor ClickHouse: ${absent.join(', ')}`);
+    return mirror;
+};
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------------------------------------------------
@@ -1500,8 +1636,8 @@ const main = async () => {
     const chain = parseChainConfig(configYaml, args.chainId);
     if (!chain) throw new Error(`chain ${args.chainId} not found in ${args.config}`);
 
-    const db = createDb(config, args.schema, args.chainId);
-    const progress = await loadProgress(db);
+    const schemaDb = createDb(config, args.schema, args.chainId);
+    const progress = await loadProgress(schemaDb);
     const block = args.block ?? progress.progressBlock;
     console.log(
         `chain ${args.chainId}, schema ${args.schema}: envio_chains progress_block ${progress.progressBlock} (start ${progress.startBlock}, end ${progress.endBlock ?? '-'}, source ${progress.sourceBlock}, ${progress.eventsProcessed} events)`
@@ -1514,6 +1650,27 @@ const main = async () => {
     }
     console.log(`checking at block ${block}, RPC ${new URL(args.rpc).host}, checks: ${args.only.join(', ')}\n`);
 
+    // without the copy, only the checks reading tables Postgres holds can pass; the others fail on the missing table
+    const mirror = await mirrorMissingTables(config, schemaDb, args, root).catch(async (error: unknown) => {
+        console.log(`WARNING: copying the ClickHouse tables failed: ${describeError(error)}`);
+        await schemaDb.query(dropMirrorStatement(mirrorSchemaName(args.schema, args.chainId))).catch(() => undefined);
+        return undefined;
+    });
+    try {
+        await runChecks(args, createDb(config, args.schema, args.chainId, mirror), block, chain, configYaml);
+    } finally {
+        if (mirror !== undefined) await schemaDb.query(dropMirrorStatement(mirror.schema));
+    }
+};
+
+/** Loads the chain's contracts and tokens, runs the checks of `args.only` and prints their results. */
+const runChecks = async (
+    args: Args,
+    db: Db,
+    block: bigint,
+    chain: NonNullable<ReturnType<typeof parseChainConfig>>,
+    configYaml: string
+) => {
     const [contractRows, tokenRows] = await Promise.all([
         db.query(
             pgSql`select address, kind, facts_status, created_block from ${db.table('Contract')} where ${chainIs(db)}`
@@ -1569,7 +1726,7 @@ const main = async () => {
     const ctx: Ctx = {
         args,
         db,
-        rpc: createRpc(args.rpc, args.concurrency),
+        rpc: createRpc(args.rpc, args.concurrency, args.chainId),
         block,
         chain,
         configYaml,

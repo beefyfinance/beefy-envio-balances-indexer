@@ -87,7 +87,7 @@ chain's `ENVIO_RPC_URL_<chainId>`). Commit new fixtures. `RPC_FIXTURES=off` uses
 
 ## Correctness check
 
-After an indexing run, compare what is stored in Postgres with the chain at a fixed block:
+After an indexing run, compare what is stored with the chain at a fixed block:
 
 ```bash
 pnpm correctness --chain 1135 --schema raw_lisk --rpc http://localhost:8546 --config config.yaml
@@ -97,6 +97,10 @@ It checks every `TokenSupply` and `Balance` row against `totalSupply()` / `balan
 events against the chain's own logs, a sample of event rows against receipts and blocks, `ClmPoolState` against
 re-reads, and contract / token coverage. The block defaults to the indexer's last fully processed block
 (`envio_chains.progress_block`); exit code 1 on any failure. Needs `psql` and an archive-capable RPC.
+
+The checks run in Postgres. The tables Envio stores in ClickHouse only (TimelineEvent, ContractLink, the event tables)
+are first copied for the chain from `ENVIO_CLICKHOUSE_*` into a scratch schema `<schema>__ch_<chain>`, dropped at the
+end; only the tables the selected checks (`--only`) read are copied. Without ClickHouse, the checks reading them fail.
 
 ## Rate-limited RPCs
 

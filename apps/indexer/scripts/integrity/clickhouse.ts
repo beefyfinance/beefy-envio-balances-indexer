@@ -16,31 +16,44 @@ import { paramEntries } from '../lib/sql.ts';
 export type ClickHouseClient = {
     /** Rows of `statement` (JSONEachRow), each validated by `row`; a row of another shape throws. */
     query<T>(statement: Sql, row: z.ZodType<T>): Promise<T[]>;
+    /** The answer of `statement` in CSV with a header row, as it arrives (not buffered). */
+    csv(statement: Sql): Promise<ReadableStream<Uint8Array>>;
+};
+
+/** Sends `statement` in `format`; throws with the start of the answer on an HTTP error. */
+const post = async (config: ClickHouseConfig, statement: Sql, format: 'JSONEachRow' | 'CSVWithNames') => {
+    if (!isSql(statement)) throw new Error('not a SQL statement: build it with the sql tag');
+    const request =
+        format === 'CSVWithNames' ? sql`${statement}\nFORMAT CSVWithNames` : sql`${statement}\nFORMAT JSONEachRow`;
+    const endpoint = new URL(config.url);
+    endpoint.searchParams.set('database', config.database);
+    // the query and its parameters travel in a multipart body: id lists in the URL can pass 90 KB, more than a proxy
+    // such as Cloudflare accepts in a header (HTTP/2 FRAME_SIZE_ERROR)
+    const body = new FormData();
+    body.set('query', request.text);
+    for (const [name, value] of paramEntries(request.params)) body.set(name, value);
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'x-clickhouse-user': config.username,
+            'x-clickhouse-key': config.password,
+        },
+        body,
+    });
+    if (!response.ok) {
+        throw new Error(`ClickHouse query failed: ${response.status} ${(await response.text()).slice(0, 500)}`);
+    }
+    return response;
 };
 
 export const createClickHouseClient = (config: ClickHouseConfig): ClickHouseClient => ({
+    async csv(statement: Sql): Promise<ReadableStream<Uint8Array>> {
+        const response = await post(config, statement, 'CSVWithNames');
+        if (response.body === null) throw new Error('ClickHouse answered without a body');
+        return response.body;
+    },
     async query<T>(statement: Sql, row: z.ZodType<T>): Promise<T[]> {
-        if (!isSql(statement)) throw new Error('not a SQL statement: build it with the sql tag');
-        const request = sql`${statement}\nFORMAT JSONEachRow`;
-        const endpoint = new URL(config.url);
-        endpoint.searchParams.set('database', config.database);
-        // the query and its parameters travel in a multipart body: id lists in the URL can pass 90 KB, more than a proxy
-        // such as Cloudflare accepts in a header (HTTP/2 FRAME_SIZE_ERROR)
-        const body = new FormData();
-        body.set('query', request.text);
-        for (const [name, value] of paramEntries(request.params)) body.set(name, value);
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'x-clickhouse-user': config.username,
-                'x-clickhouse-key': config.password,
-            },
-            body,
-        });
-        const text = await response.text();
-        if (!response.ok) {
-            throw new Error(`ClickHouse query failed: ${response.status} ${text.slice(0, 500)}`);
-        }
+        const text = await (await post(config, statement, 'JSONEachRow')).text();
         return R.pipe(
             text.split('\n'),
             R.filter((line) => line.trim() !== ''),

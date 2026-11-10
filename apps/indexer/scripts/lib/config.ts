@@ -7,7 +7,8 @@
  * - ENVIO_RPC_URL_<chainId>: RPC per chain (knownContracts, correctness default), http(s) URLs.
  * - BEEFY_API_URL: Beefy API (knownContracts, integrity catalog).
  * - ENVIO_PG_HOST / PORT / USER / PASSWORD / DATABASE, ENVIO_PG_SCHEMA, PSQL: Postgres, read with psql (correctness).
- * - ENVIO_CLICKHOUSE_HOST / DATABASE / USERNAME / PASSWORD: ClickHouse over HTTP (integrity).
+ * - ENVIO_CLICKHOUSE_HOST / DATABASE / USERNAME / PASSWORD: ClickHouse over HTTP (integrity, and correctness for the
+ *   tables Postgres does not hold).
  */
 import * as R from 'remeda';
 import { z } from 'zod';
