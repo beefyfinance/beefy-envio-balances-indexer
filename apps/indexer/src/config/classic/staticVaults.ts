@@ -93,6 +93,10 @@ const staticStrategyVaultMap: Partial<Record<number, Record<Hex, Hex>>> = R.mapV
 export const staticVaultFacts = (chainId: number, vaultAddress: string): { want: Hex } | undefined =>
     staticVaultsMap[chainId]?.[asHex(vaultAddress)];
 
+/** Every legacy vault listed here (lowercase hex). */
+export const staticVaultAddresses = (): Array<{ chainId: number; address: Hex }> =>
+    R.map(staticVaults, ({ chainId, vaultAddress }) => ({ chainId, address: asHex(vaultAddress) }));
+
 /** The vault of a legacy vault's strategy, undefined for any other address. */
 export const staticStrategyVault = (chainId: number, strategyAddress: string): Hex | undefined =>
     staticStrategyVaultMap[chainId]?.[asHex(strategyAddress)];
