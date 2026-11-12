@@ -1,0 +1,32 @@
+{
+  "name": "@beefy/rpc-cache-proxy",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local JSON-RPC proxy that records logs, blocks, transactions and eth_calls in Postgres and answers them from there, so a reindex does not refetch what it already saw",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "schema": "psql \"$DATABASE_URL\" --file sql/schema.sql",
+    "test": "pnpm run test:ts && pnpm run test:unit && pnpm run test:lint",
+    "test:ts": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:lint": "oxlint -c ../../.oxlintrc.json"
+  },
+  "dependencies": {
+    "@beefy/config": "workspace:*",
+    "postgres": "3.4.8",
+    "remeda": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@beefy/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": "^26.13.0"
+  }
+}

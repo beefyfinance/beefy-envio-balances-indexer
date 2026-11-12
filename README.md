@@ -11,6 +11,8 @@ apps/
   worker/           @beefy/worker           Background jobs: a small scheduler plus jobs
   api/              @beefy/api              Read API over ClickHouse: Hono + zod-openapi. GET /v1/users/{address}/timeline
                                             (cached, rate limited, single-flight), /healthz, /openapi.json
+  rpc-cache-proxy/  @beefy/rpc-cache-proxy  Local JSON-RPC proxy that records logs, blocks, transactions and eth_calls in
+                                            Postgres and replays them, so a reindex does not refetch (dev and test tool)
 packages/
   models/           @beefy/models           Dependency-free domain models: chain registry, hex helpers
   config/           @beefy/config           Typed fail-fast env parsing, ClickHouse connection settings

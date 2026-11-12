@@ -119,6 +119,9 @@ when all of them refuse it, so give Envio's `interval_ceiling` the widest range 
 `eth_getTransactionByHash` answers from the full block when a node returns `null` for an old transaction. Every
 upstream must serve archive state. Production uses rpc.beefy.com (eRPC), which does this upstream.
 
+A reindex that refetches every log, block and transaction takes hours on free RPCs: put the
+[RPC cache proxy](../rpc-cache-proxy/README.md) between Envio and the pacer to replay them from Postgres.
+
 ## Integrity audit
 
 After a sync, check the ClickHouse tables against the Beefy API catalog and the internal invariants:

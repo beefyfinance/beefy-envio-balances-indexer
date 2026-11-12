@@ -147,6 +147,34 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@opentelemetry/api@1.9.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  apps/rpc-cache-proxy:
+    dependencies:
+      '@beefy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      postgres:
+        specifier: 3.4.8
+        version: 3.4.8
+      remeda:
+        specifier: 'catalog:'
+        version: 2.53.0
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      '@beefy/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@opentelemetry/api@1.9.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   apps/worker:
     dependencies:
       '@beefy/clickhouse':
