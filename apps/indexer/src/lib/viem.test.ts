@@ -185,8 +185,8 @@ describe('getViemClient multicall batching', () => {
     it('waits out an RPC outage instead of rejecting the read', async () => {
         // regression: a timed out eth_call threw in an effect, which stopped the indexer
         const warn = vi.fn<Logger['warn']>();
-        // first client created for chain 100 in this file, so it logs through this logger
-        const client = getViemClient(100, { ...logger, warn });
+        // first client created for chain 137 in this file, so it logs through this logger
+        const client = getViemClient(137, { ...logger, warn });
         outage.push('timeout', 'timeout', 503, 502, 503);
 
         const [result] = await client.multicall({

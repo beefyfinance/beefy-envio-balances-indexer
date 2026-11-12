@@ -23,6 +23,72 @@ docs/               Architecture and Envio reference notes
 Start with [docs/architecture.md](docs/architecture.md) (what is indexed, the timeline and its prices, versions, the public
 API and its caching) and the [indexer README](apps/indexer/README.md).
 
+## Architecture
+
+```mermaid
+flowchart TB
+  classDef source fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+  classDef table fill:#EEEDFE,stroke:#534AB7,color:#26215C
+  classDef process fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+  classDef merge fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
+
+  chains["Chains<br/>logs, calls"]:::source
+  beefy["Beefy API<br/>head prices"]:::source
+  indexer["Indexer<br/>apps/indexer, 14 chains"]:::process
+  pg[("Postgres<br/>Contract, Token, Balance, TokenSupply<br/>effects cache")]:::table
+
+  subgraph sources["Price sources"]
+    direction LR
+    s1[beefy_db]:::source
+    s2[api]:::source
+    s3[dbv1_product]:::source
+    s4[dbv1_feed]:::source
+    s5[clm_subgraph]:::source
+    s6[corr_oracle]:::source
+  end
+
+  subgraph ch["ClickHouse"]
+    subgraph databarn["databarn"]
+      merge["Merge<br/>all sources"]:::process
+      dedupe["Dedupe<br/>by priority"]:::process
+      fill["Fill gaps<br/>carry forward"]:::process
+      fact[("fact_asset_price_5m<br/>one clean price per slot")]:::table
+      dim[("dim_token<br/>token to asset")]:::table
+    end
+    hyper[("Hyperindex tables<br/>same facts as Postgres,<br/>plus events, readable now")]:::table
+    worker["Worker<br/>price join, every 15 min"]:::process
+    eventprice[("event_price<br/>cleaned, per event")]:::table
+    view["user_timeline_api<br/>merges new rows with cleaned rows<br/>cleaned price wins when it exists"]:::merge
+  end
+
+  api["API<br/>apps/api, one query per request"]:::process
+
+  chains --> indexer
+  beefy --> indexer
+  indexer --> pg
+  indexer --> hyper
+  sources --> merge
+  merge --> dedupe --> fill --> fact
+  fact --> worker
+  dim --> worker
+  hyper --> worker
+  worker --> eventprice
+  hyper -->|"New rows, immediately"| view
+  eventprice -->|"Cleaned rows"| view
+  view --> api
+
+  linkStyle 12,13 stroke:#D85A30,stroke-width:2px
+```
+
+Gray is an external source, purple a table, teal a process and coral the read-time merge.
+
+- **New rows are readable at once.** The indexer writes events to the Hyperindex tables in ClickHouse, with the head price
+  of the Beefy API as a provisional price. `user_timeline_api` reads them directly.
+- **Cleaned rows come later.** databarn merges its price sources, keeps one price per asset and 5 minute slot, and carries
+  values forward over gaps. The worker joins events with those prices into `event_price` every 15 minutes.
+- **One merge, at read time.** `user_timeline_api` takes the stored price when it exists, else the head price, else
+  `PENDING`. See [docs/architecture.md](docs/architecture.md#read-path).
+
 ## Getting started
 
 Requirements: Node 26.13.0 (`.nvmrc`; `nvm use` / `fnm use`) and pnpm 11.28.6 (pinned in `packageManager` and `engines`;

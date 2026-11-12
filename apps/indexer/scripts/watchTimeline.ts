@@ -16,8 +16,8 @@
  * It ends once the user sees a final price, or after `--max-hours`. Each step and each change is printed and appended
  * to `--out` as JSON lines; Ctrl-C prints the summary so far. Read-only: it writes nothing to ClickHouse.
  *
- * Usage: node --env-file=../worker/.env scripts/watchTimeline.ts --chain 59144 --account 0x... --version 7
- *        --envio-database envio_dev_mrt_7 [--database beefy_indexer_dev_mrt] [--api http://localhost:18431]
+ * Usage: node --env-file=../worker/.env scripts/watchTimeline.ts --chain 4326 --account 0x... --version 13
+ *        --envio-database envio_dev_mrt_13 [--database beefy_indexer_dev_mrt] [--api http://localhost:18431]
  *        [--tx 0x...] [--refresh 30] [--poll 2] [--out watch.jsonl] [--max-hours 30]
  * ClickHouse comes from CLICKHOUSE_URL, CLICKHOUSE_USERNAME and CLICKHOUSE_PASSWORD, read through fetch.
  */

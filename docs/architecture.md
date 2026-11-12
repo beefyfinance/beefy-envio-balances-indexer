@@ -23,8 +23,8 @@ Paths starting with `src/` are relative to `apps/indexer/`. Envio's behaviour is
 
 ## Indexer
 
-One hand-edited `config.yaml` with 23 chains. `pnpm dev` and `pnpm start` use HyperSync with RPC fallback (hyperevm and
-metis are RPC only). `pnpm start:rpc` sets `ENVIO_RPC_FOR=sync`: every chain syncs over RPC, with no `ENVIO_API_TOKEN`.
+One hand-edited `config.yaml` with 14 chains. `pnpm dev` and `pnpm start` use HyperSync with RPC fallback (hyperevm is
+RPC only). `pnpm start:rpc` sets `ENVIO_RPC_FOR=sync`: every chain syncs over RPC, with no `ENVIO_API_TOKEN`.
 
 Tables are in `schema.graphql`, ClickHouse only by default. Event rows carry block and transaction fields, with `trxFrom` (the
 EOA) to label zaps. Handlers read only Postgres, so `Contract`, `Token`, `Balance`, `TokenSupply` and `SwapperRoute` are in

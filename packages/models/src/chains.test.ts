@@ -15,7 +15,7 @@ describe('chains', () => {
 
     it('looks chains up by id and key', () => {
         expect(chainById(8453)?.key).toBe('base');
-        expect(chainByKey('lisk')?.id).toBe(1135);
+        expect(chainByKey('plasma')?.id).toBe(9745);
         expect(chainById(1234567)).toBeUndefined();
         expect(isChainId(137)).toBe(true);
         expect(isChainId(5)).toBe(false);

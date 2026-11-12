@@ -45,7 +45,7 @@ The event source is chosen per run with an environment variable, not a second fi
 
 | mode | how | sync |
 |---|---|---|
-| default | `pnpm dev`, `pnpm start` | HyperSync, RPC as fallback and for contract reads (hyperevm, metis: RPC only) |
+| default | `pnpm dev`, `pnpm start` | HyperSync, RPC as fallback and for contract reads (hyperevm: RPC only) |
 | RPC only | `pnpm start:rpc`, or `ENVIO_RPC_FOR=sync` | every chain syncs over its RPC; no HyperSync and no `ENVIO_API_TOKEN` |
 
 `ENVIO_RPC_FOR` fills the `for:` of each chain's rpc entry (`${ENVIO_RPC_FOR:-fallback}` in config.yaml). All scripts set
@@ -90,7 +90,7 @@ chain's `ENVIO_RPC_URL_<chainId>`). Commit new fixtures. `RPC_FIXTURES=off` uses
 After an indexing run, compare what is stored with the chain at a fixed block:
 
 ```bash
-pnpm correctness --chain 1135 --schema raw_lisk --rpc http://localhost:8546 --config config.yaml
+pnpm correctness --chain 9745 --schema raw_plasma --rpc http://localhost:8546 --config config.yaml
 ```
 
 It checks every `TokenSupply` and `Balance` row against `totalSupply()` / `balanceOf()`, share-token, boost and CLM
@@ -108,7 +108,7 @@ Envio's RPC source has no request-rate setting. For RPC-only runs against public
 front of the RPC and point `ENVIO_RPC_URL_<chain>` at it (`http://127.0.0.1:<port>`; it listens on loopback only):
 
 ```bash
-pnpm rpc-pacer --upstream https://rpc.api.lisk.com --port 8546 --rps 10 --max-rps 12 --concurrency 8
+pnpm rpc-pacer --upstream https://rpc.plasma.to --port 8546 --rps 10 --max-rps 12 --concurrency 8
 ```
 
 It paces each upstream with its own adaptive rate (halved on rate limits, at most once per burst, raised after
